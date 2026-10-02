@@ -413,6 +413,7 @@ func (conn *Conn) attachTerminal(ctx context.Context) (int, error) {
 	detached := make(chan struct{})
 	go func() {
 		var esc tty.Escape
+		lastCR := false
 		buf := make([]byte, 4096)
 		for {
 			n, err := os.Stdin.Read(buf)
@@ -421,6 +422,12 @@ func (conn *Conn) attachTerminal(ctx context.Context) (int, error) {
 				if detach {
 					close(detached)
 					return
+				}
+				if !isTTY {
+					// Piped input: send Enter the way a terminal does (CR).
+					// A Unix PTY maps CR to LF, but a Windows ConPTY only
+					// treats CR as Enter, so a bare LF would never submit.
+					fwd = pipedNewlines(fwd, &lastCR)
 				}
 				if role == proto.RoleControl && len(fwd) > 0 {
 					_ = dc.Send(fwd)
@@ -476,4 +483,22 @@ func drain(out <-chan []byte) {
 			return
 		}
 	}
+}
+
+// pipedNewlines converts LF and CRLF line endings to CR. lastCR carries
+// across reads so a CRLF split between two reads is not doubled.
+func pipedNewlines(in []byte, lastCR *bool) []byte {
+	out := make([]byte, 0, len(in))
+	for _, c := range in {
+		switch {
+		case c == '\n' && *lastCR:
+			// second half of CRLF: already sent the CR
+		case c == '\n':
+			out = append(out, '\r')
+		default:
+			out = append(out, c)
+		}
+		*lastCR = c == '\r'
+	}
+	return out
 }

@@ -55,6 +55,7 @@ setu share --approve -- bash               # confirm each joiner on this termina
 setu share --expire 30m --max-clients 1    # stop accepting new joins after 30 minutes
 setu share --headless --link-file ~/.setu-link -- claude   # no local attach (e.g. under tmux/nohup)
 setu share --manual                        # no relays: copy/paste offer & answer
+setu share -d --password -- claude         # run in the background and get your shell back
 ```
 
 By default the host terminal is attached to the session too: you see what the
@@ -77,6 +78,28 @@ to end the share.
 | `--headless` | off | Don't attach the local terminal. |
 | `--qr` | on | Print a QR code of the browser link. |
 | `--link-file` | — | Write invite link(s) to a 0600 file. |
+| `-d`, `--background` | off | Detach: serve in the background and return to the shell. |
+
+### Background shares
+
+`setu share -d …` starts the share as a detached background process. It prints
+the links and QR code, then gives you your prompt back. The share keeps running
+after you close the terminal (on Windows, after you close the window).
+
+```sh
+setu share -d --password -- claude   # prompts for the password, then detaches
+setu ps                              # list background shares
+setu link <id>                       # print the links / QR code again
+setu logs <id>                       # who connected, with verification codes
+setu stop <id>                       # end one share (or: setu stop --all)
+```
+
+Each background share keeps its state in `~/.config/setu/sessions/<id>/`
+(`%AppData%\setu\sessions\<id>\` on Windows), readable only by you. That
+state includes the invite links. The directory is removed when the share
+ends. The password is passed to the background process through a pipe, never
+on the command line or in the environment. `--manual` and `--approve` need an
+attached terminal, so they cannot be combined with `-d`.
 
 ### Join
 

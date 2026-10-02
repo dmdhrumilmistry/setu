@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/dmdhrumilmistry/setu/internal/client"
+	"github.com/dmdhrumilmistry/setu/internal/daemon"
 	"github.com/dmdhrumilmistry/setu/internal/host"
 	"github.com/dmdhrumilmistry/setu/internal/link"
 	"github.com/dmdhrumilmistry/setu/internal/nostr"
@@ -24,7 +25,6 @@ import (
 	"github.com/dmdhrumilmistry/setu/internal/rtc"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
 	"github.com/dmdhrumilmistry/setu/internal/tty"
-	"github.com/mdp/qrterminal/v3"
 )
 
 var version = "dev"
@@ -34,6 +34,10 @@ const usage = `setu — share your terminal peer-to-peer (WebRTC), no server of 
 Usage:
   setu share [flags] [--] [command [args...]]   share a command (default: $SHELL; PowerShell on Windows)
   setu join  [flags] <link | code>              join from another terminal
+  setu ps                                       list background shares
+  setu link <id>                                show a background share's links (+ QR)
+  setu logs <id>                                show a background share's log
+  setu stop <id> | --all                        stop background share(s)
   setu version
 
 Examples:
@@ -41,6 +45,7 @@ Examples:
   setu share --password --once -- claude  require a password, single use link
   setu share --view-link -- htop          extra read-only link for spectators
   setu share --manual                     no relays at all: copy/paste offer & answer
+  setu share -d --password -- claude      run in the background, get your shell back
   setu join 'https://…/#k=…'              join from a terminal instead of a browser
 
 Run 'setu share -h' or 'setu join -h' for flags.
@@ -61,8 +66,16 @@ func main() {
 		code, err = runShare(os.Args[2:])
 	case "join":
 		code, err = runJoin(os.Args[2:])
+	case "ps", "list", "ls":
+		code, err = runPS()
+	case "stop":
+		code, err = runStop(os.Args[2:])
+	case "link", "links":
+		code, err = runLink(os.Args[2:])
+	case "logs", "log":
+		code, err = runLogs(os.Args[2:])
 	case "version", "--version", "-v":
-		fmt.Println("setu", version)
+		fmt.Println(versionString())
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:
@@ -115,6 +128,12 @@ func runShare(args []string) (int, error) {
 	qr := fs.Bool("qr", true, "print a QR code of the invite link")
 	linkFile := fs.String("link-file", "", "also write the invite link(s) to this file (mode 0600)")
 	verbose := fs.Bool("verbose", false, "verbose logging")
+	var background bool
+	fs.BoolVar(&background, "background", false, "run the share in the background and return to the shell (see `setu ps`)")
+	fs.BoolVar(&background, "d", false, "shorthand for --background")
+	// Internal: set by --background on the detached child process.
+	sessionDir := fs.String("session-dir", "", "internal: background session directory")
+	passwordStdin := fs.Bool("password-stdin", false, "read the session password from the first line of stdin")
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "Usage: setu share [flags] [--] [command [args...]]\n\n")
 		fs.PrintDefaults()
@@ -125,6 +144,20 @@ func runShare(args []string) (int, error) {
 	command := fs.Args()
 	if len(command) == 0 {
 		command = host.DefaultShell()
+	}
+
+	if background {
+		if *manual {
+			return 1, errors.New("--background cannot be combined with --manual (the answer is pasted into this terminal)")
+		}
+		if *approve {
+			return 1, errors.New("--background cannot be combined with --approve (nobody would see the prompt)")
+		}
+	}
+	if *sessionDir != "" {
+		*headless = true
+		*qr = false
+		*linkFile = daemon.LinksPath(*sessionDir)
 	}
 
 	stdinTTY := tty.IsTerminal(os.Stdin) && tty.IsTerminal(os.Stdout)
@@ -148,6 +181,16 @@ func runShare(args []string) (int, error) {
 	}
 
 	pw := os.Getenv("SETU_PASSWORD")
+	if *passwordStdin {
+		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err != nil && line == "" {
+			return 1, errors.New("--password-stdin: no password on stdin")
+		}
+		pw = strings.TrimRight(line, "\r\n")
+		if pw == "" {
+			return 1, errors.New("--password-stdin: empty password")
+		}
+	}
 	if *password && pw == "" {
 		if !tty.IsTerminal(os.Stdin) {
 			return 1, errors.New("--password needs a terminal to prompt, or set SETU_PASSWORD")
@@ -178,6 +221,17 @@ func runShare(args []string) (int, error) {
 		}
 	}
 	os.Unsetenv("SETU_PASSWORD") // never leak into the shared shell
+
+	if background {
+		return startBackground(fs, command, pw)
+	}
+	if *sessionDir != "" {
+		cleanup, err := daemon.Register(*sessionDir, strings.Join(command, " "))
+		if err != nil {
+			return 1, err
+		}
+		defer cleanup()
+	}
 	os.Unsetenv("SETU_TURN_PASSWORD")
 
 	if len(relays) == 0 {
@@ -243,11 +297,7 @@ func runShare(args []string) (int, error) {
 			}
 			fmt.Fprintf(w, "  terminal: setu join '%s'\n", frag)
 			if *qr && full != "" && tty.IsTerminal(os.Stderr) {
-				qrterminal.GenerateWithConfig(full, qrterminal.Config{
-					Level: qrterminal.L, Writer: w, HalfBlocks: true,
-					BlackChar: qrterminal.BLACK_BLACK, WhiteBlackChar: qrterminal.WHITE_BLACK,
-					WhiteChar: qrterminal.WHITE_WHITE, BlackWhiteChar: qrterminal.BLACK_WHITE, QuietZone: 1,
-				})
+				printQR(w, full)
 			}
 		}
 		show("\x1b[1;31mCONTROL link\x1b[0m — anyone holding it can type into this terminal. Keep it secret:", cfg.ControlSecret)
