@@ -21,8 +21,9 @@ import (
 type conPTY struct {
 	hpc       windows.Handle
 	proc      windows.Handle
-	in        *os.File // our end of the console's input pipe
-	out       *os.File // our end of the console's output pipe
+	job       windows.Handle // kill-on-close job: the command tree dies with setu
+	in        *os.File       // our end of the console's input pipe
+	out       *os.File       // our end of the console's output pipe
 	closeOnce sync.Once
 	killOnce  sync.Once
 }
@@ -96,14 +97,39 @@ func (p *conPTY) spawn(cmdLine string) error {
 	}
 	var pi windows.ProcessInformation
 	err = windows.CreateProcess(nil, cmdLine16, nil, nil, false,
-		windows.EXTENDED_STARTUPINFO_PRESENT|windows.CREATE_UNICODE_ENVIRONMENT,
+		windows.EXTENDED_STARTUPINFO_PRESENT|windows.CREATE_UNICODE_ENVIRONMENT|windows.CREATE_SUSPENDED,
 		envBlock, nil, &si.StartupInfo, &pi)
 	if err != nil {
 		return fmt.Errorf("start %s: %w", cmdLine, err)
 	}
-	windows.CloseHandle(pi.Thread)
 	p.proc = pi.Process
+	// Put the command in a kill-on-close job before it runs, so it and its
+	// children cannot outlive setu (e.g. when a background share is stopped).
+	if job, err := killOnCloseJob(); err == nil {
+		if windows.AssignProcessToJobObject(job, pi.Process) == nil {
+			p.job = job
+		} else {
+			windows.CloseHandle(job)
+		}
+	}
+	_, _ = windows.ResumeThread(pi.Thread)
+	windows.CloseHandle(pi.Thread)
 	return nil
+}
+
+func killOnCloseJob() (windows.Handle, error) {
+	job, err := windows.CreateJobObject(nil, nil)
+	if err != nil {
+		return 0, err
+	}
+	var info windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+	info.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+	if _, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation,
+		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info))); err != nil {
+		windows.CloseHandle(job)
+		return 0, err
+	}
+	return job, nil
 }
 
 // environmentBlock builds a CREATE_UNICODE_ENVIRONMENT block:
@@ -190,6 +216,10 @@ func (p *conPTY) Close() error {
 	if p.proc != 0 {
 		windows.CloseHandle(p.proc)
 		p.proc = 0
+	}
+	if p.job != 0 {
+		windows.CloseHandle(p.job) // kills anything the command left behind
+		p.job = 0
 	}
 	return nil
 }

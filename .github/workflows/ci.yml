@@ -22,6 +22,8 @@ jobs:
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
       - run: go test -race -count=1 ./...
+      - name: CLI smoke test (background share + join over public relays)
+        run: go build -o bin/ ./cmd/setu && scripts/smoke.sh ./bin/setu
       - name: cross-compile
         run: |
           for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
@@ -42,7 +44,10 @@ jobs:
           go-version-file: go.mod
       - run: go vet ./...
       - run: go test -count=1 -v ./...
-      - run: go build -o setu-bin ./cmd/setu
+      - run: go build -o bin/ ./cmd/setu
+      - name: CLI smoke test (background share + join over public relays)
+        shell: bash
+        run: scripts/smoke.sh ./bin/setu
 
   web:
     runs-on: ubuntu-latest
