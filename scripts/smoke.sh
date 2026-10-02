@@ -21,9 +21,25 @@ ID=$("$BIN" ps | awk 'NR==2 {print $1}')
 test -n "$ID"
 LINK=$("$BIN" link "$ID" | grep -m1 'setu join' | sed "s/.*setu join '\(.*\)'/\1/")
 
-OUT=$( (sleep 10; echo smoke) | "$BIN" join --timeout 90s "$LINK" 2>&1 || true)
-echo "$OUT"
-echo "$OUT" | grep -q "got:smoke"
+# Join in the background with a watchdog so a regression fails fast with
+# logs instead of hanging CI (macOS has no `timeout`).
+OUTF=$(mktemp)
+( (sleep 10; echo smoke) | "$BIN" join --timeout 90s "$LINK" >"$OUTF" 2>&1 ) &
+JOIN=$!
+for _ in $(seq 1 120); do
+  kill -0 "$JOIN" 2>/dev/null || break
+  sleep 1
+done
+if kill -0 "$JOIN" 2>/dev/null; then
+  kill "$JOIN" 2>/dev/null || true
+  cat "$OUTF"
+  echo "setu join did not finish within 120s; host log:" >&2
+  "$BIN" logs "$ID" >&2 || true
+  "$BIN" stop "$ID" || true
+  exit 1
+fi
+cat "$OUTF"
+grep -q "got:smoke" "$OUTF"
 
 # The command exited, so the background share must have ended and cleaned up.
 for _ in $(seq 1 20); do
