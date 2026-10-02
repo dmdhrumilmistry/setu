@@ -42,7 +42,7 @@ HKDF, PBKDF2, AES-GCM and HMAC in its standard library. The Rust options
 | Path | Responsibility |
 | --- | --- |
 | `cmd/setu` | CLI: flags, prompts, printing invites and QR codes |
-| `internal/host` | PTY session, output fan-out with a 256 KiB replay buffer, admission control, per-peer handshake, nostr and manual signaling |
+| `internal/host` | PTY session (creack/pty on Unix, ConPTY on Windows), output fan-out with a 256 KiB replay buffer, admission control, per-peer handshake, nostr and manual signaling |
 | `internal/client` | `Dial` (signaling, WebRTC, handshake) and the raw-mode terminal attach for `setu join` |
 | `internal/secure` | Invite secrets, HKDF room derivation, AES-GCM sealing, SAS, PBKDF2/HMAC password proof |
 | `internal/nostr` | A minimal NIP-01 client: BIP-340 signed events and a relay pool with reconnects |
@@ -129,7 +129,6 @@ and the 6-digit **SAS** that both sides display.
 
 ## Future work
 
-* Windows hosts through ConPTY (`setu join` already works on Windows).
 * Optional TOTP as a second factor for long-lived links.
 * Session recording (asciicast) for auditing what agents did.
 * Trickle ICE, for faster connects on networks where STUN is slow.

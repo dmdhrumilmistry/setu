@@ -1,5 +1,3 @@
-//go:build !windows
-
 // Package e2e runs a real host (PTY + WebRTC) against the Go client over an
 // in-process nostr relay.
 package e2e
@@ -7,6 +5,7 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -20,7 +19,14 @@ import (
 	"github.com/dmdhrumilmistry/setu/internal/secure"
 )
 
-const script = `echo READY; while read l; do echo "got:$l"; done`
+// echoCommand prints READY, then echoes every input line as "got:<line>".
+func echoCommand() []string {
+	if runtime.GOOS == "windows" {
+		return []string{"powershell.exe", "-NoLogo", "-NoProfile", "-Command",
+			`Write-Output READY; while ($true) { $l = [Console]::ReadLine(); if ($null -eq $l) { break }; Write-Output ('got:' + $l) }`}
+	}
+	return []string{"sh", "-c", `echo READY; while read l; do echo "got:$l"; done`}
+}
 
 // tlog forwards host logs to the test until the test finishes; the host may
 // still log while it shuts down, which testing forbids after completion.
@@ -71,7 +77,7 @@ func startHost(t *testing.T, ctx context.Context, relay string, mod func(*host.C
 	cs, _ := secure.NewSecret()
 	vs, _ := secure.NewSecret()
 	cfg := host.Config{
-		Command:       []string{"sh", "-c", script},
+		Command:       echoCommand(),
 		ControlSecret: &cs,
 		ViewSecret:    &vs,
 		Relays:        []string{relay},
@@ -104,7 +110,7 @@ func dial(t *testing.T, ctx context.Context, inv, password string) (*client.Conn
 func waitFor(t *testing.T, c *client.Conn, want string) {
 	t.Helper()
 	var buf bytes.Buffer
-	deadline := time.After(10 * time.Second)
+	deadline := time.After(30 * time.Second) // PowerShell on CI starts slowly
 	for !strings.Contains(buf.String(), want) {
 		select {
 		case b := <-c.Out:
@@ -216,7 +222,7 @@ func TestManual(t *testing.T) {
 	offers := make(chan string, 1)
 	answers := make(chan string, 1)
 	s, err := host.New(host.Config{
-		Command:    []string{"sh", "-c", script},
+		Command:    echoCommand(),
 		Manual:     true,
 		ICE:        []proto.ICEServer{},
 		Log:        newTlog(t),

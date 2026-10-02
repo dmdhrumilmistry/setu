@@ -32,7 +32,7 @@ var version = "dev"
 const usage = `setu — share your terminal peer-to-peer (WebRTC), no server of your own.
 
 Usage:
-  setu share [flags] [--] [command [args...]]   share a command (default: $SHELL)
+  setu share [flags] [--] [command [args...]]   share a command (default: $SHELL; PowerShell on Windows)
   setu join  [flags] <link | code>              join from another terminal
   setu version
 
@@ -51,6 +51,9 @@ func main() {
 		fmt.Fprint(os.Stderr, usage)
 		os.Exit(2)
 	}
+	// Windows consoles need VT processing switched on for colours and TUIs.
+	restoreOut := tty.EnableVT(os.Stdout)
+	restoreErr := tty.EnableVT(os.Stderr)
 	var err error
 	code := 0
 	switch os.Args[1] {
@@ -72,6 +75,8 @@ func main() {
 			code = 1
 		}
 	}
+	restoreErr()
+	restoreOut()
 	os.Exit(code)
 }
 
@@ -119,11 +124,7 @@ func runShare(args []string) (int, error) {
 
 	command := fs.Args()
 	if len(command) == 0 {
-		sh := os.Getenv("SHELL")
-		if sh == "" {
-			sh = "/bin/sh"
-		}
-		command = []string{sh}
+		command = host.DefaultShell()
 	}
 
 	stdinTTY := tty.IsTerminal(os.Stdin) && tty.IsTerminal(os.Stdout)

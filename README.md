@@ -38,8 +38,9 @@ go install github.com/dmdhrumilmistry/setu/cmd/setu@latest   # Go 1.27+
 
 Release binaries for Linux, macOS and Windows are on the
 [releases page](https://github.com/dmdhrumilmistry/setu/releases).
-Sharing (hosting) works on Linux and macOS (use WSL on Windows). Joining
-works everywhere.
+Sharing and joining work on Linux, macOS and Windows. On Windows, hosting uses
+the ConPTY pseudo console, so it needs Windows 10 1809 / Server 2019 or newer,
+and the default shell is PowerShell. `.cmd` shims like npm's `claude` work too.
 
 ## Usage
 
