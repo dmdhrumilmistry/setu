@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,11 +22,48 @@ import (
 
 const script = `echo READY; while read l; do echo "got:$l"; done`
 
-type tlog struct{ t *testing.T }
+// tlog forwards host logs to the test until the test finishes; the host may
+// still log while it shuts down, which testing forbids after completion.
+type tlog struct {
+	t    *testing.T
+	mu   sync.Mutex
+	done bool
+}
 
-func (w tlog) Write(b []byte) (int, error) {
-	w.t.Logf("host: %s", bytes.TrimSpace(b))
+func newTlog(t *testing.T) *tlog {
+	l := &tlog{t: t}
+	t.Cleanup(func() {
+		l.mu.Lock()
+		l.done = true
+		l.mu.Unlock()
+	})
+	return l
+}
+
+func (w *tlog) Write(b []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.done {
+		w.t.Logf("host: %s", bytes.TrimSpace(b))
+	}
 	return len(b), nil
+}
+
+// runHost runs s until the test ends, then cancels it and waits for it to stop.
+func runHost(t *testing.T, ctx context.Context, s *host.Session) {
+	ctx, cancel := context.WithCancel(ctx)
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		_, _ = s.Run(ctx)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-stopped:
+		case <-time.After(5 * time.Second):
+		}
+	})
 }
 
 func startHost(t *testing.T, ctx context.Context, relay string, mod func(*host.Config)) (control, view string) {
@@ -39,7 +77,7 @@ func startHost(t *testing.T, ctx context.Context, relay string, mod func(*host.C
 		Relays:        []string{relay},
 		ICE:           []proto.ICEServer{}, // local candidates only
 		MaxClients:    3,
-		Log:           tlog{t},
+		Log:           newTlog(t),
 		Verbose:       true,
 	}
 	if mod != nil {
@@ -49,7 +87,7 @@ func startHost(t *testing.T, ctx context.Context, relay string, mod func(*host.C
 	if err != nil {
 		t.Fatal(err)
 	}
-	go func() { _, _ = s.Run(ctx) }()
+	runHost(t, ctx, s)
 	time.Sleep(300 * time.Millisecond) // let the host subscribe
 	return link.Build("https://example.invalid/", link.Invite{Secret: cs.String(), Relays: []string{relay}}),
 		link.Build("", link.Invite{Secret: vs.String(), Relays: []string{relay}})
@@ -181,14 +219,14 @@ func TestManual(t *testing.T) {
 		Command:    []string{"sh", "-c", script},
 		Manual:     true,
 		ICE:        []proto.ICEServer{},
-		Log:        tlog{t},
+		Log:        newTlog(t),
 		OnInvite:   func(inv host.Invite) { offers <- inv.Code },
 		ReadAnswer: func(ctx context.Context) (string, error) { return <-answers, nil },
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	go func() { _, _ = s.Run(ctx) }()
+	runHost(t, ctx, s)
 	code := <-offers
 	c, err := client.Dial(ctx, code, client.Options{Timeout: 30 * time.Second, Logf: t.Logf, ShowAnswer: func(a string) { answers <- a }})
 	if err != nil {
