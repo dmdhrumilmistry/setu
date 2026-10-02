@@ -6,7 +6,7 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"
 npm init -y >/dev/null
-npm i --no-audit --no-fund @noble/curves@2.0.1 @xterm/xterm@6.0.0 @xterm/addon-fit@0.11.0 esbuild@0.25 >/dev/null
+npm i --no-audit --no-fund @noble/curves@2.4.0 @xterm/xterm@6.0.0 @xterm/addon-fit@0.11.0 esbuild@0.28.2 >/dev/null
 echo "export { schnorr } from '@noble/curves/secp256k1.js';" > entry.js
 npx esbuild entry.js --bundle --format=esm --minify --outfile="$here/noble-secp256k1.mjs"
 cp node_modules/@xterm/xterm/lib/xterm.mjs node_modules/@xterm/xterm/css/xterm.css "$here/"

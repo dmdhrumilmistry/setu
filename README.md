@@ -33,7 +33,7 @@ Open the link or scan the QR code and you are in the same terminal session.
 ## Install
 
 ```sh
-go install github.com/dmdhrumilmistry/setu/cmd/setu@latest   # Go 1.26+
+go install github.com/dmdhrumilmistry/setu/cmd/setu@latest   # Go 1.27+
 ```
 
 Release binaries for Linux, macOS and Windows are on the

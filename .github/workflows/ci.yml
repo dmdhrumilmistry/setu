@@ -19,6 +19,8 @@ jobs:
       - name: gofmt
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
       - run: go vet ./...
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
       - run: go test -race -count=1 ./...
       - name: cross-compile
         run: |
@@ -49,7 +51,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - run: npm i --no-save playwright@1.56.1 && npx playwright install --with-deps chromium
+      - run: npm i --no-save playwright@1.63.0 && npx playwright install --with-deps chromium
       - run: go build -o setu ./cmd/setu
       - name: browser -> web client -> local relay -> setu share
         run: SETU_LOCAL_RELAY=1 node web/test/browser-e2e.mjs
