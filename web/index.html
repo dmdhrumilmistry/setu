@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="referrer" content="no-referrer">
+  <!-- Only same-origin scripts; network only to secure websockets (nostr relays). WebRTC is peer-to-peer. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src wss:; img-src 'self' data:; font-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="theme-color" content="#0b0e14">
+  <title>setu · peer-to-peer terminal</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0e14'/%3E%3Cpath d='M5 21c4-7 18-7 22 0' stroke='%237dd3fc' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3Cpath d='M9 21v4M23 21v4M16 17v8' stroke='%237dd3fc' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="vendor/xterm.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <span class="brand">setu</span>
+    <span id="title" class="title"></span>
+    <span id="status" class="status" data-kind="info">idle</span>
+  </header>
+
+  <main id="screen-home" data-screen>
+    <section class="card">
+      <h1>Your terminal, anywhere. No server in the middle.</h1>
+      <p>setu connects this browser <strong>directly</strong> to a terminal shared with
+        <code>setu share</code>, over an end-to-end encrypted WebRTC channel. Public nostr relays are only used to
+        exchange encrypted connection details, and Google STUN only helps find a network path.</p>
+      <form id="join-form" class="row">
+        <input id="invite" type="password" autocomplete="off" spellcheck="false" placeholder="Paste an invite link or offer code" aria-label="Invite link or code">
+        <button type="submit">Join</button>
+      </form>
+      <h2>Start a share</h2>
+      <pre><code># install (Go 1.26+), or grab a release binary
+go install github.com/dmdhrumilmistry/setu/cmd/setu@latest
+
+# share Claude Code (or any command), then open the printed link / scan the QR
+setu share --password -- claude</code></pre>
+      <h2>Security model</h2>
+      <ul class="list">
+        <li>The invite link <em>is</em> the key. Its secret lives after <code>#</code>, which browsers never send to this website.</li>
+        <li>Relays see only AES-GCM ciphertext, throwaway keys and a random room id.</li>
+        <li>Terminal traffic is DTLS encrypted peer-to-peer. Compare the verification code on both ends.</li>
+        <li>Optional password (PBKDF2 + HMAC challenge), view-only links, single-use links, expiry and host approval.</li>
+        <li>This page loads no third-party code; all libraries are vendored and pinned. You can self-host it.</li>
+      </ul>
+    </section>
+  </main>
+
+  <main id="screen-connect" data-screen hidden>
+    <section class="card">
+      <h1>Connecting</h1>
+      <ol id="steps" class="steps"></ol>
+      <div id="sas-box" class="sas" hidden>Verification code <strong id="sas"></strong></div>
+      <form id="pw-form" class="row" hidden>
+        <input id="pw" type="password" autocomplete="current-password" placeholder="Session password" aria-label="Session password">
+        <button type="submit">Unlock</button>
+      </form>
+      <div id="answer-box" hidden>
+        <p>Answer code — send it to the host:</p>
+        <textarea id="answer" readonly rows="6" spellcheck="false"></textarea>
+        <button id="copy-answer" type="button">Copy</button>
+      </div>
+    </section>
+  </main>
+
+  <main id="screen-term" data-screen hidden>
+    <div id="term"></div>
+    <nav id="keys" class="keys" aria-label="Special keys">
+      <button data-key="esc">Esc</button>
+      <button data-key="tab">Tab</button>
+      <button data-key="stab" title="Shift+Tab">⇧Tab</button>
+      <button data-key="ctrl" id="key-ctrl">Ctrl</button>
+      <button data-key="cc">^C</button>
+      <button data-key="cd">^D</button>
+      <button data-key="left" aria-label="Left">←</button>
+      <button data-key="up" aria-label="Up">↑</button>
+      <button data-key="down" aria-label="Down">↓</button>
+      <button data-key="right" aria-label="Right">→</button>
+      <button data-key="enter">⏎</button>
+      <button data-key="compose" title="Compose a longer message">✎</button>
+    </nav>
+    <form id="compose" class="compose" hidden>
+      <textarea id="compose-text" rows="3" placeholder="Type a prompt… (Ctrl/⌘+Enter to send)"></textarea>
+      <div class="compose-actions">
+        <label><input id="compose-enter" type="checkbox" checked> press Enter after</label>
+        <button type="submit">Send</button>
+      </div>
+    </form>
+  </main>
+
+  <script type="module" src="js/app.mjs"></script>
+</body>
+</html>
