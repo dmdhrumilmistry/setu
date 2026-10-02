@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -64,8 +63,7 @@ const (
 type Session struct {
 	cfg Config
 
-	ptmx *os.File
-	cmd  *exec.Cmd
+	pty ptyProcess
 
 	mu          sync.Mutex
 	peers       map[int]*peer
@@ -147,29 +145,18 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 	if s.cfg.Mirror {
 		cols, rows = tty.Size(os.Stdout)
 	}
-	ptmx, cmd, err := startPTY(s.cfg.Command, cols, rows)
+	p, err := startPTY(s.cfg.Command, cols, rows)
 	if err != nil {
 		return 1, err
 	}
-	s.ptmx, s.cmd, s.cols, s.rows = ptmx, cmd, cols, rows
-	defer ptmx.Close()
+	s.pty, s.cols, s.rows = p, cols, rows
+	defer p.Close()
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	exited := make(chan int, 1)
-	go func() {
-		code := 0
-		if err := cmd.Wait(); err != nil {
-			var ee *exec.ExitError
-			if errors.As(err, &ee) {
-				code = ee.ExitCode()
-			} else {
-				code = 1
-			}
-		}
-		exited <- code
-	}()
+	go func() { exited <- p.Wait() }()
 
 	readDone := make(chan struct{})
 	go s.pumpOutput(readDone)
@@ -186,7 +173,7 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 	signalErr := make(chan error, 1)
 	if s.cfg.Manual {
 		if err := s.serveManual(sigCtx); err != nil {
-			_ = cmd.Process.Kill()
+			_ = p.Kill()
 			return 1, err
 		}
 		defer s.attachLocal(ctx, cancel)()
@@ -203,7 +190,7 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 	case code = <-exited:
 	case err := <-signalErr:
 		if err != nil && ctx.Err() == nil {
-			_ = cmd.Process.Kill()
+			_ = p.Kill()
 			<-exited
 			s.closeAll("host error")
 			return 1, err
@@ -211,7 +198,7 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 		code = <-exited
 	case <-ctx.Done():
 		// Host ended the share (~. or a signal): not a command failure.
-		_ = cmd.Process.Kill()
+		_ = p.Kill()
 		<-exited
 		code = 0
 	}
@@ -283,7 +270,7 @@ func (s *Session) pumpOutput(done chan<- struct{}) {
 	defer close(done)
 	buf := make([]byte, 32<<10)
 	for {
-		n, err := s.ptmx.Read(buf)
+		n, err := s.pty.Read(buf)
 		if n > 0 {
 			chunk := append([]byte(nil), buf[:n]...)
 			s.mu.Lock()
@@ -311,7 +298,7 @@ func (s *Session) pumpOutput(done chan<- struct{}) {
 func (s *Session) writeInput(b []byte) {
 	s.inputMu.Lock()
 	defer s.inputMu.Unlock()
-	_, _ = s.ptmx.Write(b)
+	_, _ = s.pty.Write(b)
 }
 
 func (s *Session) resize(cols, rows int) {
@@ -323,7 +310,7 @@ func (s *Session) resize(cols, rows int) {
 	s.cols, s.rows = cols, rows
 	s.mu.Unlock()
 	if !same {
-		_ = setSize(s.ptmx, cols, rows)
+		_ = s.pty.Resize(cols, rows)
 	}
 }
 
