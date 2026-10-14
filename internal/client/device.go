@@ -42,6 +42,29 @@ func localZone() string {
 	return time.Now().Format("MST -07:00")
 }
 
+// DeviceKeyPath is where this installation keeps its device key.
+func DeviceKeyPath() (string, error) {
+	base, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, "setu", "device.key"), nil
+}
+
+// LoadDeviceKey returns this installation's device key, creating it on
+// first use. remember=false returns a fresh key that exists only in memory
+// (hosts cannot recognise this device next time).
+func LoadDeviceKey(remember bool) (*secure.DeviceKey, error) {
+	if !remember {
+		return secure.NewDeviceKey()
+	}
+	path, err := DeviceKeyPath()
+	if err != nil {
+		return nil, err
+	}
+	return secure.LoadOrCreateDeviceKey(path)
+}
+
 // deviceID returns a random id kept in the user's config directory, so the
 // host's audit log can tell repeat visits from the same device apart from
 // new ones. It identifies an installation, not a person, and is not derived

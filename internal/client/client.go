@@ -32,6 +32,10 @@ type Options struct {
 	// Info describes this device to the host's audit log (see LocalInfo);
 	// nil sends nothing.
 	Info *proto.ClientInfo
+	// DeviceKey proves which device is joining, so a host can approve it
+	// automatically next time (see secure.LoadOrCreateDeviceKey). nil
+	// sends no key.
+	DeviceKey *secure.DeviceKey
 }
 
 // ErrDetached is returned when the user typed the ~. escape.
@@ -57,6 +61,7 @@ type Conn struct {
 	dc              *webrtc.DataChannel
 	Role, Cmd, Host string
 	SAS             string
+	Approval        string               // how the host admitted us: proto.Approval* or empty
 	Out             <-chan []byte        // terminal output
 	Ctl             <-chan proto.Control // control frames after ready
 	Closed, Failed  <-chan struct{}
@@ -356,6 +361,13 @@ func handshake(ctx context.Context, p *peerConn, opt Options) (*Conn, error) {
 				opt.Logf("connected peer-to-peer. Verification code: %s (should match the host)", sas)
 				auth := proto.Control{T: proto.CtlAuth}
 				auth.Client = opt.Info
+				if opt.DeviceKey != nil {
+					sig, err := opt.DeviceKey.Sign(c.Nonce, localFP, remoteFP)
+					if err != nil {
+						return nil, err
+					}
+					auth.DeviceKey, auth.DeviceSig = opt.DeviceKey.Public(), sig
+				}
 				if c.Auth == proto.AuthPassword {
 					if opt.Password == nil {
 						return nil, errors.New("host requires a password")
@@ -374,7 +386,7 @@ func handshake(ctx context.Context, p *peerConn, opt Options) (*Conn, error) {
 					return nil, err
 				}
 			case proto.CtlReady:
-				conn.Role, conn.Cmd, conn.Host = c.Role, c.Cmd, c.Host
+				conn.Role, conn.Cmd, conn.Host, conn.Approval = c.Role, c.Cmd, c.Host, c.Approval
 			case proto.CtlError:
 				return nil, fmt.Errorf("host: %s", c.Msg)
 			}
@@ -387,6 +399,9 @@ func handshake(ctx context.Context, p *peerConn, opt Options) (*Conn, error) {
 		}
 	}
 
+	if conn.Approval == proto.ApprovalTrusted {
+		opt.Logf("the host recognised this device and approved it automatically")
+	}
 	return conn, nil
 }
 

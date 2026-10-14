@@ -158,7 +158,11 @@ the start of a line.</p>
 </tr>
 <tr>
 <td><code>--anonymous</code></td>
-<td>Do not send device details (see below).</td>
+<td>Do not send device details, and use a one-time device key (see below).</td>
+</tr>
+<tr>
+<td><code>--no-remember</code></td>
+<td>Use a one-time device key, so hosts cannot recognise this device next time.</td>
 </tr>
 <tr>
 <td><code>--verbose</code></td>
@@ -166,6 +170,20 @@ the start of a line.</p>
 </tr>
 </tbody>
 </table>
+<h2 id="get-approved-automatically">Get approved automatically</h2>
+<p>If the host uses <code>--approve</code>, you wait until they let you in. Each setu client
+has a <strong>device key</strong> that hosts can trust, so you are let in without waiting:</p>
+<ol>
+<li>Find your device fingerprint: on the web client's home page under
+<strong>This device</strong>, or with <code>setu device</code> in a terminal.</li>
+<li>Send it to the host. They add <code>--trust-device &lt;fingerprint&gt;</code>, or answer
+<code>a</code> (always) the next time they approve you.</li>
+</ol>
+<p>In the browser, keep <strong>Remember this device</strong> ticked so the same key is used
+next time. The private key never leaves your browser and cannot be read by any
+script. When a host admits you automatically the status bar shows
+<strong>trusted device</strong>. See
+<a href="sharing.html#approve-joiners-and-trust-devices">Approve joiners and trust devices</a>.</p>
 <h2 id="manual-mode">Manual mode</h2>
 <p>If the host used <code>--manual</code>, they send you an offer code or link instead:</p>
 <ol>
@@ -209,6 +227,7 @@ wrong passwords and mismatched verification codes.</p>
       <li class="l3"><a href="#on-a-phone">On a phone</a></li>
       <li class="l3"><a href="#pasting-an-invite">Pasting an invite</a></li>
       <li class="l2"><a href="#from-a-terminal">From a terminal</a></li>
+      <li class="l2"><a href="#get-approved-automatically">Get approved automatically</a></li>
       <li class="l2"><a href="#manual-mode">Manual mode</a></li>
       <li class="l2"><a href="#what-the-host-learns-about-you">What the host learns about you</a></li>
       <li class="l2"><a href="#common-problems">Common problems</a></li>

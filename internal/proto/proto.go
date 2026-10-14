@@ -87,7 +87,24 @@ type Control struct {
 	// self-reported: the host records it for auditing but never uses it
 	// for access decisions.
 	Client *ClientInfo `json:"client,omitempty"`
+
+	// DeviceKey (65-byte uncompressed P-256 point) and DeviceSig (P1363
+	// signature over secure.DeviceTranscript) prove which device is
+	// joining (sent with "auth"). Unlike Client, they are verified; hosts
+	// use them to approve known devices automatically.
+	DeviceKey []byte `json:"device_key,omitempty"`
+	DeviceSig []byte `json:"device_sig,omitempty"`
+
+	// Approval tells the client how it was admitted (sent with "ready"):
+	// ApprovalTrusted, ApprovalPrompt, or empty when no approval applied.
+	Approval string `json:"approval,omitempty"`
 }
+
+// How a client was admitted when the host requires approval.
+const (
+	ApprovalTrusted = "trusted" // a known device, approved automatically
+	ApprovalPrompt  = "prompt"  // the host answered the prompt
+)
 
 const maxInfoField = 256
 

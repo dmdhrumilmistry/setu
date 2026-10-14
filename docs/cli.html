@@ -84,6 +84,7 @@ setu logs &lt;id&gt;                                show a background share's lo
 setu stop &lt;id&gt; | --all                        stop background shares
 setu service ...                              always-on shares with persistent links
 setu policy                                   show the managed (MDM) policy in force
+setu device [show | reset]                    this device's key fingerprint (for auto-approval)
 setu version                                  version, commit and platform
 </code></pre>
 <p>Flags take one or two dashes (<code>-once</code> and <code>--once</code> are the same). Boolean flags
@@ -134,7 +135,12 @@ can be turned off explicitly, for example <code>--qr=false</code>.</p>
 <tr>
 <td><code>--approve</code></td>
 <td>off</td>
-<td>Ask y/N on this terminal before admitting each client.</td>
+<td>Ask before admitting each client: <code>y</code> once, <code>a</code> always for that device, <code>N</code> no.</td>
+</tr>
+<tr>
+<td><code>--trust-device FP</code></td>
+<td>none</td>
+<td>Device key fingerprint approved without asking (repeatable or comma separated). With <code>--approve</code> and no terminal (<code>-d</code>, <code>--headless</code>), only these devices may join.</td>
 </tr>
 </tbody>
 </table>
@@ -300,7 +306,12 @@ can be turned off explicitly, for example <code>--qr=false</code>.</p>
 <tr>
 <td><code>--anonymous</code></td>
 <td>off</td>
-<td>Do not send device details to the host.</td>
+<td>Do not send device details to the host, and use a one-time device key.</td>
+</tr>
+<tr>
+<td><code>--no-remember</code></td>
+<td>off</td>
+<td>Use a one-time device key kept only in memory, so hosts cannot approve this device automatically next time.</td>
 </tr>
 <tr>
 <td><code>--verbose</code></td>
@@ -585,6 +596,13 @@ can be turned off explicitly, for example <code>--qr=false</code>.</p>
 </tr>
 </tbody>
 </table>
+<h2 id="setu-device">setu device</h2>
+<pre><code class="language-sh">setu device          # print this device's key fingerprint (creates the key on first use)
+setu device reset    # replace the key; hosts that trusted the old one will ask again
+</code></pre>
+<p>The private key is stored owner-only at <code>&lt;config dir&gt;/setu/device.key</code>. Give the
+fingerprint to a host to use with <code>setu share --approve --trust-device</code>. See
+<a href="sharing.html#approve-joiners-and-trust-devices">Approve joiners and trust devices</a>.</p>
 <h2 id="setu-policy">setu policy</h2>
 <p>Prints where the managed policy came from, its hash and its settings (header
 values hidden), or &quot;no managed policy on this device&quot;. See
@@ -653,6 +671,7 @@ values hidden), or &quot;no managed policy on this device&quot;. See
       <li class="l3"><a href="#setu-service-rotate">setu service rotate</a></li>
       <li class="l3"><a href="#setu-service-audit">setu service audit</a></li>
       <li class="l3"><a href="#setu-service-install-and-run">setu service install and run</a></li>
+      <li class="l2"><a href="#setu-device">setu device</a></li>
       <li class="l2"><a href="#setu-policy">setu policy</a></li>
       <li class="l2"><a href="#environment-variables">Environment variables</a></li>
     </ul>

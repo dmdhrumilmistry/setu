@@ -120,13 +120,68 @@ View-only clients' keystrokes and resizes are dropped.</p>
 </tr>
 <tr>
 <td><code>--approve</code></td>
-<td>Ask <code>y/N</code> on the host terminal for every joiner, showing their verification code.</td>
+<td>Ask on the host terminal before admitting each joiner. See <a href="#approve-joiners-and-trust-devices">Approve joiners and trust devices</a>.</td>
 </tr>
 </tbody>
 </table>
 <p>Combine them for one-off help sessions:</p>
 <pre><code class="language-sh">setu share --password --once --expire 15m --max-clients 1 -- bash
 </code></pre>
+<h2 id="approve-joiners-and-trust-devices">Approve joiners and trust devices</h2>
+<p>With <code>--approve</code>, every joiner waits until you allow them on the host
+terminal:</p>
+<pre><code>[setu] client #2 (role=control) wants to join: shared-control-link (client #2 from 203.0.113.7:51234, device Pixel 8 (Android 15, setu-web), device key 3f2a-91c0-77de-0b4e-a1c9, verification code 058 186)
+Allow? [y] once, [a] always for this device, [N] no (60s)
+</code></pre>
+<ul>
+<li><code>y</code> admits this connection only.</li>
+<li><code>a</code> admits it <strong>and trusts the device</strong> for the rest of this share: the
+next time that device joins (after a dropped connection, a phone that went
+to sleep, a page reload) it is approved automatically, without a prompt.</li>
+<li>Anything else, or no answer within 60 seconds, denies it.</li>
+</ul>
+<h3 id="device-keys">Device keys</h3>
+<p>Every client has a <strong>device key</strong>: a P-256 key pair created on first use. The
+browser keeps it as a non-extractable WebCrypto key (no script, including the
+web client, can read the private key); <code>setu join</code> keeps it in an owner-only
+file. When joining, the client signs a message bound to this exact encrypted
+connection, so the host knows which device is connecting and a signature
+cannot be replayed. A device is shown by its fingerprint, such as
+<code>3f2a-91c0-77de-0b4e-a1c9</code>:</p>
+<ul>
+<li>in the browser, on the web client's home page under <strong>This device</strong>;</li>
+<li>in a terminal, with <code>setu device</code> (it is also printed by <code>setu join</code>).</li>
+</ul>
+<p>Trust is held <strong>in memory</strong> by the running share and ends with it. Answering
+<code>a</code> never writes anything to disk.</p>
+<h3 id="pre-approve-devices">Pre-approve devices</h3>
+<p>Give the fingerprints of your own devices up front and they are let in
+without asking:</p>
+<pre><code class="language-sh">setu share --approve --trust-device 3f2a-91c0-77de-0b4e-a1c9 -- claude
+</code></pre>
+<p><code>--trust-device</code> can be repeated or comma separated. Devices not on the list
+are still asked about on the host terminal.</p>
+<h3 id="unattended-only-known-devices">Unattended: only known devices</h3>
+<p>Without a terminal to answer prompts (background shares, <code>--headless</code> under
+a service manager), <code>--approve</code> with <code>--trust-device</code> becomes an allow list:
+trusted devices are admitted automatically and <strong>every other device is
+refused</strong>.</p>
+<pre><code class="language-sh">setu share -d --password --approve --trust-device 3f2a-91c0-77de-0b4e-a1c9 -- claude
+</code></pre>
+<p>Combined with a password, a joiner then needs the link, the password and the
+private key of a trusted device.</p>
+<h3 id="in-the-browser">In the browser</h3>
+<p>The web client's home page shows <strong>This device</strong> with its fingerprint and a
+<strong>Remember this device</strong> option (on by default):</p>
+<ul>
+<li>remembered: the key is stored in this browser, so hosts that trust it
+recognise it on every visit;</li>
+<li>not remembered (or private browsing): a new one-time key is used for each
+join, so hosts can approve it once but never recognise it again.</li>
+</ul>
+<p><strong>Forget this device</strong> deletes the stored key; hosts that trusted it will ask
+again. When a host admits the browser automatically, the status bar shows
+<strong>trusted device</strong>.</p>
 <h2 id="verify-who-you-are-talking-to">Verify who you are talking to</h2>
 <p>When a client connects, the host terminal prints a line such as:</p>
 <pre><code>[setu] client #1 connected via nostr, role=control: shared-control-link (client #1 from 203.0.113.7:51234, device alice-laptop (linux/amd64, setu-cli), verification code 058 186)
@@ -255,6 +310,11 @@ of connections and typed commands to your OpenTelemetry collector. See
       <li class="l3"><a href="#passwords">Passwords</a></li>
       <li class="l3"><a href="#view-only-links">View-only links</a></li>
       <li class="l3"><a href="#single-use-expiry-and-limits">Single use, expiry and limits</a></li>
+      <li class="l2"><a href="#approve-joiners-and-trust-devices">Approve joiners and trust devices</a></li>
+      <li class="l3"><a href="#device-keys">Device keys</a></li>
+      <li class="l3"><a href="#pre-approve-devices">Pre-approve devices</a></li>
+      <li class="l3"><a href="#unattended-only-known-devices">Unattended: only known devices</a></li>
+      <li class="l3"><a href="#in-the-browser">In the browser</a></li>
       <li class="l2"><a href="#verify-who-you-are-talking-to">Verify who you are talking to</a></li>
       <li class="l2"><a href="#run-in-the-background">Run in the background</a></li>
       <li class="l2"><a href="#headless-and-scripted-shares">Headless and scripted shares</a></li>

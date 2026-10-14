@@ -18,6 +18,7 @@ an SSH private key.
 | Admission | `--max-clients`, `--once`, `--expire`, `--approve`. Handshakes must finish within 2 minutes, and at most 3 can be pending. |
 | Hygiene | `SETU_PASSWORD`, `SETU_TURN_PASSWORD` and audit collector headers are removed from the environment before the shared command starts. Link files and session directories are owner-only. Slow clients are disconnected after 8 MiB of backlog. |
 | Web client | No third-party code at runtime: libraries are vendored and checksum-pinned, a strict Content Security Policy allows only same-origin scripts, and the page refuses to run in a frame. |
+| Device keys | Each client signs every connection with a P-256 device key (a non-extractable WebCrypto key in browsers, an owner-only file for `setu join`). The signature covers the host's nonce and both DTLS fingerprints, so it cannot be replayed. With `--approve`, hosts can trust device fingerprints (`--trust-device`, or answering "always"); trust lives in memory for the share. Unattended shares admit only trusted devices. A bad device signature counts as a failed login. |
 | Personal keys | With the [service](service.md), each person can have their own key; identity comes from which key decrypted the request. |
 | Audit log | Connections, admission decisions and submitted commands go to your collector over TLS, off the machine within about a second. See [Audit logging](audit.md). |
 | Managed policy | Administrators can enforce requirements on every device; a broken or tampered policy fails closed. See [MDM and managed policy](mdm.md). |

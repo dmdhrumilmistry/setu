@@ -46,3 +46,32 @@ test('parseInvite', () => {
   assert.deepEqual(C.parseInvite('CODE'), { offer: 'CODE' });
   assert.throws(() => C.parseInvite('https://x/#z=1'));
 });
+
+// Device keys: a signature made by Go (secure.DeviceKey.Sign) must verify
+// in WebCrypto, and both sides must agree on the fingerprint.
+import { deviceTranscript, deviceFingerprint, signDevice } from '../js/device.mjs';
+
+const goDevice = {
+  pub: '04f4c396d791eab640e864213d8c4a758d1e97e4875f09145ec53cbf97e5acd86f6c0b77ea2ae52274f54cdacc70c731874696f89a9483e58bdedd6a902aa2f637',
+  sig: 'a89eefafb726eb6bfb5c7dd96b660ffdd9b9cf151379e7f8770f1005dc9665ddd48d9ef038c9fbe2dd12ca7d7596916130db38916e30fb052f30910e2582390e',
+  fp: '019e-dc90-3f80-4457-9a53',
+};
+const vecNonce = Uint8Array.from({ length: 32 }, (_, i) => i);
+
+test('device signature from Go verifies in WebCrypto', async () => {
+  const pub = await crypto.subtle.importKey('raw', C.unhex(goDevice.pub), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+  const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pub, C.unhex(goDevice.sig),
+    deviceTranscript(vecNonce, 'sha-256 CC:DD', 'sha-256 AA:BB'));
+  assert.equal(ok, true);
+  assert.equal(await deviceFingerprint(C.unhex(goDevice.pub)), goDevice.fp);
+});
+
+test('device signature is bound to the connection', async () => {
+  const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign', 'verify']);
+  const sig = await signDevice({ privateKey: pair.privateKey }, vecNonce, FPA, FPB);
+  assert.equal(sig.length, 64);
+  const verify = (n, a, b) => crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pair.publicKey, sig, deviceTranscript(n, a, b));
+  assert.equal(await verify(vecNonce, FPB, FPA), true);
+  assert.equal(await verify(new Uint8Array(32), FPA, FPB), false);
+  assert.equal(await verify(vecNonce, FPA, 'sha-256 FF'), false);
+});

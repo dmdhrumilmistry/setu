@@ -42,6 +42,7 @@ Usage:
   setu stop <id> | --all                        stop background share(s)
   setu service ...                              always-on shares with persistent links (see 'setu service')
   setu policy                                   show the managed (MDM) policy in force on this device
+  setu device [show | reset]                    this device's key fingerprint (for auto-approval)
   setu version
 
 Examples:
@@ -84,6 +85,8 @@ func main() {
 		code, err = runService(os.Args[2:])
 	case "policy":
 		code, err = runPolicy(os.Args[2:])
+	case "device":
+		code, err = runDevice(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println(versionString())
 	case "help", "-h", "--help":
@@ -127,7 +130,9 @@ func runShare(args []string) (int, error) {
 	password := fs.Bool("password", false, "require a password (prompted; or set SETU_PASSWORD)")
 	maxClients := fs.Int("max-clients", 2, "maximum concurrent clients")
 	once := fs.Bool("once", false, "invite becomes invalid after the first successful join")
-	approve := fs.Bool("approve", false, "ask on this terminal before admitting each client")
+	approve := fs.Bool("approve", false, "ask on this terminal before admitting each client (answer a to always approve that device)")
+	var trustDevices listFlag
+	fs.Var(&trustDevices, "trust-device", "device key fingerprint to approve without asking (repeatable; see 'setu device'). With --approve and no terminal, only these devices may join")
 	expire := fs.Duration("expire", 0, "invite stops accepting new clients after this long (e.g. 30m); 0 = never")
 	fs.Var(&relays, "relay", "nostr relay URL (repeatable / comma separated); default: built-in public relays")
 	fs.Var(&stun, "stun", "STUN server URL(s), e.g. stun:stun.l.google.com:19302 (default Google STUN)")
@@ -194,8 +199,8 @@ func runShare(args []string) (int, error) {
 		if *manual {
 			return 1, errors.New("--background cannot be combined with --manual (the answer is pasted into this terminal)")
 		}
-		if *approve {
-			return 1, errors.New("--background cannot be combined with --approve (nobody would see the prompt)")
+		if *approve && len(trustDevices) == 0 {
+			return 1, errors.New("--background with --approve needs --trust-device (nobody would see the prompt)")
 		}
 	}
 	if *sessionDir != "" {
@@ -206,8 +211,19 @@ func runShare(args []string) (int, error) {
 
 	stdinTTY := tty.IsTerminal(os.Stdin) && tty.IsTerminal(os.Stdout)
 	mirror := !*headless && stdinTTY
-	if *approve && !tty.IsTerminal(os.Stdin) {
-		return 1, errors.New("--approve needs an interactive terminal")
+	for i, fp := range trustDevices {
+		n, err := secure.NormalizeDeviceFingerprint(fp)
+		if err != nil {
+			return 1, err
+		}
+		trustDevices[i] = n
+	}
+	if len(trustDevices) > 0 && !*approve {
+		return 1, errors.New("--trust-device only matters with --approve (without it every joiner with the link is admitted)")
+	}
+	noPrompt := *approve && (!tty.IsTerminal(os.Stdin) || *sessionDir != "")
+	if noPrompt && len(trustDevices) == 0 {
+		return 1, errors.New("--approve needs an interactive terminal, or --trust-device to admit known devices only")
 	}
 	if *manual && !tty.IsTerminal(os.Stdin) {
 		return 1, errors.New("--manual needs an interactive terminal to paste the answer")
@@ -287,18 +303,20 @@ func runShare(args []string) (int, error) {
 		relays = nostr.DefaultRelays
 	}
 	cfg := host.Config{
-		Command:    command,
-		Manual:     *manual,
-		Relays:     relays,
-		ICE:        ice,
-		Password:   pw,
-		MaxClients: *maxClients,
-		Once:       *once,
-		Approve:    *approve,
-		Expire:     *expire,
-		Mirror:     mirror,
-		Verbose:    *verbose,
-		Audit:      auditLog,
+		Command:        command,
+		Manual:         *manual,
+		Relays:         relays,
+		ICE:            ice,
+		Password:       pw,
+		MaxClients:     *maxClients,
+		Once:           *once,
+		Approve:        *approve,
+		TrustedDevices: trustDevices,
+		NoPrompt:       noPrompt,
+		Expire:         *expire,
+		Mirror:         mirror,
+		Verbose:        *verbose,
+		Audit:          auditLog,
 	}
 
 	customRelays := relays
@@ -365,7 +383,14 @@ func runShare(args []string) (int, error) {
 			notes = append(notes, "expires in "+expire.String())
 		}
 		if *approve {
-			notes = append(notes, "host approval required")
+			switch {
+			case noPrompt:
+				notes = append(notes, fmt.Sprintf("only %d trusted device(s) may join", len(trustDevices)))
+			case len(trustDevices) > 0:
+				notes = append(notes, fmt.Sprintf("host approval required (%d trusted device(s) approved automatically)", len(trustDevices)))
+			default:
+				notes = append(notes, "host approval required")
+			}
 		}
 		notes = append(notes, fmt.Sprintf("max %d client(s)", *maxClients))
 		if auditCfg.Enabled() {
@@ -425,7 +450,8 @@ func runJoin(args []string) (int, error) {
 	var relays listFlag
 	fs.Var(&relays, "relay", "override nostr relay URL(s)")
 	timeout := fs.Duration("timeout", 3*time.Minute, "give up connecting after this long")
-	anonymous := fs.Bool("anonymous", false, "do not send device details (hostname, OS user, device id) to the host; the host still logs your network address")
+	anonymous := fs.Bool("anonymous", false, "do not send device details (hostname, OS user, device id) to the host and use a one-time device key; the host still logs your network address")
+	noRemember := fs.Bool("no-remember", false, "use a one-time device key kept only in memory, so hosts cannot approve this device automatically next time")
 	verbose := fs.Bool("verbose", false, "verbose logging")
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "Usage: setu join [flags] <link | k=… | offer code>\n\n")
@@ -460,6 +486,12 @@ func runJoin(args []string) (int, error) {
 	if !*anonymous {
 		opt.Info = client.LocalInfo(versionString())
 	}
+	key, err := client.LoadDeviceKey(!*anonymous && !*noRemember)
+	if err != nil {
+		return 1, fmt.Errorf("device key: %w", err)
+	}
+	opt.DeviceKey = key
+	fmt.Fprintf(os.Stderr, "This device: %s (give it to the host to approve this device automatically)\n", key.Fingerprint())
 	ctx, cancel := signalContext()
 	defer cancel()
 	code, err := client.Join(ctx, fs.Arg(0), opt)

@@ -41,6 +41,9 @@ type peer struct {
 	// shared links). The host derives it from which key decrypted the join
 	// request, never from anything the client claims.
 	keyName string
+	// deviceFP is the fingerprint of the client's device key, set only when
+	// its signature over this connection verified.
+	deviceFP string
 
 	pc *webrtc.PeerConnection
 	dc *webrtc.DataChannel
@@ -172,6 +175,20 @@ func (p *peer) onMessage(msg webrtc.DataChannelMessage) {
 		p.state = stateApproving
 		p.info = c.Client.Sanitized() // before the password check, so failures are attributed too
 		p.mu.Unlock()
+		if len(c.DeviceKey) > 0 {
+			// A device key must prove itself on this connection; a client that
+			// sends a bad one is broken or forging, so it is refused.
+			fp, err := secure.VerifyDevice(c.DeviceKey, c.DeviceSig, p.nonce, p.localFP, p.remoteFP)
+			if err != nil {
+				p.s.authFailed(p)
+				p.sendControl(proto.Control{T: proto.CtlError, Msg: "invalid device key signature"})
+				time.AfterFunc(200*time.Millisecond, func() { p.close("invalid device key") })
+				return
+			}
+			p.mu.Lock()
+			p.deviceFP = fp
+			p.mu.Unlock()
+		}
 		if p.s.pwKey != nil {
 			want := secure.AuthProof(p.s.pwKey, p.nonce, p.localFP, p.remoteFP)
 			if !hmac.Equal(want, c.Proof) {
@@ -190,7 +207,8 @@ func (p *peer) onMessage(msg webrtc.DataChannelMessage) {
 }
 
 func (p *peer) activate() {
-	if !p.s.approve(p) {
+	how, ok := p.s.approve(p)
+	if !ok {
 		p.sendControl(proto.Control{T: proto.CtlError, Msg: "the host denied the connection"})
 		time.AfterFunc(200*time.Millisecond, func() { p.close("denied by host") })
 		return
@@ -213,7 +231,7 @@ func (p *peer) activate() {
 	}
 	p.mu.Unlock()
 	s.failures = 0
-	p.sendControl(proto.Control{T: proto.CtlReady, V: proto.Version, Role: p.role, Cmd: s.commandLine(), Host: s.host, Cols: s.cols, Rows: s.rows})
+	p.sendControl(proto.Control{T: proto.CtlReady, V: proto.Version, Role: p.role, Cmd: s.commandLine(), Host: s.host, Cols: s.cols, Rows: s.rows, Approval: how})
 	if len(s.ring) > 0 {
 		for off := 0; off < len(s.ring); off += 16 << 10 {
 			end := min(off+16<<10, len(s.ring))
@@ -289,7 +307,7 @@ func (p *peer) addCloseHook(f func()) {
 func (p *peer) auditClient() audit.Client {
 	p.mu.Lock()
 	c := audit.Client{ID: p.id, Role: p.role, Via: p.label, KeyName: p.keyName, SAS: p.sas, Fingerprint: p.remoteFP,
-		PublicAddresses: p.publicAddrs, LocalAddresses: p.localAddrs, Device: p.info}
+		PublicAddresses: p.publicAddrs, LocalAddresses: p.localAddrs, Device: p.info, DeviceKey: p.deviceFP}
 	p.mu.Unlock()
 	if sctp := p.pc.SCTP(); sctp != nil {
 		if pair, err := sctp.Transport().ICETransport().GetSelectedCandidatePair(); err == nil && pair != nil && pair.Remote != nil {

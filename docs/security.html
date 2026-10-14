@@ -129,6 +129,10 @@ an SSH private key.</p>
 <td>No third-party code at runtime: libraries are vendored and checksum-pinned, a strict Content Security Policy allows only same-origin scripts, and the page refuses to run in a frame.</td>
 </tr>
 <tr>
+<td>Device keys</td>
+<td>Each client signs every connection with a P-256 device key (a non-extractable WebCrypto key in browsers, an owner-only file for <code>setu join</code>). The signature covers the host's nonce and both DTLS fingerprints, so it cannot be replayed. With <code>--approve</code>, hosts can trust device fingerprints (<code>--trust-device</code>, or answering &quot;always&quot;); trust lives in memory for the share. Unattended shares admit only trusted devices. A bad device signature counts as a failed login.</td>
+</tr>
+<tr>
 <td>Personal keys</td>
 <td>With the <a href="service.html">service</a>, each person can have their own key; identity comes from which key decrypted the request.</td>
 </tr>

@@ -6,6 +6,7 @@ import { Terminal } from '../vendor/xterm.mjs';
 import { FitAddon } from '../vendor/addon-fit.mjs';
 import * as C from './crypto.mjs';
 import * as N from './nostr.mjs';
+import { deviceKey, forgetDevice, signDevice, deviceFingerprint } from './device.mjs';
 
 const PROTO_VERSION = 1;
 const GATHER_TIMEOUT = 6000;
@@ -182,6 +183,20 @@ async function onHello(m) {
   step(`Verification code ${code} — the host terminal prints the same code when you join.`, 'ok');
   const nonce = C.b64Decode(m.nonce);
   const client = await clientInfo();
+  // Device key: proves which device this is, so a host can approve it
+  // automatically. Best effort: joining works without it.
+  let dev = null;
+  try {
+    dev = await deviceKey(rememberDevice());
+    step(`This device: ${await deviceFingerprint(dev.publicRaw)} (${rememberDevice() ? 'remembered' : 'one-time key'})`);
+  } catch { /* WebCrypto ECDSA unavailable */ }
+  const withDevice = async (msg) => {
+    if (dev) {
+      msg.device_key = C.b64Encode(dev.publicRaw);
+      msg.device_sig = C.b64Encode(await signDevice(dev, nonce, localFP, remoteFP));
+    }
+    return msg;
+  };
   if (m.auth === 'password') {
     setStatus('password required', 'warn');
     $('pw-form').hidden = false;
@@ -195,20 +210,24 @@ async function onHello(m) {
       try {
         const key = await C.passwordKey(pw, C.b64Decode(m.salt), m.iter);
         const proof = await C.authProof(key, nonce, localFP, remoteFP);
-        sendCtl({ t: 'auth', proof: C.b64Encode(proof), client });
+        sendCtl(await withDevice({ t: 'auth', proof: C.b64Encode(proof), client }));
+        step('Authenticated. If the host requires approval, it is being asked now...');
       } catch (err) {
         fail(String(err.message || err));
       }
     };
   } else {
-    sendCtl({ t: 'auth', client });
+    sendCtl(await withDevice({ t: 'auth', client }));
+    step('If the host requires approval, it is being asked now...');
   }
 }
 
 function onReady(m) {
   state.role = m.role;
   state.ready = true;
-  setStatus(m.role === 'control' ? 'connected · control' : 'connected · view only', 'ok');
+  const trusted = m.approval === 'trusted' ? ' · trusted device' : '';
+  setStatus((m.role === 'control' ? 'connected · control' : 'connected · view only') + trusted, 'ok');
+  if (trusted) $('status').title = 'The host recognised this device and approved it automatically';
   $('title').textContent = `${m.cmd || 'terminal'} @ ${m.host || 'host'}`;
   document.title = `setu · ${m.cmd || 'terminal'}`;
   show('screen-term');
@@ -382,7 +401,32 @@ async function start(input) {
   }
 }
 
+// The remember-device preference (default on) lives in localStorage.
+function rememberDevice() {
+  try { return localStorage.getItem('setu-remember-device') !== '0'; } catch { return false; }
+}
+
+async function showDevice() {
+  try {
+    const k = await deviceKey(rememberDevice());
+    $('device-fp').textContent = (await deviceFingerprint(k.publicRaw)) + (rememberDevice() ? '' : ' (one-time key)');
+  } catch {
+    $('device-fp').textContent = 'unavailable in this browser';
+  }
+}
+
 function boot() {
+  $('remember-device').checked = rememberDevice();
+  $('remember-device').addEventListener('change', async (e) => {
+    try { localStorage.setItem('setu-remember-device', e.target.checked ? '1' : '0'); } catch { /* ignore */ }
+    if (!e.target.checked) await forgetDevice(); // unticking deletes the stored key
+    showDevice();
+  });
+  $('forget-device').addEventListener('click', async () => {
+    await forgetDevice();
+    await showDevice();
+    $('forget-device').textContent = 'Forgotten: new key created';
+  });
   $('copy-answer').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText($('answer').value); $('copy-answer').textContent = 'Copied'; }
     catch { $('answer').select(); }
@@ -400,6 +444,7 @@ function boot() {
     start(frag);
   } else {
     show('screen-home');
+    showDevice();
   }
 }
 

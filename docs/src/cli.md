@@ -9,6 +9,7 @@ setu logs <id>                                show a background share's log
 setu stop <id> | --all                        stop background shares
 setu service ...                              always-on shares with persistent links
 setu policy                                   show the managed (MDM) policy in force
+setu device [show | reset]                    this device's key fingerprint (for auto-approval)
 setu version                                  version, commit and platform
 ```
 
@@ -31,7 +32,8 @@ setu share [flags] [--] [command [args...]]
 | `--once` | off | The invite stops working after the first successful join. |
 | `--expire DURATION` | `0` (never) | Stop accepting new clients after this long, for example `30m`. |
 | `--max-clients N` | 2 | Maximum concurrent clients. |
-| `--approve` | off | Ask y/N on this terminal before admitting each client. |
+| `--approve` | off | Ask before admitting each client: `y` once, `a` always for that device, `N` no. |
+| `--trust-device FP` | none | Device key fingerprint approved without asking (repeatable or comma separated). With `--approve` and no terminal (`-d`, `--headless`), only these devices may join. |
 
 **Running**
 
@@ -80,7 +82,8 @@ setu join [flags] <link | k=... | offer code>
 | --- | --- | --- |
 | `--timeout DURATION` | `3m` | Give up connecting after this long. |
 | `--relay URL` | from the link | Override the nostr relays. |
-| `--anonymous` | off | Do not send device details to the host. |
+| `--anonymous` | off | Do not send device details to the host, and use a one-time device key. |
+| `--no-remember` | off | Use a one-time device key kept only in memory, so hosts cannot approve this device automatically next time. |
 | `--verbose` | off | Verbose logging. |
 
 Type `<Enter> ~ .` to detach.
@@ -161,6 +164,17 @@ Ids can be abbreviated to any unique prefix.
 | `install` | `--no-start` | Register autostart without starting the service now. |
 | `run` | `--dir PATH` | Service state directory (default: the per-user one). |
 | `run` | `--log-file PATH` | Append the supervisor log to PATH instead of stderr. |
+
+## setu device
+
+```sh
+setu device          # print this device's key fingerprint (creates the key on first use)
+setu device reset    # replace the key; hosts that trusted the old one will ask again
+```
+
+The private key is stored owner-only at `<config dir>/setu/device.key`. Give the
+fingerprint to a host to use with `setu share --approve --trust-device`. See
+[Approve joiners and trust devices](sharing.md#approve-joiners-and-trust-devices).
 
 ## setu policy
 

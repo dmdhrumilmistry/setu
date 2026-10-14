@@ -417,6 +417,108 @@ func TestAuditEchoOff(t *testing.T) {
 	}
 }
 
+func dialDevice(ctx context.Context, t *testing.T, inv string, key *secure.DeviceKey) (*client.Conn, error) {
+	return client.Dial(ctx, inv, client.Options{Timeout: 30 * time.Second, Logf: t.Logf, DeviceKey: key})
+}
+
+// TestTrustedDevices: with --approve and no prompt, only trusted device keys
+// get in, and the audit log records the verified key and how it was admitted.
+func TestTrustedDevices(t *testing.T) {
+	r := relaytest.New()
+	defer r.Close()
+	col := audittest.New(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	al, err := audit.New(ctx, audit.Config{Endpoint: col.URL}, audit.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	trusted, _ := secure.NewDeviceKey()
+	stranger, _ := secure.NewDeviceKey()
+	ctl, _ := startHost(t, ctx, r.URL(), func(c *host.Config) {
+		c.Audit = al
+		c.Approve, c.NoPrompt = true, true
+		c.TrustedDevices = []string{strings.ToUpper(trusted.Fingerprint())} // any case works
+	})
+
+	c, err := dialDevice(ctx, t, ctl, trusted)
+	if err != nil {
+		t.Fatalf("trusted device refused: %v", err)
+	}
+	if c.Approval != proto.ApprovalTrusted {
+		t.Errorf("approval %q, want %q", c.Approval, proto.ApprovalTrusted)
+	}
+	waitFor(t, c, "READY")
+	c.Close()
+
+	for name, key := range map[string]*secure.DeviceKey{"unknown device": stranger, "no device key": nil} {
+		if _, err := dialDevice(ctx, t, ctl, key); err == nil || !strings.Contains(err.Error(), "denied") {
+			t.Errorf("%s: got %v, want a denial", name, err)
+		}
+	}
+	time.Sleep(300 * time.Millisecond)
+	if err := al.Shutdown(ctx); err != nil {
+		t.Fatal(err)
+	}
+	methods := map[string]string{}
+	for _, rec := range col.Events("setu.client.approval") {
+		methods[audittest.Attr(rec, "setu.client.device_key")] = audittest.Attr(rec, "setu.approval.method")
+	}
+	if methods[trusted.Fingerprint()] != audit.ApprovedTrustedDevice || methods[stranger.Fingerprint()] != audit.DeniedUnknownDevice || methods[""] != audit.DeniedUnknownDevice {
+		t.Errorf("approval records %v", methods)
+	}
+}
+
+// TestApproveAlways: answering "a" trusts the device for the rest of the
+// session, so it is not asked about again; other devices still are.
+func TestApproveAlways(t *testing.T) {
+	r := relaytest.New()
+	defer r.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	var mu sync.Mutex
+	asked := 0
+	answers := []byte{'a', 'n'}
+	ctl, _ := startHost(t, ctx, r.URL(), func(c *host.Config) {
+		c.Approve = true
+		c.Ask = func(time.Duration) (byte, bool) {
+			mu.Lock()
+			defer mu.Unlock()
+			a := answers[asked]
+			asked++
+			return a, true
+		}
+	})
+	phone, _ := secure.NewDeviceKey()
+	c, err := dialDevice(ctx, t, ctl, phone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Approval != proto.ApprovalPrompt {
+		t.Errorf("first join approval %q", c.Approval)
+	}
+	c.Close()
+	time.Sleep(300 * time.Millisecond)
+
+	c2, err := dialDevice(ctx, t, ctl, phone)
+	if err != nil {
+		t.Fatalf("remembered device refused: %v", err)
+	}
+	defer c2.Close()
+	if c2.Approval != proto.ApprovalTrusted {
+		t.Errorf("second join approval %q, want %q", c2.Approval, proto.ApprovalTrusted)
+	}
+	other, _ := secure.NewDeviceKey()
+	if _, err := dialDevice(ctx, t, ctl, other); err == nil {
+		t.Error("an unknown device was admitted after the host answered no")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if asked != 2 {
+		t.Errorf("host was asked %d times, want 2 (first join and the other device)", asked)
+	}
+}
+
 func TestOnceAndWrongSecret(t *testing.T) {
 	r := relaytest.New()
 	defer r.Close()
