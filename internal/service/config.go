@@ -31,6 +31,7 @@ import (
 	"github.com/dmdhrumilmistry/setu/internal/audit"
 	"github.com/dmdhrumilmistry/setu/internal/link"
 	"github.com/dmdhrumilmistry/setu/internal/nostr"
+	"github.com/dmdhrumilmistry/setu/internal/policy"
 	"github.com/dmdhrumilmistry/setu/internal/proto"
 	"github.com/dmdhrumilmistry/setu/internal/rtc"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
@@ -371,6 +372,49 @@ func (p *Profile) Validate() error {
 	}
 	return rtc.ValidateICE(p.ICE())
 }
+
+// keyValiditySlack absorbs the time between creating keys and checking them.
+const keyValiditySlack = time.Minute
+
+// CheckPolicy checks a profile against the managed policy. The supervisor
+// runs it before serving, because the config file is the user's to edit.
+func (p *Profile) CheckPolicy(pol *policy.Policy, now time.Time) error {
+	if !pol.Managed() {
+		return nil
+	}
+	if err := pol.CheckService(); err != nil {
+		return err
+	}
+	if err := pol.CheckCommand(p.Command); err != nil {
+		return err
+	}
+	if err := pol.CheckWebURL(p.WebURL); err != nil {
+		return err
+	}
+	if _, err := pol.Relays(p.Relays); err != nil {
+		return err
+	}
+	if err := pol.CheckPassword(p.Password != nil, servicePasswordFloor); err != nil {
+		return err
+	}
+	if _, err := pol.Clients(p.MaxClients, true); err != nil {
+		return err
+	}
+	if pol.RequirePersonalKeys && p.ControlKey != "" {
+		return &policy.Violation{Key: "RequirePersonalKeys", Msg: "shared control links are not allowed; give each person their own key"}
+	}
+	if err := pol.CheckKeyValidity(time.Duration(p.ValidFor)); err != nil {
+		return err
+	}
+	if max := pol.MaxKeyValidity.D(); max > 0 && (p.ExpiresAt.IsZero() || p.ExpiresAt.Sub(now) > max+keyValiditySlack) {
+		return &policy.Violation{Key: "MaxKeyValidity", Msg: fmt.Sprintf("keys must expire within %s; rotate them", max)}
+	}
+	return nil
+}
+
+// servicePasswordFloor stands in for the length of a stored password, which
+// is only kept as a verifier; the CLI checks the real length when it is set.
+const servicePasswordFloor = 1 << 10
 
 // Active reports whether the supervisor should serve the profile now.
 func (p *Profile) Active(now time.Time) bool {

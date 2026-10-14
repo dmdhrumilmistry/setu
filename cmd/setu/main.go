@@ -22,6 +22,7 @@ import (
 	"github.com/dmdhrumilmistry/setu/internal/host"
 	"github.com/dmdhrumilmistry/setu/internal/link"
 	"github.com/dmdhrumilmistry/setu/internal/nostr"
+	"github.com/dmdhrumilmistry/setu/internal/policy"
 	"github.com/dmdhrumilmistry/setu/internal/proto"
 	"github.com/dmdhrumilmistry/setu/internal/rtc"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
@@ -40,6 +41,7 @@ Usage:
   setu logs <id>                                show a background share's log
   setu stop <id> | --all                        stop background share(s)
   setu service ...                              always-on shares with persistent links (see 'setu service')
+  setu policy                                   show the managed (MDM) policy in force on this device
   setu version
 
 Examples:
@@ -80,6 +82,8 @@ func main() {
 		code, err = runLogs(os.Args[2:])
 	case "service", "svc":
 		code, err = runService(os.Args[2:])
+	case "policy":
+		code, err = runPolicy(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println(versionString())
 	case "help", "-h", "--help":
@@ -155,6 +159,37 @@ func runShare(args []string) (int, error) {
 		command = host.DefaultShell()
 	}
 
+	// Managed (MDM) policy: checked here and again by a background child.
+	pol, err := policy.Load()
+	if err != nil {
+		return 1, err
+	}
+	if err := pol.CheckShare(*manual); err != nil {
+		return 1, err
+	}
+	if err := pol.CheckCommand(resolveCommand(command)); err != nil {
+		return 1, err
+	}
+	if err := pol.CheckWebURL(*webURL); err != nil {
+		return 1, err
+	}
+	set := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	if *maxClients, err = pol.Clients(*maxClients, set["max-clients"]); err != nil {
+		return 1, err
+	}
+	if *expire, err = pol.ShareExpiry(*expire); err != nil {
+		return 1, err
+	}
+	if !*manual {
+		if relays, err = pol.Relays(relays); err != nil {
+			return 1, err
+		}
+	}
+	if pol.RequirePassword {
+		*password = true // prompt (or use SETU_PASSWORD) even without --password
+	}
+
 	if background {
 		if *manual {
 			return 1, errors.New("--background cannot be combined with --manual (the answer is pasted into this terminal)")
@@ -196,6 +231,11 @@ func runShare(args []string) (int, error) {
 			return 1, err
 		}
 		auditCfg = c
+	} else if *auditOpts.input == audit.InputOff {
+		auditCfg.Input = audit.InputOff // so a policy can refuse it
+	}
+	if auditCfg, err = pol.AuditConfig(auditCfg); err != nil {
+		return 1, err
 	}
 
 	pw := os.Getenv("SETU_PASSWORD")
@@ -211,11 +251,14 @@ func runShare(args []string) (int, error) {
 	}
 	if *password && pw == "" {
 		var err error
-		if pw, err = promptNewPassword("session", 8); err != nil {
+		if pw, err = promptNewPassword("session", pol.MinPassword(8)); err != nil {
 			return 1, err
 		}
 	}
 	os.Unsetenv("SETU_PASSWORD") // never leak into the shared shell
+	if err := pol.CheckPassword(pw != "", len(pw)); err != nil {
+		return 1, err
+	}
 
 	if background {
 		return startBackground(fs, command, pw)
@@ -232,7 +275,7 @@ func runShare(args []string) (int, error) {
 	var auditLog *audit.Logger
 	if auditCfg.Enabled() {
 		var err error
-		auditLog, err = audit.New(context.Background(), auditCfg, audit.Options{Version: versionString()})
+		auditLog, err = audit.New(context.Background(), auditCfg, audit.Options{Version: versionString(), Attributes: pol.AuditAttributes()})
 		if err != nil {
 			return 1, err
 		}

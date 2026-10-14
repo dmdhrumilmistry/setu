@@ -35,6 +35,7 @@ import (
 	"os/user"
 	"runtime"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -226,6 +227,9 @@ func (c Config) tlsConfig() (*tls.Config, error) {
 // Options are the process-level details attached to every record.
 type Options struct {
 	Version string
+	// Attributes are added to the resource of every record, e.g. the
+	// device serial number or asset tag from a managed policy.
+	Attributes map[string]string
 	// Logf reports export problems (rate limited). Defaults to stderr.
 	Logf func(format string, args ...any)
 
@@ -240,6 +244,7 @@ type Logger struct {
 	redact   *redactor
 	user     string // OS account that shared commands run as
 	host     string
+	hostID   string // stable machine id (OpenTelemetry host.id)
 }
 
 const (
@@ -290,13 +295,14 @@ func New(ctx context.Context, cfg Config, opt Options) (*Logger, error) {
 	setErrorHandler(opt.Logf)
 
 	host, _ := os.Hostname()
+	hostID := machineID()
 	username := ""
 	if u, err := user.Current(); err == nil {
 		username = u.Username
 	}
 
 	provider := sdklog.NewLoggerProvider(
-		sdklog.WithResource(processResource(opt.Version, host, username)),
+		sdklog.WithResource(processResource(opt.Version, host, hostID, username, opt.Attributes)),
 		sdklog.WithProcessor(sdklog.NewBatchProcessor(exp,
 			sdklog.WithMaxQueueSize(queueSize),
 			sdklog.WithExportInterval(exportInterval),
@@ -311,6 +317,7 @@ func New(ctx context.Context, cfg Config, opt Options) (*Logger, error) {
 		redact:   red,
 		user:     username,
 		host:     host,
+		hostID:   hostID,
 	}
 	if cfg.Required {
 		if err := l.probe(ctx); err != nil {
@@ -381,7 +388,7 @@ func setErrorHandler(logf func(string, ...any)) {
 	})
 }
 
-func processResource(version, host, username string) *resource.Resource {
+func processResource(version, host, hostID, username string, extra map[string]string) *resource.Resource {
 	attrs := []attribute.KeyValue{
 		attribute.String("service.name", "setu"),
 		attribute.String("service.version", version),
@@ -392,6 +399,17 @@ func processResource(version, host, username string) *resource.Resource {
 	}
 	if username != "" {
 		attrs = append(attrs, attribute.String("user.name", username))
+	}
+	if hostID != "" {
+		attrs = append(attrs, attribute.String("host.id", hostID))
+	}
+	keys := make([]string, 0, len(extra))
+	for k := range extra {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		attrs = append(attrs, attribute.String(k, extra[k]))
 	}
 	return resource.NewSchemaless(attrs...)
 }
@@ -640,6 +658,7 @@ func (in *Input) record(e event) {
 	who := append(slices.Clip(in.attrs),
 		attribute.String("user.name", in.s.l.user),
 		attribute.String("host.name", in.s.l.host),
+		attribute.String("host.id", in.s.l.hostID),
 	)
 	if e.control != "" {
 		in.s.emitAt(at, otellog.SeverityInfo, "setu.input.control", e.control,

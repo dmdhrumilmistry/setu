@@ -14,12 +14,13 @@ import (
 	"github.com/dmdhrumilmistry/setu/internal/audit"
 	"github.com/dmdhrumilmistry/setu/internal/daemon"
 	"github.com/dmdhrumilmistry/setu/internal/host"
+	"github.com/dmdhrumilmistry/setu/internal/policy"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
 )
 
 const (
 	pollInterval      = 2 * time.Second  // config file change detection
-	reconcileInterval = 30 * time.Second // expiry and audit retry, even without changes
+	reconcileInterval = 10 * time.Second // policy, expiry and audit retry, even without config changes
 	minBackoff        = time.Second
 	maxBackoff        = time.Minute
 	stableRun         = time.Minute // a run this long resets the backoff
@@ -38,7 +39,9 @@ type Supervisor struct {
 
 	logged, seen map[string]bool // problem messages: already logged / seen this round
 
-	hostHook func(*host.Config) // tests: adjust each session's config
+	hostHook   func(*host.Config)             // tests: adjust each session's config
+	loadPolicy func() (*policy.Policy, error) // tests: replaces policy.Load
+	every      time.Duration                  // tests: replaces reconcileInterval
 }
 
 type runner struct {
@@ -70,7 +73,7 @@ func (sv *Supervisor) Run(ctx context.Context) error {
 	defer tick.Stop()
 	for {
 		st := statKey(ConfigPath(sv.Dir))
-		if st != lastStat || time.Since(lastReconcile) >= reconcileInterval {
+		if st != lastStat || time.Since(lastReconcile) >= sv.interval() {
 			lastStat, lastReconcile = st, time.Now()
 			sv.reconcile(ctx)
 		}
@@ -85,6 +88,13 @@ func (sv *Supervisor) Run(ctx context.Context) error {
 		case <-tick.C:
 		}
 	}
+}
+
+func (sv *Supervisor) interval() time.Duration {
+	if sv.every > 0 {
+		return sv.every
+	}
+	return reconcileInterval
 }
 
 func statKey(path string) string {
@@ -112,20 +122,45 @@ func (sv *Supervisor) reconcile(ctx context.Context) {
 		return
 	}
 
+	// The managed (MDM) policy is re-read on every pass, so a policy pushed
+	// to the device applies within seconds. An unreadable policy, or one
+	// that disables the service, stops everything (fail closed).
+	loadPolicy := sv.loadPolicy
+	if loadPolicy == nil {
+		loadPolicy = policy.Load
+	}
+	pol, err := loadPolicy()
+	if err == nil {
+		err = pol.CheckService()
+	}
+	if err != nil {
+		sv.stopAll()
+		sv.auditFP = ""
+		sv.logOnce("not serving any profile: %v", err)
+		return
+	}
+	auditCfg, err := pol.AuditConfig(cfg.Audit)
+	if err != nil {
+		auditCfg, _ = pol.AuditConfig(audit.Config{}) // the policy's collector wins
+	}
+
 	// A changed audit configuration restarts everything, so no session is
 	// split across two pipelines. An enabled but unusable audit pipeline
 	// fails closed: nothing is served until it works.
-	if fp := fingerprint(cfg.Audit); fp != sv.auditFP || sv.auditErr != nil {
+	if fp := fingerprint([]any{auditCfg, pol.Hash()}); fp != sv.auditFP || sv.auditErr != nil {
 		sv.stopAll()
 		_ = sv.audit.Shutdown(context.Background())
-		sv.audit, sv.auditErr = audit.New(ctx, cfg.Audit, audit.Options{Version: sv.Version, Logf: sv.Log.Printf})
+		sv.audit, sv.auditErr = audit.New(ctx, auditCfg, audit.Options{Version: sv.Version, Logf: sv.Log.Printf, Attributes: pol.AuditAttributes()})
 		sv.auditFP = fp
 		switch {
 		case sv.auditErr != nil:
 			sv.logOnce("audit unavailable, not serving any profile until it works (retrying): %v", sv.auditErr)
 			return
-		case cfg.Audit.Enabled():
-			sv.Log.Printf("audit: exporting to %s", cfg.Audit.Endpoint)
+		case auditCfg.Enabled():
+			sv.Log.Printf("audit: exporting to %s", auditCfg.Endpoint)
+		}
+		if pol.Managed() {
+			sv.Log.Printf("managed policy %s (hash %s) in force", pol.Source(), pol.Hash())
 		}
 	}
 
@@ -140,7 +175,11 @@ func (sv *Supervisor) reconcile(ctx context.Context) {
 			sv.logOnce("profile %s: %v (not served)", name, err)
 			continue
 		}
-		desired[name] = fingerprint(p)
+		if err := p.CheckPolicy(pol, now); err != nil {
+			sv.logOnce("profile %s: %v (not served)", name, err)
+			continue
+		}
+		desired[name] = fingerprint([]any{p, pol.Hash()})
 	}
 	for name, r := range sv.running {
 		if fp, ok := desired[name]; !ok || fp != r.fp {
@@ -158,7 +197,7 @@ func (sv *Supervisor) reconcile(ctx context.Context) {
 		sv.running[name] = r
 		go func(name string, p *Profile, al *audit.Logger) {
 			defer close(r.done)
-			sv.serve(rctx, name, p, al)
+			sv.serve(rctx, name, p, al, pol)
 		}(name, cfg.Profiles[name], sv.audit)
 	}
 }
@@ -196,7 +235,7 @@ func (sv *Supervisor) stopAll() {
 
 // serve runs one profile's command, restarting it with backoff whenever it
 // exits, until ctx ends or the keys expire.
-func (sv *Supervisor) serve(ctx context.Context, name string, p *Profile, al *audit.Logger) {
+func (sv *Supervisor) serve(ctx context.Context, name string, p *Profile, al *audit.Logger, pol *policy.Policy) {
 	if !p.ExpiresAt.IsZero() {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithDeadline(ctx, p.ExpiresAt)
@@ -205,7 +244,7 @@ func (sv *Supervisor) serve(ctx context.Context, name string, p *Profile, al *au
 	out := &prefixWriter{l: sv.Log, prefix: name + ": "}
 	backoff := minBackoff
 	for {
-		cfg, err := hostConfig(name, p)
+		cfg, err := hostConfig(name, p, pol)
 		if err != nil {
 			sv.Log.Printf("profile %s: %v", name, err)
 			return
@@ -245,12 +284,19 @@ func (sv *Supervisor) serve(ctx context.Context, name string, p *Profile, al *au
 	}
 }
 
-func hostConfig(name string, p *Profile) (host.Config, error) {
+func hostConfig(name string, p *Profile, pol *policy.Policy) (host.Config, error) {
+	relays, err := pol.Relays(p.Relays)
+	if err != nil {
+		return host.Config{}, err
+	}
+	if len(relays) == 0 {
+		relays = p.relays()
+	}
 	cfg := host.Config{
 		Command:          p.Command,
 		Dir:              p.Dir,
 		Profile:          name,
-		Relays:           p.relays(),
+		Relays:           relays,
 		ICE:              p.ICE(),
 		PasswordVerifier: p.Password,
 		MaxClients:       p.MaxClients,

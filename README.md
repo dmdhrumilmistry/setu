@@ -208,6 +208,24 @@ Secrets are kept out of the log:
 | `--audit-input` | `lines` (default) or `off`. |
 | `--audit-redact` | Extra regular expression to redact (repeatable). |
 
+### Managed devices (MDM)
+
+Organizations can deploy a **managed policy** through Intune, Jamf, Kandji,
+VaanarSena, Group Policy or configuration management. The policy can:
+
+* disable sharing or the service,
+* require passwords and personal keys,
+* cap clients and lifetimes,
+* restrict which programs, relays and web clients may be used,
+* force audit logging to the organization's collector.
+
+setu fails closed: if a policy is present but malformed or not
+admin-owned, setu will not run. `setu policy` shows what is in force.
+
+Ready-made artifacts are in [deploy/mdm](deploy/mdm): an ADMX/ADML template,
+a `.mobileconfig` profile, a `.reg` file, a Linux installer and a VaanarSena
+manifest.
+
 ### Join
 
 * **Browser:** open the link. On a phone, use the key bar for Esc / Tab /

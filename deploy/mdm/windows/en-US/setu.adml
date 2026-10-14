@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<policyDefinitionResources xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <displayName>setu</displayName>
+  <description>Managed policy for setu, peer-to-peer terminal sharing.</description>
+  <resources>
+    <stringTable>
+      <string id="SUPPORTED_Setu">setu 1.0 or later</string>
+      <string id="Setu">setu (terminal sharing)</string>
+
+      <string id="DisableShare">Disable ad-hoc sharing (setu share)</string>
+      <string id="DisableShare_Help">If enabled, users cannot run "setu share". Always-on service profiles are governed separately.</string>
+      <string id="DisableService">Disable the background service (setu service)</string>
+      <string id="DisableService_Help">If enabled, users cannot create service profiles and the running service stops serving all of them.</string>
+      <string id="DisableManual">Disable manual (copy/paste) signaling</string>
+      <string id="DisableManual_Help">If enabled, "setu share --manual" is refused, so every connection goes through the allowed relays.</string>
+      <string id="RequirePassword">Require a session password</string>
+      <string id="RequirePassword_Help">If enabled, every share and service profile must have a password. Optionally set a minimum length (0 keeps setu's own minimum: 8 for shares, 12 for service profiles).</string>
+      <string id="RequirePersonalKeys">Require personal keys for service profiles</string>
+      <string id="RequirePersonalKeys_Help">If enabled, service profiles may not have a shared control link. Every person gets their own key, so the audit log names who ran each command.</string>
+      <string id="MaxClients">Maximum concurrent clients</string>
+      <string id="MaxClients_Help">The most clients a share or service profile may admit at once.</string>
+      <string id="MaxShareDuration">Maximum share duration</string>
+      <string id="MaxShareDuration_Help">Ad-hoc shares must stop accepting new clients within this duration, written like 30m or 8h. Shares without --expire get this value.</string>
+      <string id="MaxKeyValidity">Maximum service key validity</string>
+      <string id="MaxKeyValidity_Help">Service profile keys must expire within this duration, written like 168h or 720h. Profiles that exceed it are not served until their keys are rotated.</string>
+      <string id="AllowedCommands">Allowed commands</string>
+      <string id="AllowedCommands_Help">Only these programs may be shared. Use a bare name (claude, bash, pwsh) to match the program name, or an absolute path to match exactly. If not configured, any program may be shared.</string>
+      <string id="AllowedRelays">Allowed nostr relays</string>
+      <string id="AllowedRelays_Help">Signaling may only use these relays (wss:// URLs). They also become the default relays.</string>
+      <string id="AllowedWebURLs">Allowed web client URLs</string>
+      <string id="AllowedWebURLs_Help">Invite links may only point at these web client base URLs, for example a self-hosted copy. Terminal-only links are always allowed.</string>
+      <string id="Audit">Audit log collector (OpenTelemetry)</string>
+      <string id="Audit_Help">Forces the audit log on and sends it to this OTLP/HTTP collector. Users cannot turn it off or send it elsewhere. "Required" refuses to share unless the collector accepts a test record. Use https; plain http is refused for remote collectors unless "Allow plain http" is checked. Prefer a client certificate (mutual TLS) over a header token: anything setu can read, the signed-in user can read too.</string>
+      <string id="AuditHeaders">Audit collector headers</string>
+      <string id="AuditHeaders_Help">HTTP headers sent with every export, for example Authorization = Bearer token. Registry values under HKLM\Software\Policies are readable by every local user, so use an ingest-only token.</string>
+      <string id="AuditRedact">Extra audit redaction patterns</string>
+      <string id="AuditRedact_Help">Regular expressions whose matches are replaced with [REDACTED] in recorded commands, in addition to setu's built-in patterns.</string>
+      <string id="ResourceAttributes">Audit device attributes</string>
+      <string id="ResourceAttributes_Help">Name = value pairs added to every audit record, for example device.asset_tag or deployment.environment, so records can be joined with your device inventory. setu also records host.id (the Windows MachineGuid).</string>
+    </stringTable>
+    <presentationTable>
+      <presentation id="RequirePassword">
+        <decimalTextBox refId="MinPasswordLength" defaultValue="14">Minimum password length:</decimalTextBox>
+      </presentation>
+      <presentation id="MaxClients">
+        <decimalTextBox refId="MaxClients" defaultValue="1">Maximum clients:</decimalTextBox>
+      </presentation>
+      <presentation id="MaxShareDuration">
+        <textBox refId="MaxShareDuration"><label>Duration (for example 8h):</label><defaultValue>8h</defaultValue></textBox>
+      </presentation>
+      <presentation id="MaxKeyValidity">
+        <textBox refId="MaxKeyValidity"><label>Duration (for example 720h):</label><defaultValue>720h</defaultValue></textBox>
+      </presentation>
+      <presentation id="AllowedCommands">
+        <listBox refId="AllowedCommands">Programs:</listBox>
+      </presentation>
+      <presentation id="AllowedRelays">
+        <listBox refId="AllowedRelays">Relay URLs:</listBox>
+      </presentation>
+      <presentation id="AllowedWebURLs">
+        <listBox refId="AllowedWebURLs">Web client base URLs:</listBox>
+      </presentation>
+      <presentation id="Audit">
+        <textBox refId="AuditEndpoint"><label>Collector URL (https://host:4318/v1/logs):</label></textBox>
+        <checkBox refId="AuditRequired" defaultChecked="true">Required: refuse to share if the collector is unreachable</checkBox>
+        <textBox refId="AuditInput"><label>Record: lines (commands and connections) or off (connections only):</label><defaultValue>lines</defaultValue></textBox>
+        <textBox refId="AuditCAFile"><label>CA bundle (PEM path, optional):</label></textBox>
+        <textBox refId="AuditCertFile"><label>Client certificate (PEM path, optional):</label></textBox>
+        <textBox refId="AuditKeyFile"><label>Client key (PEM path, optional):</label></textBox>
+        <checkBox refId="AuditInsecure" defaultChecked="false">Allow plain http to a remote collector</checkBox>
+      </presentation>
+      <presentation id="AuditHeaders">
+        <listBox refId="AuditHeaders">Headers (name, value):</listBox>
+      </presentation>
+      <presentation id="AuditRedact">
+        <listBox refId="AuditRedact">Patterns:</listBox>
+      </presentation>
+      <presentation id="ResourceAttributes">
+        <listBox refId="ResourceAttributes">Attributes (name, value):</listBox>
+      </presentation>
+    </presentationTable>
+  </resources>
+</policyDefinitionResources>

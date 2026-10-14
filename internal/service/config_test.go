@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -8,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dmdhrumilmistry/setu/internal/policy"
 	"github.com/dmdhrumilmistry/setu/internal/proto"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
 )
@@ -158,7 +160,7 @@ func TestPersonalKeys(t *testing.T) {
 		t.Fatalf("links %+v", links)
 	}
 
-	cfg, err := hostConfig("x", p)
+	cfg, err := hostConfig("x", p, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,6 +179,45 @@ func TestPersonalKeys(t *testing.T) {
 	p.PersonalKeys["bob"].Key = p.PersonalKeys["alice"].Key
 	if err := p.Validate(); err == nil {
 		t.Error("two people sharing one key accepted")
+	}
+}
+
+func TestCheckPolicy(t *testing.T) {
+	now := time.Now()
+	pol, err := policy.Parse([]byte(`{"RequirePersonalKeys": true, "RequirePassword": true, "MaxKeyValidity": "168h", "MaxClients": 1}`), "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, _ := secure.NewPasswordVerifier("a long enough password")
+	good := func() *Profile {
+		p := &Profile{Command: []string{"sh"}, Enabled: true, MaxClients: 1, Password: v, ValidFor: Duration(24 * time.Hour)}
+		if err := p.NewKeys(false, false, now); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.AddPersonalKey("alice", proto.RoleControl, now); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	if err := good().CheckPolicy(pol, now); err != nil {
+		t.Fatalf("compliant profile refused: %v", err)
+	}
+	for key, mut := range map[string]func(*Profile){
+		"RequirePersonalKeys": func(p *Profile) { p.ControlKey = p.PersonalKeys["alice"].Key + "x" },
+		"RequirePassword":     func(p *Profile) { p.Password = nil },
+		"MaxClients":          func(p *Profile) { p.MaxClients = 3 },
+		"MaxKeyValidity":      func(p *Profile) { p.ValidFor = 0 },
+		"MaxKeyValidity ":     func(p *Profile) { p.ExpiresAt = now.Add(365 * 24 * time.Hour) }, // hand-edited expiry
+	} {
+		p := good()
+		mut(p)
+		var viol *policy.Violation
+		if err := p.CheckPolicy(pol, now); !errors.As(err, &viol) || viol.Key != strings.TrimSpace(key) {
+			t.Errorf("%s: got %v", key, err)
+		}
+	}
+	if err := good().CheckPolicy(nil, now); err != nil {
+		t.Errorf("no policy: %v", err)
 	}
 }
 

@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log"
 	"runtime"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/dmdhrumilmistry/setu/internal/host"
 	"github.com/dmdhrumilmistry/setu/internal/link"
 	"github.com/dmdhrumilmistry/setu/internal/nostr/relaytest"
+	"github.com/dmdhrumilmistry/setu/internal/policy"
 	"github.com/dmdhrumilmistry/setu/internal/proto"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
 )
@@ -143,6 +145,74 @@ func TestSupervisor(t *testing.T) {
 	if err := dialAndEcho(short2, t, p.ControlKey, r.URL(), "service-test-password", "x"); err == nil {
 		t.Fatal("disabled profile still served")
 	}
+}
+
+// TestSupervisorPolicy pushes a managed policy while a profile is served:
+// a policy the profile violates stops it, and an unreadable policy stops
+// everything (fail closed).
+func TestSupervisorPolicy(t *testing.T) {
+	r := relaytest.New()
+	defer r.Close()
+	dir := t.TempDir()
+	p := &Profile{Command: echoCommand(), Enabled: true, MaxClients: 1, Relays: []string{r.URL()}}
+	if err := p.NewKeys(true, false, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(ConfigPath(dir), &Config{Profiles: map[string]*Profile{"echo": p}}); err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	current := func() (*policy.Policy, error) { return &policy.Policy{}, nil }
+	push := func(f func() (*policy.Policy, error)) {
+		mu.Lock()
+		current = f
+		mu.Unlock()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	logs := &syncBuf{}
+	sv := &Supervisor{Dir: dir, Version: "test", Log: log.New(logs, "", 0), every: 500 * time.Millisecond,
+		hostHook: func(c *host.Config) { c.ICE = []proto.ICEServer{} },
+		loadPolicy: func() (*policy.Policy, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			return current()
+		}}
+	done := make(chan error, 1)
+	go func() { done <- sv.Run(ctx) }()
+	defer func() { cancel(); <-done }()
+	waitLog := func(want string) {
+		t.Helper()
+		deadline := time.Now().Add(20 * time.Second)
+		for !strings.Contains(logs.String(), want) {
+			if time.Now().After(deadline) {
+				t.Fatalf("log never showed %q:\n%s", want, logs.String())
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	waitLog("profile echo: serving")
+	if err := dialAndEcho(ctx, t, p.ControlKey, r.URL(), "", "before"); err != nil {
+		t.Fatal(err)
+	}
+
+	// The organisation now requires personal keys: the shared link stops.
+	strict, err := policy.Parse([]byte(`{"RequirePersonalKeys": true}`), "mdm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	push(func() (*policy.Policy, error) { return strict, nil })
+	waitLog("RequirePersonalKeys")
+	short, cancelShort := context.WithTimeout(ctx, 6*time.Second)
+	defer cancelShort()
+	if err := dialAndEcho(short, t, p.ControlKey, r.URL(), "", "x"); err == nil {
+		t.Fatal("profile still served against the policy")
+	}
+
+	// A broken policy must not fall back to "no policy".
+	push(func() (*policy.Policy, error) { return nil, errors.New("policy unreadable") })
+	waitLog("not serving any profile: policy unreadable")
 }
 
 func TestSupervisorAuditFailsClosed(t *testing.T) {

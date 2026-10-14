@@ -319,7 +319,9 @@ func TestAuditPersonalKey(t *testing.T) {
 	}
 	// When.
 	at, err := time.Parse(time.RFC3339Nano, audittest.Attr(rec, "setu.command.submitted_at"))
-	if err != nil || at.Before(before) || at.After(time.Now()) {
+	// Wall clock on both sides, with slack: VMs (WSL2) step their clocks.
+	const skew = 5 * time.Second
+	if err != nil || at.Before(before.Round(0).Add(-skew)) || at.After(time.Now().Round(0).Add(skew)) {
 		t.Errorf("submitted_at %v (err %v) outside the test window", at, err)
 	}
 	// What.

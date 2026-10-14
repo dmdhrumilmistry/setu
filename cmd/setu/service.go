@@ -19,6 +19,7 @@ import (
 
 	"github.com/dmdhrumilmistry/setu/internal/audit"
 	"github.com/dmdhrumilmistry/setu/internal/link"
+	"github.com/dmdhrumilmistry/setu/internal/policy"
 	"github.com/dmdhrumilmistry/setu/internal/proto"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
 	"github.com/dmdhrumilmistry/setu/internal/service"
@@ -91,6 +92,7 @@ func runService(args []string) (int, error) {
 type serviceState struct {
 	dir, path string
 	cfg       *service.Config
+	pol       *policy.Policy
 }
 
 func loadService() (*serviceState, error) {
@@ -103,10 +105,24 @@ func loadService() (*serviceState, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &serviceState{dir: dir, path: path, cfg: cfg}, nil
+	pol, err := policy.Load()
+	if err != nil {
+		return nil, err
+	}
+	return &serviceState{dir: dir, path: path, cfg: cfg, pol: pol}, nil
 }
 
-func (s *serviceState) save() error {
+// save writes the configuration. The named profiles (the ones this command
+// changed) must comply with the managed policy if they are enabled; the
+// service enforces the same check before serving anything.
+func (s *serviceState) save(changed ...string) error {
+	for _, name := range changed {
+		if p := s.cfg.Profiles[name]; p != nil && p.Enabled {
+			if err := p.CheckPolicy(s.pol, time.Now()); err != nil {
+				return fmt.Errorf("profile %s: %w", name, err)
+			}
+		}
+	}
 	if err := service.Save(s.path, s.cfg); err != nil {
 		return err
 	}
@@ -150,7 +166,7 @@ func promptNewPassword(what string, minLen int) (string, error) {
 
 // profilePassword gets a password for a service profile from SETU_PASSWORD,
 // one line of stdin, or a prompt, and returns only its verifier.
-func profilePassword(fromStdin bool) (*secure.PasswordVerifier, error) {
+func profilePassword(fromStdin bool, minLen int) (*secure.PasswordVerifier, error) {
 	pw := os.Getenv("SETU_PASSWORD")
 	os.Unsetenv("SETU_PASSWORD")
 	if fromStdin {
@@ -162,12 +178,12 @@ func profilePassword(fromStdin bool) (*secure.PasswordVerifier, error) {
 	}
 	if pw == "" {
 		var err error
-		if pw, err = promptNewPassword("profile", servicePasswordMin); err != nil {
+		if pw, err = promptNewPassword("profile", minLen); err != nil {
 			return nil, err
 		}
 	}
-	if len(pw) < servicePasswordMin {
-		return nil, fmt.Errorf("profile passwords need at least %d characters (their links do not expire quickly)", servicePasswordMin)
+	if len(pw) < minLen {
+		return nil, fmt.Errorf("profile passwords need at least %d characters (their links do not expire quickly)", minLen)
 	}
 	return secure.NewPasswordVerifier(pw)
 }
@@ -213,6 +229,24 @@ func serviceAdd(args []string) (int, error) {
 	if _, exists := st.cfg.Profiles[name]; exists {
 		return 1, fmt.Errorf("profile %q already exists (use `setu service rotate` or `setu service remove`)", name)
 	}
+	if err := st.pol.CheckService(); err != nil {
+		return 1, err
+	}
+	// Under a managed policy, unset options default to what it allows.
+	set := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	if st.pol.RequirePersonalKeys {
+		if len(people) == 0 {
+			return 1, &policy.Violation{Key: "RequirePersonalKeys", Msg: "name the people who may connect with --person"}
+		}
+		*noShared = true
+	}
+	if max := st.pol.MaxKeyValidity.D(); max > 0 && !set["valid-for"] {
+		*validFor = min(*validFor, max)
+	}
+	if *maxClients, err = st.pol.Clients(*maxClients, set["max-clients"]); err != nil {
+		return 1, err
+	}
 	// Resolve the command now: the service's PATH may differ, and a fixed
 	// path cannot be hijacked by a directory added to PATH later.
 	exe, err := exec.LookPath(command[0])
@@ -244,7 +278,7 @@ func serviceAdd(args []string) (int, error) {
 		Created:      now.UTC(),
 	}
 	if !*noPassword {
-		if p.Password, err = profilePassword(*passwordStdin); err != nil {
+		if p.Password, err = profilePassword(*passwordStdin, st.pol.MinPassword(servicePasswordMin)); err != nil {
 			return 1, err
 		}
 	}
@@ -263,7 +297,7 @@ func serviceAdd(args []string) (int, error) {
 		return 1, err
 	}
 	st.cfg.Profiles[name] = p
-	if err := st.save(); err != nil {
+	if err := st.save(name); err != nil {
 		return 1, err
 	}
 	printProfile(name, p, "")
@@ -399,7 +433,7 @@ func serviceKey(args []string) (int, error) {
 		if err := p.Validate(); err != nil {
 			return 1, err
 		}
-		if err := st.save(); err != nil {
+		if err := st.save(rest[0]); err != nil {
 			return 1, err
 		}
 		printProfile(rest[0], p, rest[1])
@@ -467,7 +501,7 @@ func serviceRotate(args []string) (int, error) {
 		return 1, err
 	}
 	if *newPassword || *passwordStdin {
-		if p.Password, err = profilePassword(*passwordStdin); err != nil {
+		if p.Password, err = profilePassword(*passwordStdin, st.pol.MinPassword(servicePasswordMin)); err != nil {
 			return 1, err
 		}
 	}
@@ -476,7 +510,7 @@ func serviceRotate(args []string) (int, error) {
 		return 1, err
 	}
 	p.Rotated = now.UTC()
-	if err := st.save(); err != nil {
+	if err := st.save(name); err != nil {
 		return 1, err
 	}
 	fmt.Fprintln(os.Stderr, "New keys created for everyone; the old links no longer work.")
@@ -505,7 +539,7 @@ func serviceEnable(args []string, enable bool) (int, error) {
 	if enable && !p.Active(time.Now()) {
 		return 1, fmt.Errorf("profile %q has expired keys: run `setu service rotate %s`", name, name)
 	}
-	if err := st.save(); err != nil {
+	if err := st.save(name); err != nil {
 		return 1, err
 	}
 	return 0, nil
@@ -594,6 +628,13 @@ func serviceInstall(args []string) (int, error) {
 	fs := flag.NewFlagSet("service install", flag.ExitOnError)
 	noStart := fs.Bool("no-start", false, "register autostart without starting the service now")
 	_ = fs.Parse(args)
+	pol, err := policy.Load()
+	if err != nil {
+		return 1, err
+	}
+	if err := pol.CheckService(); err != nil {
+		return 1, err
+	}
 	dir, err := service.Dir()
 	if err != nil {
 		return 1, err
@@ -637,9 +678,19 @@ func serviceStatus() (int, error) {
 	} else {
 		fmt.Println("supervisor: not running")
 	}
-	if st.cfg.Audit.Enabled() {
-		fmt.Printf("audit:      %s (required=%v)\n", collectorHost(st.cfg.Audit.Endpoint), st.cfg.Audit.Required)
-	} else {
+	if st.pol.Managed() {
+		fmt.Printf("policy:     %s (hash %s; see `setu policy`)\n", st.pol.Source(), st.pol.Hash())
+	}
+	effective, err := st.pol.AuditConfig(st.cfg.Audit)
+	if err != nil {
+		effective, _ = st.pol.AuditConfig(audit.Config{})
+	}
+	switch {
+	case st.pol.AuditEndpoint != "":
+		fmt.Printf("audit:      %s (required=%v, enforced by policy)\n", collectorHost(effective.Endpoint), effective.Required)
+	case effective.Enabled():
+		fmt.Printf("audit:      %s (required=%v)\n", collectorHost(effective.Endpoint), effective.Required)
+	default:
 		fmt.Println("audit:      off")
 	}
 	fmt.Println("state dir: ", st.dir)

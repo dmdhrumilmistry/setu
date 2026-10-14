@@ -1,0 +1,15 @@
+{
+  "DisableManual": true,
+  "RequirePassword": true,
+  "MinPasswordLength": 14,
+  "RequirePersonalKeys": true,
+  "MaxClients": 2,
+  "MaxShareDuration": "8h",
+  "MaxKeyValidity": "720h",
+  "AllowedCommands": ["claude", "bash", "pwsh"],
+  "AuditEndpoint": "https://otel.example.com:4318/v1/logs",
+  "AuditHeaders": {"Authorization": "Bearer REPLACE_WITH_INGEST_ONLY_TOKEN"},
+  "AuditRequired": true,
+  "AuditInput": "lines",
+  "ResourceAttributes": {"deployment.environment": "corp", "device.owner.team": "platform"}
+}
