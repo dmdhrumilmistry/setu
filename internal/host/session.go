@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dmdhrumilmistry/setu/internal/audit"
 	"github.com/dmdhrumilmistry/setu/internal/proto"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
 	"github.com/dmdhrumilmistry/setu/internal/tty"
@@ -26,6 +27,8 @@ type Invite struct {
 // Config controls a sharing session.
 type Config struct {
 	Command []string
+	Dir     string // working directory for Command; empty = current
+	Profile string // service profile name, for logs and audit records
 
 	// Signaling.
 	Manual        bool           // copy/paste signaling instead of nostr
@@ -35,11 +38,14 @@ type Config struct {
 	ICE           []proto.ICEServer
 
 	// Access control.
-	Password   string        // empty = no password
-	MaxClients int           // concurrent authenticated clients
-	Once       bool          // disable invites after the first successful join
-	Approve    bool          // ask on the host terminal before admitting a client
-	Expire     time.Duration // disable invites after this long (0 = never)
+	Password string // empty = no password
+	// PasswordVerifier is an alternative to Password: a key derived ahead
+	// of time, so the plaintext never has to be stored.
+	PasswordVerifier *secure.PasswordVerifier
+	MaxClients       int           // concurrent authenticated clients
+	Once             bool          // disable invites after the first successful join
+	Approve          bool          // ask on the host terminal before admitting a client
+	Expire           time.Duration // disable invites after this long (0 = never)
 
 	// Local terminal.
 	Mirror bool // attach the host terminal to the shared PTY
@@ -48,6 +54,9 @@ type Config struct {
 	ReadAnswer func(ctx context.Context) (string, error) // manual mode
 	Log        io.Writer
 	Verbose    bool
+
+	// Audit, if not nil, receives session, client and command records.
+	Audit *audit.Logger
 }
 
 const (
@@ -80,7 +89,12 @@ type Session struct {
 
 	pwKey  []byte
 	pwSalt []byte
+	pwIter int
 	host   string
+
+	id         string
+	audit      *audit.Session
+	localInput *audit.Input
 
 	router    *stdinRouter
 	approval  sync.Mutex
@@ -107,15 +121,23 @@ func New(cfg Config) (*Session, error) {
 	if cfg.Log == nil {
 		cfg.Log = os.Stderr
 	}
-	s := &Session{cfg: cfg, peers: map[int]*peer{}, accepting: true, router: &stdinRouter{}}
-	if cfg.Password != "" {
-		s.pwSalt = secure.RandomBytes(16)
-		k, err := secure.PasswordKey(cfg.Password, s.pwSalt, secure.PBKDF2Iterations)
+	s := &Session{cfg: cfg, peers: map[int]*peer{}, accepting: true, router: &stdinRouter{}, id: secure.RandomID(8)}
+	switch {
+	case cfg.Password != "" && cfg.PasswordVerifier != nil:
+		return nil, errors.New("set either a password or a password verifier, not both")
+	case cfg.Password != "":
+		v, err := secure.NewPasswordVerifier(cfg.Password)
 		if err != nil {
 			return nil, err
 		}
-		s.pwKey = k
 		s.cfg.Password = "" // keep only the derived key in memory
+		s.pwSalt, s.pwIter, s.pwKey = v.Salt, v.Iter, v.Key
+	case cfg.PasswordVerifier != nil:
+		v := cfg.PasswordVerifier
+		if err := v.Validate(); err != nil {
+			return nil, err
+		}
+		s.pwSalt, s.pwIter, s.pwKey = v.Salt, v.Iter, v.Key
 	}
 	s.host, _ = os.Hostname()
 	return s, nil
@@ -145,12 +167,26 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 	if s.cfg.Mirror {
 		cols, rows = tty.Size(os.Stdout)
 	}
-	p, err := startPTY(s.cfg.Command, cols, rows)
+	p, err := startPTY(s.cfg.Command, s.cfg.Dir, cols, rows)
 	if err != nil {
 		return 1, err
 	}
 	s.pty, s.cols, s.rows = p, cols, rows
 	defer p.Close()
+
+	mode := "nostr"
+	if s.cfg.Manual {
+		mode = "manual"
+	}
+	s.audit = s.cfg.Audit.Session(audit.SessionInfo{
+		ID:         s.id,
+		Command:    s.commandLine(),
+		Mode:       mode,
+		Profile:    s.cfg.Profile,
+		Password:   s.pwKey != nil,
+		ViewLink:   s.cfg.ViewSecret != nil,
+		MaxClients: s.cfg.MaxClients,
+	})
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -186,6 +222,7 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 	}
 
 	var code int
+	reason := "command exited"
 	select {
 	case code = <-exited:
 	case err := <-signalErr:
@@ -193,6 +230,7 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 			_ = p.Kill()
 			<-exited
 			s.closeAll("host error")
+			s.endAudit(1, "host error: "+err.Error())
 			return 1, err
 		}
 		code = <-exited
@@ -201,6 +239,7 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 		_ = p.Kill()
 		<-exited
 		code = 0
+		reason = "share ended by host"
 	}
 	select {
 	case <-readDone:
@@ -209,7 +248,22 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 	s.broadcastExit(code)
 	time.Sleep(200 * time.Millisecond) // let the exit frame flush
 	s.closeAll("session ended")
+	s.endAudit(code, reason)
 	return code, nil
+}
+
+func (s *Session) endAudit(code int, reason string) {
+	s.localInput.Close()
+	s.audit.End(code, reason)
+}
+
+// passwordPrompt reports whether the shared command is reading a password
+// (canonical mode with echo off), so those keystrokes are never audited.
+func (s *Session) passwordPrompt() bool {
+	if pm, ok := s.pty.(interface{ PasswordMode() bool }); ok {
+		return pm.PasswordMode()
+	}
+	return false
 }
 
 // attachLocal mirrors the PTY on the host terminal (raw mode) and routes
@@ -233,9 +287,11 @@ func (s *Session) attachLocal(ctx context.Context, cancel context.CancelFunc) (r
 			}
 		}
 		var esc tty.Escape
+		s.localInput = s.audit.Input(audit.Client{Role: proto.RoleControl, Via: "local"}, s.passwordPrompt)
 		s.router.setForward(func(b []byte) {
 			out, detach := esc.Filter(b)
 			if len(out) > 0 {
+				s.localInput.Write(out)
 				s.writeInput(out)
 			}
 			if detach {
@@ -353,6 +409,7 @@ func (s *Session) authFailed(p *peer) {
 		s.failures = 0
 	}
 	s.mu.Unlock()
+	s.audit.AuthFailed(p.auditClient())
 	s.logf("WARNING: client #%d failed password authentication (%d recent, %d total)", p.id, fails, total)
 	if fails >= maxAuthFailures {
 		s.logf("WARNING: too many failures — refusing new clients for %s", lockoutDuration)
@@ -369,6 +426,7 @@ func (s *Session) stopAccepting(reason string) {
 	stop := s.stopSignal
 	s.mu.Unlock()
 	if was {
+		s.audit.InviteDisabled(reason)
 		s.logf("invite disabled: %s (connected clients stay connected)", reason)
 		if stop != nil && !s.cfg.Manual {
 			stop()
@@ -386,6 +444,7 @@ func (s *Session) approve(p *peer) bool {
 	s.logf("client #%d (%s, role=%s) wants to join. Verification code: %s\nAllow? [y/N] (60s)", p.id, p.label, p.role, p.sas)
 	c, ok := s.router.ask(60 * time.Second)
 	allowed := ok && (c == 'y' || c == 'Y')
+	s.audit.Approval(p.auditClient(), allowed)
 	if allowed {
 		s.logf("client #%d approved", p.id)
 	} else {

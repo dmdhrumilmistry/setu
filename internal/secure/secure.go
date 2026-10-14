@@ -171,6 +171,36 @@ func PasswordKey(password string, salt []byte, iterations int) ([]byte, error) {
 	return pbkdf2.Key(sha256.New, password, salt, iterations, 32)
 }
 
+// PasswordVerifier is a password stretched ahead of time. Long-lived service
+// profiles store this instead of the password, so the file never reveals a
+// password that may be reused elsewhere.
+type PasswordVerifier struct {
+	Salt []byte `json:"salt"`
+	Iter int    `json:"iter"`
+	Key  []byte `json:"key"`
+}
+
+// NewPasswordVerifier derives a verifier with a fresh salt.
+func NewPasswordVerifier(password string) (*PasswordVerifier, error) {
+	salt := RandomBytes(16)
+	key, err := PasswordKey(password, salt, PBKDF2Iterations)
+	if err != nil {
+		return nil, err
+	}
+	return &PasswordVerifier{Salt: salt, Iter: PBKDF2Iterations, Key: key}, nil
+}
+
+// Validate rejects verifiers a client would refuse or that are malformed.
+func (v *PasswordVerifier) Validate() error {
+	if v.Iter < MinPBKDF2Iterations {
+		return fmt.Errorf("password verifier: %d iterations below minimum %d", v.Iter, MinPBKDF2Iterations)
+	}
+	if len(v.Salt) < 16 || len(v.Key) != 32 {
+		return errors.New("password verifier: bad salt or key length")
+	}
+	return nil
+}
+
 // AuthProof is the client's answer to the host's password challenge. It is
 // bound to the per-connection nonce and to both DTLS fingerprints, so a proof
 // is useless outside the exact WebRTC session it was made for.

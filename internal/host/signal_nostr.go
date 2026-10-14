@@ -146,6 +146,7 @@ func (ns *nostrSignaler) onHello(ctx context.Context, ev nostr.Event, rr roomRol
 	p, err := ns.s.newPeer(rr.role, "nostr")
 	if err != nil {
 		ns.reply(ev.PubKey, rr, proto.Signal{Type: proto.SigReject, SID: m.SID, Reason: err.Error()})
+		ns.s.audit.ClientRejected(rr.role, err.Error())
 		ns.s.logf("rejected a join request: %v", err)
 		return
 	}

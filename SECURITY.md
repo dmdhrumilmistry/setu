@@ -17,6 +17,8 @@ like an SSH private key.
 | Roles | `--view-link` creates a separate secret whose holders can only watch. The host decides each client's role from which secret decrypted the request, so a client cannot claim a role. The host drops keystrokes and resizes from view-only clients. |
 | Admission | `--max-clients` (default 2), `--once` (single use), `--expire 30m`, and `--approve` (y/N prompt on the host showing the verification code). A handshake that doesn't finish within 2 minutes is dropped, and no more than 3 handshakes can be pending at once. |
 | Hygiene | `SETU_PASSWORD` and `SETU_TURN_PASSWORD` are removed from the environment before the shared command starts. `--link-file` is written with mode 0600. Background shares (`-d`) keep their links in a per-user 0700 directory that is deleted when the share ends, and receive the password over a pipe rather than argv or the environment. On Windows the shared command runs in a kill-on-close Job Object, so it cannot outlive setu. Slow clients are disconnected once 8 MiB are buffered, so they cannot exhaust host memory. |
+| Audit log (`--audit-*`, `setu service audit`) | Connections, admission decisions and submitted commands go to your OpenTelemetry collector over OTLP/HTTP. The endpoint must be https unless it is loopback or you pass `--audit-insecure`. Credentials in the URL are refused, and TLS 1.2 is the minimum, with an optional pinned CA and mutual TLS. Collector credentials come only from `OTEL_EXPORTER_OTLP_HEADERS` (or the 0600 service config) and are removed from the environment before the shared command starts. Records are batched and flushed every second, off-box, so a participant who later gains control of the host cannot erase what was already exported. The queue is bounded (8192 records, oldest dropped) and never blocks the terminal. `--audit-required` fails closed: no share starts unless the collector accepted a test record. The service also serves nothing while its audit pipeline cannot be built. Lines typed with terminal echo off (password prompts, Unix) are never recorded, and known secret formats are redacted before export. |
+| Service (`setu service`) | Persistent links are long-lived credentials, so profiles require a 12+ character password by default. Only a PBKDF2 verifier (salt, iterations, key) is stored, never the password. Keys expire after 90 days unless configured otherwise, `rotate` invalidates old links immediately, and `max-clients` defaults to 1. The config file must be mode 0600 (setu refuses it otherwise). On Windows it lives in non-roaming `%LOCALAPPDATA%`. Profile commands are pinned to absolute paths. A lock file keeps two supervisors from answering for the same keys. Autostart runs as the user with least privilege: a systemd user unit with `UMask=0077`, a launchd agent with umask 077, or a logon task at `LeastPrivilege`. |
 | Web client | No third-party code at runtime: xterm.js and noble-curves are vendored and checksum-pinned (`web/vendor/SHA256SUMS`, checked in CI). A strict CSP allows only same-origin scripts and `wss:` connections. The page refuses to run inside a frame. |
 
 ## What does not protect you
@@ -37,6 +39,19 @@ like an SSH private key.
 * **Availability.** Relays can drop messages. That causes a failed connection,
   never a compromise. Use `--relay` to choose relays you prefer, or
   `--manual` to use no relays at all.
+* **The audit log is evidence, not prevention.** Commands are rebuilt from
+  keystrokes, so cursor editing, history and completion can make a recorded
+  line differ from what the shell ran (such lines are flagged `edited`).
+  Commands that an agent runs by itself are not keystrokes, so setu does not
+  see them. Redaction is pattern based and can miss a secret in an unusual
+  format. On Windows, ConPTY does not expose the echo state, so password
+  prompts rely on redaction alone. Use `--audit-input off` if that is not
+  acceptable. A control client has a shell as you and can stop setu, so
+  records that were still queued when that happened may be lost.
+* **An always-on profile is an always-open door.** Anyone with its link and
+  password can reach your shell whenever the service runs. Prefer short
+  `--valid-for` values, rotate keys when a device is lost, and disable
+  profiles you are not using.
 * **The agent itself.** setu shares the terminal exactly as it is. Run agents
   with the permissions you would grant them locally, for example inside a
   container or a separate user account.

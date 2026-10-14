@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dmdhrumilmistry/setu/internal/audit"
+	"github.com/dmdhrumilmistry/setu/internal/audit/audittest"
 	"github.com/dmdhrumilmistry/setu/internal/client"
 	"github.com/dmdhrumilmistry/setu/internal/host"
 	"github.com/dmdhrumilmistry/setu/internal/link"
@@ -187,6 +189,127 @@ func TestPassword(t *testing.T) {
 	}
 	defer c.Close()
 	waitFor(t, c, "READY")
+}
+
+func TestPasswordVerifier(t *testing.T) {
+	r := relaytest.New()
+	defer r.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	v, err := secure.NewPasswordVerifier("stored-pass-123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctl, _ := startHost(t, ctx, r.URL(), func(c *host.Config) { c.PasswordVerifier = v })
+	if _, err := dial(t, ctx, ctl, "wrong-password"); err == nil {
+		t.Fatal("wrong password accepted")
+	}
+	c, err := dial(t, ctx, ctl, "stored-pass-123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	waitFor(t, c, "READY")
+}
+
+func TestAudit(t *testing.T) {
+	r := relaytest.New()
+	defer r.Close()
+	col := audittest.New(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	al, err := audit.New(ctx, audit.Config{Endpoint: col.URL, Required: true}, audit.Options{Version: "e2e"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctl, view := startHost(t, ctx, r.URL(), func(c *host.Config) { c.Audit = al })
+
+	c, err := dial(t, ctx, ctl, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, c, "READY")
+	_ = c.Write([]byte("echo audited\r"))
+	waitFor(t, c, "got:echo audited")
+	v, err := dial(t, ctx, view, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, v, "got:echo audited")
+	_ = v.Write([]byte("view cannot type\r"))
+	time.Sleep(300 * time.Millisecond)
+	v.Close()
+	c.Close()
+	time.Sleep(500 * time.Millisecond) // let the host notice the disconnects
+	if err := al.Shutdown(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	cmds := col.Events("setu.command")
+	if len(cmds) != 1 || audittest.Body(cmds[0]) != "echo audited" {
+		var got []string
+		for _, r := range cmds {
+			got = append(got, audittest.Body(r))
+		}
+		t.Fatalf("commands %q, want only the control client's line", got)
+	}
+	if audittest.Attr(cmds[0], "setu.client.role") != proto.RoleControl || audittest.Attr(cmds[0], "setu.client.via") != "nostr" {
+		t.Errorf("command attribution: %v", cmds[0].Attributes)
+	}
+	conns := col.Events("setu.client.connect")
+	if len(conns) != 2 {
+		t.Fatalf("want 2 connect records, got %d", len(conns))
+	}
+	if got := audittest.Attr(conns[0], "setu.client.verification_code"); got != c.SAS {
+		t.Errorf("verification code %q, client saw %q", got, c.SAS)
+	}
+	if audittest.Attr(conns[0], "client.address") == "" {
+		t.Error("connect record has no client address")
+	}
+	if len(col.Events("setu.session.start")) != 1 || len(col.Events("setu.client.disconnect")) != 2 {
+		t.Errorf("lifecycle records: start=%d disconnect=%d", len(col.Events("setu.session.start")), len(col.Events("setu.client.disconnect")))
+	}
+}
+
+// TestAuditEchoOff checks that a line typed at a password prompt (canonical
+// mode, echo off) never reaches the collector.
+func TestAuditEchoOff(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("ConPTY does not expose the terminal mode")
+	}
+	r := relaytest.New()
+	defer r.Close()
+	col := audittest.New(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	al, err := audit.New(ctx, audit.Config{Endpoint: col.URL}, audit.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctl, _ := startHost(t, ctx, r.URL(), func(c *host.Config) {
+		c.Audit = al
+		c.Command = []string{"sh", "-c", `stty -echo; echo PROMPT; read pw; stty echo; echo "len:${#pw}"; read l; echo "got:$l"`}
+	})
+	c, err := dial(t, ctx, ctl, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	waitFor(t, c, "PROMPT")
+	_ = c.Write([]byte("hunter2-secret\r"))
+	waitFor(t, c, "len:14")
+	_ = c.Write([]byte("visible\r"))
+	waitFor(t, c, "got:visible")
+	if err := al.Shutdown(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, rec := range col.Events("setu.command") {
+		got = append(got, audittest.Body(rec))
+	}
+	if strings.Join(got, "|") != "[REDACTED: typed with terminal echo off]|visible" {
+		t.Fatalf("commands %q", got)
+	}
 }
 
 func TestOnceAndWrongSecret(t *testing.T) {

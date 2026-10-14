@@ -27,9 +27,16 @@ var notForwarded = map[string]bool{
 func startBackground(fs *flag.FlagSet, command []string, password string) (int, error) {
 	var forwarded []string
 	fs.Visit(func(f *flag.Flag) {
-		if !notForwarded[f.Name] {
-			forwarded = append(forwarded, "-"+f.Name+"="+f.Value.String())
+		if notForwarded[f.Name] {
+			return
 		}
+		if rf, ok := f.Value.(*repeatFlag); ok {
+			for _, v := range *rf {
+				forwarded = append(forwarded, "-"+f.Name+"="+v)
+			}
+			return
+		}
+		forwarded = append(forwarded, "-"+f.Name+"="+f.Value.String())
 	})
 	childArgs := func(dir string) []string {
 		args := []string{"share", "-session-dir", dir}
@@ -67,11 +74,18 @@ func printLinks(w io.Writer, dir string) error {
 	if err != nil {
 		return fmt.Errorf("read links: %w", err)
 	}
+	printLinkList(w, strings.Fields(string(b)))
+	return nil
+}
+
+// printLinkList prints a control link and an optional view-only link, with
+// QR codes when w is a terminal.
+func printLinkList(w io.Writer, links []string) {
 	titles := []string{
 		"\x1b[1;31mCONTROL link\x1b[0m — anyone holding it can type into the shared terminal. Keep it secret:",
 		"\x1b[1;33mVIEW-ONLY link\x1b[0m — can watch, cannot type:",
 	}
-	for i, l := range strings.Fields(string(b)) {
+	for i, l := range links {
 		if i < len(titles) {
 			fmt.Fprintf(w, "\n%s\n", titles[i])
 		}
@@ -87,7 +101,6 @@ func printLinks(w io.Writer, dir string) error {
 			fmt.Fprintf(w, "  terminal: setu join '%s'\n", l)
 		}
 	}
-	return nil
 }
 
 func printQR(w io.Writer, s string) {

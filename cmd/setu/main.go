@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dmdhrumilmistry/setu/internal/audit"
 	"github.com/dmdhrumilmistry/setu/internal/client"
 	"github.com/dmdhrumilmistry/setu/internal/daemon"
 	"github.com/dmdhrumilmistry/setu/internal/host"
@@ -38,6 +39,7 @@ Usage:
   setu link <id>                                show a background share's links (+ QR)
   setu logs <id>                                show a background share's log
   setu stop <id> | --all                        stop background share(s)
+  setu service ...                              always-on shares with persistent links (see 'setu service')
   setu version
 
 Examples:
@@ -46,6 +48,8 @@ Examples:
   setu share --view-link -- htop          extra read-only link for spectators
   setu share --manual                     no relays at all: copy/paste offer & answer
   setu share -d --password -- claude      run in the background, get your shell back
+  setu share --audit-endpoint https://otel.example.com -- claude
+                                          send an audit log of connections and commands
   setu join 'https://…/#k=…'              join from a terminal instead of a browser
 
 Run 'setu share -h' or 'setu join -h' for flags.
@@ -74,6 +78,8 @@ func main() {
 		code, err = runLink(os.Args[2:])
 	case "logs", "log":
 		code, err = runLogs(os.Args[2:])
+	case "service", "svc":
+		code, err = runService(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println(versionString())
 	case "help", "-h", "--help":
@@ -128,6 +134,8 @@ func runShare(args []string) (int, error) {
 	qr := fs.Bool("qr", true, "print a QR code of the invite link")
 	linkFile := fs.String("link-file", "", "also write the invite link(s) to this file (mode 0600)")
 	verbose := fs.Bool("verbose", false, "verbose logging")
+	auditOn := fs.Bool("audit", false, "send an audit log (connections and typed commands) to an OpenTelemetry collector; see -audit-* flags")
+	auditOpts := addAuditFlags(fs, "audit-", false)
 	var background bool
 	fs.BoolVar(&background, "background", false, "run the share in the background and return to the shell (see `setu ps`)")
 	fs.BoolVar(&background, "d", false, "shorthand for --background")
@@ -137,7 +145,8 @@ func runShare(args []string) (int, error) {
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "Usage: setu share [flags] [--] [command [args...]]\n\n")
 		fs.PrintDefaults()
-		fmt.Fprint(os.Stderr, "\nEnvironment: SETU_PASSWORD (password), SETU_TURN_PASSWORD (TURN credential)\n")
+		fmt.Fprint(os.Stderr, "\nEnvironment: SETU_PASSWORD (password), SETU_TURN_PASSWORD (TURN credential),\n"+
+			"  OTEL_EXPORTER_OTLP_[LOGS_]ENDPOINT / OTEL_EXPORTER_OTLP_[LOGS_]HEADERS (audit collector and its credentials)\n")
 	}
 	_ = fs.Parse(args)
 
@@ -180,6 +189,15 @@ func runShare(args []string) (int, error) {
 		return 1, err
 	}
 
+	var auditCfg audit.Config
+	if *auditOn || *auditOpts.endpoint != "" {
+		c, err := auditOpts.config()
+		if err != nil {
+			return 1, err
+		}
+		auditCfg = c
+	}
+
 	pw := os.Getenv("SETU_PASSWORD")
 	if *passwordStdin {
 		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
@@ -192,32 +210,9 @@ func runShare(args []string) (int, error) {
 		}
 	}
 	if *password && pw == "" {
-		if !tty.IsTerminal(os.Stdin) {
-			return 1, errors.New("--password needs a terminal to prompt, or set SETU_PASSWORD")
-		}
-		for {
-			fmt.Fprint(os.Stderr, "Choose a session password: ")
-			a, err := tty.ReadPassword(os.Stdin)
-			fmt.Fprintln(os.Stderr)
-			if err != nil {
-				return 1, err
-			}
-			fmt.Fprint(os.Stderr, "Repeat password: ")
-			b, err := tty.ReadPassword(os.Stdin)
-			fmt.Fprintln(os.Stderr)
-			if err != nil {
-				return 1, err
-			}
-			if a != b {
-				fmt.Fprintln(os.Stderr, "passwords do not match")
-				continue
-			}
-			if len(a) < 8 {
-				fmt.Fprintln(os.Stderr, "use at least 8 characters")
-				continue
-			}
-			pw = a
-			break
+		var err error
+		if pw, err = promptNewPassword("session", 8); err != nil {
+			return 1, err
 		}
 	}
 	os.Unsetenv("SETU_PASSWORD") // never leak into the shared shell
@@ -234,6 +229,17 @@ func runShare(args []string) (int, error) {
 	}
 	os.Unsetenv("SETU_TURN_PASSWORD")
 
+	var auditLog *audit.Logger
+	if auditCfg.Enabled() {
+		var err error
+		auditLog, err = audit.New(context.Background(), auditCfg, audit.Options{Version: versionString()})
+		if err != nil {
+			return 1, err
+		}
+		defer auditLog.Shutdown(context.Background())
+		audit.ScrubEnv() // collector credentials stay out of the shared shell
+	}
+
 	if len(relays) == 0 {
 		relays = nostr.DefaultRelays
 	}
@@ -249,6 +255,7 @@ func runShare(args []string) (int, error) {
 		Expire:     *expire,
 		Mirror:     mirror,
 		Verbose:    *verbose,
+		Audit:      auditLog,
 	}
 
 	customRelays := relays
@@ -318,6 +325,9 @@ func runShare(args []string) (int, error) {
 			notes = append(notes, "host approval required")
 		}
 		notes = append(notes, fmt.Sprintf("max %d client(s)", *maxClients))
+		if auditCfg.Enabled() {
+			notes = append(notes, "audited to "+collectorHost(auditCfg.Endpoint))
+		}
 		fmt.Fprintf(w, "\nSecurity: %s. Compare the verification code shown on both sides.\n", strings.Join(notes, ", "))
 		if *linkFile != "" {
 			if err := writePrivate(*linkFile, strings.Join(links, "\n")+"\n"); err != nil {
