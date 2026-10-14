@@ -55,8 +55,25 @@ the start of a line.
 | --- | --- |
 | `--timeout 3m` | Give up connecting after this long. |
 | `--relay URL` | Override the relays in the link. |
-| `--anonymous` | Do not send device details (see below). |
+| `--anonymous` | Do not send device details, and use a one-time device key (see below). |
+| `--no-remember` | Use a one-time device key, so hosts cannot recognise this device next time. |
 | `--verbose` | Log signaling and connection details. |
+
+## Get approved automatically
+
+If the host uses `--approve`, you wait until they let you in. Each setu client
+has a **device key** that hosts can trust, so you are let in without waiting:
+
+1. Find your device fingerprint: on the web client's home page under
+   **This device**, or with `setu device` in a terminal.
+2. Send it to the host. They add `--trust-device <fingerprint>`, or answer
+   `a` (always) the next time they approve you.
+
+In the browser, keep **Remember this device** ticked so the same key is used
+next time. The private key never leaves your browser and cannot be read by any
+script. When a host admits you automatically the status bar shows
+**trusted device**. See
+[Approve joiners and trust devices](sharing.md#approve-joiners-and-trust-devices).
 
 ## Manual mode
 

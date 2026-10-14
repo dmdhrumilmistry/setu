@@ -50,12 +50,16 @@ const server = createServer(async (req, res) => {
 }).listen(0);
 const port = server.address().port;
 
-const host = spawn(bin, ['share', '--headless', '--qr=false', '--relay', relays, '--web-url', `http://127.0.0.1:${port}/`, '--', 'sh', '-c', 'echo READY; while read l; do echo "got:$l"; done'], {
-  env: hostEnv,
-  stdio: ['ignore', 'ignore', 'pipe'],
-});
-let hostLog = '';
-host.stderr.on('data', (d) => { hostLog += d; process.stderr.write('host| ' + d); });
+// startHost runs `setu share` headless with extra flags and collects its log.
+function startHost(extra, tag) {
+  const proc = spawn(bin, ['share', '--headless', '--qr=false', '--relay', relays, '--web-url', `http://127.0.0.1:${port}/`, ...extra,
+    '--', 'sh', '-c', 'echo READY; while read l; do echo "got:$l"; done'], { env: hostEnv, stdio: ['ignore', 'ignore', 'pipe'] });
+  const h = { proc, log: '' };
+  proc.stderr.on('data', (d) => { h.log += d; process.stderr.write(tag + '| ' + d); });
+  return h;
+}
+const host = startHost([], 'host');
+const hosts = [host];
 
 const deadline = (ms, what) => new Promise((_, rej) => setTimeout(() => rej(new Error('timeout: ' + what)), ms));
 async function until(fn, ms, what) {
@@ -67,7 +71,8 @@ async function until(fn, ms, what) {
 let browser;
 let ok = false;
 try {
-  const url = await until(() => (hostLog.match(/browser:\s+(\S+)/) || [])[1], 15000, 'invite link');
+  const url = await until(() => (host.log.match(/browser:\s+(\S+)/) || [])[1], 15000, 'invite link');
+
   const proxy = process.env.HTTPS_PROXY;
   const args = chromeArgs;
   // Pass the proxy as raw flags: Playwright's proxy option forces loopback through it.
@@ -91,14 +96,66 @@ try {
   await page.keyboard.press('Enter');
   await until(async () => (await rows()).includes('got:hello'), 15000, 'echo from host');
   const sas = await page.textContent('#sas');
-  await until(() => hostLog.includes(`verification code ${sas}`), 5000, 'matching SAS on host');
+  await until(() => host.log.includes(`verification code ${sas}`), 5000, 'matching SAS on host');
   console.log(`OK: browser joined, typed, received echo; SAS ${sas} matches host`);
+
+  // Device keys: the home page shows this browser's (remembered) device key,
+  // and the host verified the same key when it joined above.
+  const home = await ctx.newPage();
+  await home.goto(`http://127.0.0.1:${port}/`);
+  const fp = await until(async () => {
+    const t = (await home.textContent('#device-fp')) || '';
+    return /^[0-9a-f]{4}(-[0-9a-f]{4}){4}$/.test(t) ? t : '';
+  }, 10000, 'device fingerprint on the home page');
+  await until(() => host.log.includes(`device key ${fp}`), 5000, 'host verified the browser device key');
+  console.log(`OK: browser device key ${fp} verified by the host`);
+  // The stored private key must be non-extractable: scripts can sign with
+  // it but never read it.
+  const stored = await home.evaluate(() => new Promise((resolve, reject) => {
+    const open = indexedDB.open('setu', 1);
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const req = open.result.transaction('keys').objectStore('keys').get('device');
+      req.onsuccess = async () => {
+        const k = req.result.privateKey;
+        let exported = true;
+        try { await crypto.subtle.exportKey('pkcs8', k); } catch { exported = false; }
+        resolve({ extractable: k.extractable, exported });
+      };
+    };
+  }));
+  if (stored.extractable || stored.exported) throw new Error('device private key is extractable');
+  console.log('OK: stored device private key is non-extractable');
+
+  // A host that trusts only this device admits it with no prompt.
+  const trusting = startHost(['--approve', '--trust-device', fp], 'trusting');
+  hosts.push(trusting);
+  const url2 = await until(() => (trusting.log.match(/browser:\s+(\S+)/) || [])[1], 15000, 'invite link (trusting host)');
+  const p2 = await ctx.newPage();
+  await p2.goto(url2);
+  await p2.waitForSelector('#pw-form:not([hidden])', { timeout: 60000 });
+  await p2.fill('#pw', 'browser-test-pw');
+  await p2.click('#pw-form button');
+  await p2.waitForSelector('#screen-term:not([hidden])', { timeout: 30000 });
+  await until(async () => ((await p2.textContent('#status')) || '').includes('trusted device'), 15000, 'trusted-device status shown');
+  await until(() => trusting.log.includes(`approved automatically: trusted device ${fp}`), 5000, 'host auto-approved the device');
+  console.log('OK: trusted browser device approved automatically');
+
+  // Another browser profile has a different key and is turned away.
+  const stranger = await browser.newContext({ ignoreHTTPSErrors: !!proxy });
+  const p3 = await stranger.newPage();
+  await p3.goto(url2);
+  await p3.waitForSelector('#pw-form:not([hidden])', { timeout: 60000 });
+  await p3.fill('#pw', 'browser-test-pw');
+  await p3.click('#pw-form button');
+  await until(async () => /denied/i.test(await p3.textContent('body')), 30000, 'unknown device denied');
+  console.log('OK: unknown browser device denied');
   ok = true;
 } catch (e) {
   console.error('FAIL:', e.message);
 } finally {
   if (browser) await browser.close();
-  host.kill('SIGTERM');
+  for (const h of hosts) h.proc.kill('SIGTERM');
   if (relayProc) relayProc.kill('SIGTERM');
   server.close();
   process.exit(ok ? 0 : 1);

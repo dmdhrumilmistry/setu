@@ -36,12 +36,18 @@ go install github.com/dmdhrumilmistry/setu/cmd/setu@latest
 # share Claude Code (or any command), then open the printed link / scan the QR
 setu share --password -- claude</code></pre>
       <p>New to setu? Read the <a href="https://dmdhrumilmistry.github.io/setu/docs/" rel="noopener">documentation</a>.</p>
+      <h2>This device</h2>
+      <p class="device">Device key <code id="device-fp">...</code></p>
+      <label class="check"><input id="remember-device" type="checkbox"><span>Remember this device, so hosts that trust it (<code>--trust-device</code>, or "always" at their prompt) let it in without asking</span></label>
+      <p class="hint">The private key never leaves this browser and cannot be exported, even by this page. Unticking the box deletes it; each join then uses a one-time key.</p>
+      <button id="forget-device" type="button" class="ghost">Forget this device</button>
       <h2>Security model</h2>
       <ul class="list">
         <li>The invite link <em>is</em> the key. Its secret lives after <code>#</code>, which browsers never send to this website.</li>
         <li>Relays see only AES-GCM ciphertext, throwaway keys and a random room id.</li>
         <li>Terminal traffic is DTLS encrypted peer-to-peer. Compare the verification code on both ends.</li>
         <li>Optional password (PBKDF2 + HMAC challenge), view-only links, single-use links, expiry and host approval.</li>
+        <li>A device key signs each connection, so a host can recognise and auto-approve this browser; it cannot be copied out of the browser.</li>
         <li>This page loads no third-party code; all libraries are vendored and pinned. You can self-host it.</li>
       </ul>
     </section>

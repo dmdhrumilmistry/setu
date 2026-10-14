@@ -41,13 +41,85 @@ View-only clients' keystrokes and resizes are dropped.
 | `--once` | The invite stops working after the first successful join. |
 | `--expire 30m` | Stop accepting new joiners after this long. Connected clients stay connected. |
 | `--max-clients 1` | At most this many connected clients (default 2). |
-| `--approve` | Ask `y/N` on the host terminal for every joiner, showing their verification code. |
+| `--approve` | Ask on the host terminal before admitting each joiner. See [Approve joiners and trust devices](#approve-joiners-and-trust-devices). |
 
 Combine them for one-off help sessions:
 
 ```sh
 setu share --password --once --expire 15m --max-clients 1 -- bash
 ```
+
+## Approve joiners and trust devices
+
+With `--approve`, every joiner waits until you allow them on the host
+terminal:
+
+```
+[setu] client #2 (role=control) wants to join: shared-control-link (client #2 from 203.0.113.7:51234, device Pixel 8 (Android 15, setu-web), device key 3f2a-91c0-77de-0b4e-a1c9, verification code 058 186)
+Allow? [y] once, [a] always for this device, [N] no (60s)
+```
+
+* `y` admits this connection only.
+* `a` admits it **and trusts the device** for the rest of this share: the
+  next time that device joins (after a dropped connection, a phone that went
+  to sleep, a page reload) it is approved automatically, without a prompt.
+* Anything else, or no answer within 60 seconds, denies it.
+
+### Device keys
+
+Every client has a **device key**: a P-256 key pair created on first use. The
+browser keeps it as a non-extractable WebCrypto key (no script, including the
+web client, can read the private key); `setu join` keeps it in an owner-only
+file. When joining, the client signs a message bound to this exact encrypted
+connection, so the host knows which device is connecting and a signature
+cannot be replayed. A device is shown by its fingerprint, such as
+`3f2a-91c0-77de-0b4e-a1c9`:
+
+* in the browser, on the web client's home page under **This device**;
+* in a terminal, with `setu device` (it is also printed by `setu join`).
+
+Trust is held **in memory** by the running share and ends with it. Answering
+`a` never writes anything to disk.
+
+### Pre-approve devices
+
+Give the fingerprints of your own devices up front and they are let in
+without asking:
+
+```sh
+setu share --approve --trust-device 3f2a-91c0-77de-0b4e-a1c9 -- claude
+```
+
+`--trust-device` can be repeated or comma separated. Devices not on the list
+are still asked about on the host terminal.
+
+### Unattended: only known devices
+
+Without a terminal to answer prompts (background shares, `--headless` under
+a service manager), `--approve` with `--trust-device` becomes an allow list:
+trusted devices are admitted automatically and **every other device is
+refused**.
+
+```sh
+setu share -d --password --approve --trust-device 3f2a-91c0-77de-0b4e-a1c9 -- claude
+```
+
+Combined with a password, a joiner then needs the link, the password and the
+private key of a trusted device.
+
+### In the browser
+
+The web client's home page shows **This device** with its fingerprint and a
+**Remember this device** option (on by default):
+
+* remembered: the key is stored in this browser, so hosts that trust it
+  recognise it on every visit;
+* not remembered (or private browsing): a new one-time key is used for each
+  join, so hosts can approve it once but never recognise it again.
+
+**Forget this device** deletes the stored key; hosts that trusted it will ask
+again. When a host admits the browser automatically, the status bar shows
+**trusted device**.
 
 ## Verify who you are talking to
 

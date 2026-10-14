@@ -71,7 +71,8 @@ to end the share.
 | `--once` | off | The invite stops working after the first successful join. |
 | `--expire` | `0` | Stop accepting new clients after this duration. |
 | `--max-clients` | `2` | Maximum concurrent clients. |
-| `--approve` | off | Ask y/N on the host for every joiner. |
+| `--approve` | off | Ask on the host for every joiner: `y` once, `a` always for that device, `N` no. |
+| `--trust-device` | none | Device key fingerprint (`setu device`, or the web client's home page) approved without asking. With `--approve` in the background, only these devices may join. |
 | `--manual` | off | Copy/paste signaling instead of nostr. |
 | `--relay` | 4 public relays | Nostr relay URL(s) to use. |
 | `--stun` | Google STUN | STUN server URL(s). |

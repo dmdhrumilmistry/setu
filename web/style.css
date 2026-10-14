@@ -74,3 +74,11 @@ button:hover { filter: brightness(1.08); }
 .compose textarea { font-size: 14px; }
 .compose-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; color: var(--muted); font-size: 13px; }
 @media (min-width: 900px) { .keys { justify-content: center; } }
+
+/* "This device" section */
+.device code { font-size: 15px; letter-spacing: .04em; color: var(--accent); }
+.check { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; cursor: pointer; }
+.check input { margin-top: 4px; width: 18px; height: 18px; flex: none; }
+.hint { color: var(--muted); font-size: 14px; margin: 6px 0 12px; }
+button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--muted); }
+.check code { white-space: nowrap; }

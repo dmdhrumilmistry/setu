@@ -56,6 +56,17 @@ type Config struct {
 	Once             bool          // disable invites after the first successful join
 	Approve          bool          // ask on the host terminal before admitting a client
 	Expire           time.Duration // disable invites after this long (0 = never)
+	// TrustedDevices are device key fingerprints approved without asking
+	// (secure.DeviceFingerprint form). Answering "a" at the prompt adds a
+	// device to this set, in memory, for the rest of the session.
+	TrustedDevices []string
+	// NoPrompt means nobody can answer approval prompts (headless or in
+	// the background): with Approve, trusted devices are admitted and every
+	// other client is denied.
+	NoPrompt bool
+	// Ask overrides how approval answers are read (tests); by default the
+	// host terminal is asked.
+	Ask func(timeout time.Duration) (byte, bool)
 
 	// Local terminal.
 	Mirror bool // attach the host terminal to the shared PTY
@@ -108,6 +119,7 @@ type Session struct {
 
 	router    *stdinRouter
 	approval  sync.Mutex
+	trusted   map[string]bool // device fingerprints approved automatically (guarded by approval)
 	rawMode   bool
 	mirroring bool
 	logMu     sync.Mutex
@@ -136,7 +148,17 @@ func New(cfg Config) (*Session, error) {
 	if cfg.Log == nil {
 		cfg.Log = os.Stderr
 	}
-	s := &Session{cfg: cfg, peers: map[int]*peer{}, accepting: true, router: &stdinRouter{}, id: secure.RandomID(8)}
+	s := &Session{cfg: cfg, peers: map[int]*peer{}, accepting: true, router: &stdinRouter{}, id: secure.RandomID(8), trusted: map[string]bool{}}
+	for _, fp := range cfg.TrustedDevices {
+		n, err := secure.NormalizeDeviceFingerprint(fp)
+		if err != nil {
+			return nil, err
+		}
+		s.trusted[n] = true
+	}
+	if cfg.NoPrompt && cfg.Approve && len(s.trusted) == 0 {
+		return nil, errors.New("approval without a prompt needs at least one trusted device (nobody could be admitted)")
+	}
 	switch {
 	case cfg.Password != "" && cfg.PasswordVerifier != nil:
 		return nil, errors.New("set either a password or a password verifier, not both")
@@ -286,7 +308,7 @@ func (s *Session) passwordPrompt() bool {
 // func restores the terminal and must run before the process exits.
 func (s *Session) attachLocal(ctx context.Context, cancel context.CancelFunc) (restore func()) {
 	restore = func() {}
-	if !s.cfg.Mirror && !s.cfg.Approve {
+	if !s.cfg.Mirror && (!s.cfg.Approve || s.cfg.NoPrompt) {
 		return restore
 	}
 	if s.cfg.Mirror {
@@ -451,22 +473,63 @@ func (s *Session) stopAccepting(reason string) {
 }
 
 // approve asks the host user to accept a client.
-func (s *Session) approve(p *peer) bool {
+// approve decides whether a client may join when --approve is on. Known
+// devices (a verified device key in the trusted set) are admitted without
+// asking; otherwise the host is asked, and may answer "a" to trust the
+// device for the rest of the session. It returns how the client was
+// admitted (proto.Approval*), or ok=false if it was denied.
+func (s *Session) approve(p *peer) (how string, ok bool) {
 	if !s.cfg.Approve {
-		return true
+		return "", true
 	}
 	s.approval.Lock()
 	defer s.approval.Unlock()
-	s.logf("client #%d (%s, role=%s) wants to join. Verification code: %s\nAllow? [y/N] (60s)", p.id, p.label, p.role, p.sas)
-	c, ok := s.router.ask(60 * time.Second)
-	allowed := ok && (c == 'y' || c == 'Y')
-	s.audit.Approval(p.auditClient(), allowed)
-	if allowed {
-		s.logf("client #%d approved", p.id)
-	} else {
-		s.logf("client #%d denied", p.id)
+	who := p.auditClient()
+	if p.deviceFP != "" && s.trusted[p.deviceFP] {
+		s.audit.Approval(who, true, audit.ApprovedTrustedDevice)
+		s.logf("client #%d approved automatically: trusted device %s", p.id, p.deviceFP)
+		return proto.ApprovalTrusted, true
 	}
-	return allowed
+	if s.cfg.NoPrompt {
+		s.audit.Approval(who, false, audit.DeniedUnknownDevice)
+		s.logf("client #%d denied: device %s is not trusted and nobody can approve it here", p.id, orNone(p.deviceFP))
+		return "", false
+	}
+	choices := "[y/N]"
+	if p.deviceFP != "" {
+		choices = "[y] once, [a] always for this device, [N] no"
+	}
+	noKey := ""
+	if p.deviceFP == "" {
+		noKey = " (no device key, so it cannot be remembered)"
+	}
+	s.logf("client #%d (role=%s) wants to join: %s%s\nAllow? %s (60s)", p.id, p.role, who.Actor(), noKey, choices)
+	ask := s.cfg.Ask
+	if ask == nil {
+		ask = s.router.ask
+	}
+	c, answered := ask(60 * time.Second)
+	switch {
+	case answered && (c == 'a' || c == 'A') && p.deviceFP != "":
+		s.trusted[p.deviceFP] = true
+		s.audit.Approval(who, true, audit.ApprovedAlways)
+		s.logf("client #%d approved; device %s will be approved automatically for the rest of this share", p.id, p.deviceFP)
+	case answered && (c == 'y' || c == 'Y'):
+		s.audit.Approval(who, true, audit.ApprovedOnce)
+		s.logf("client #%d approved", p.id)
+	default:
+		s.audit.Approval(who, false, audit.DeniedByHost)
+		s.logf("client #%d denied", p.id)
+		return "", false
+	}
+	return proto.ApprovalPrompt, true
+}
+
+func orNone(s string) string {
+	if s == "" {
+		return "(none sent)"
+	}
+	return s
 }
 
 func (s *Session) broadcastExit(code int) {

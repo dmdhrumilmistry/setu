@@ -482,6 +482,9 @@ type Client struct {
 	LocalAddresses  []string
 	// Device is what the client reported about itself (self-reported).
 	Device *proto.ClientInfo
+	// DeviceKey is the fingerprint of the client's device key, verified by
+	// a signature over this connection (unlike Device).
+	DeviceKey string
 }
 
 // ActorName is the best identity setu has for a client: the name of the
@@ -513,6 +516,9 @@ func (c Client) Actor() string {
 		}
 		if d := c.Device.Summary(); d != "" {
 			s += ", device " + d
+		}
+		if c.DeviceKey != "" {
+			s += ", device key " + c.DeviceKey
 		}
 		if c.SAS != "" {
 			s += ", verification code " + c.SAS
@@ -547,6 +553,9 @@ func (c Client) attrs() []attribute.KeyValue {
 	}
 	if c.Transport != "" {
 		a = append(a, attribute.String("network.transport", c.Transport))
+	}
+	if c.DeviceKey != "" {
+		a = append(a, attribute.String("setu.client.device_key", c.DeviceKey))
 	}
 	if len(c.PublicAddresses) > 0 {
 		a = append(a, attribute.StringSlice("setu.client.public_addresses", c.PublicAddresses))
@@ -639,7 +648,7 @@ func (s *Session) AuthFailed(c Client) {
 }
 
 // Approval records the host's answer to an --approve prompt.
-func (s *Session) Approval(c Client, allowed bool) {
+func (s *Session) Approval(c Client, allowed bool, method string) {
 	if s == nil {
 		return
 	}
@@ -648,9 +657,18 @@ func (s *Session) Approval(c Client, allowed bool) {
 		verdict = "approved"
 	}
 	s.emit(otellog.SeverityInfo, "setu.client.approval",
-		fmt.Sprintf("client #%d %s by host", c.ID, verdict),
-		append(c.attrs(), attribute.Bool("setu.approved", allowed))...)
+		fmt.Sprintf("client #%d %s (%s)", c.ID, verdict, method),
+		append(c.attrs(), attribute.Bool("setu.approved", allowed), attribute.String("setu.approval.method", method))...)
 }
+
+// How an approval decision was made (setu.approval.method).
+const (
+	ApprovedTrustedDevice = "trusted-device" // known device key, no prompt
+	ApprovedAlways        = "prompt-always"  // host answered "always": device now trusted
+	ApprovedOnce          = "prompt-once"    // host answered "yes"
+	DeniedByHost          = "prompt-denied"  // host answered "no" or did not answer
+	DeniedUnknownDevice   = "unknown-device" // no prompt available, device not trusted
+)
 
 // InviteDisabled records the invite no longer accepting clients.
 func (s *Session) InviteDisabled(reason string) {
