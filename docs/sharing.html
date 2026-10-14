@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Sharing a terminal - setu docs</title>
+<meta name="description" content="setu share runs a command in a pseudo terminal and lets other devices join it. Everything after -- is the command; without one, setu shares your shell.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/theme.js"></script>
+<script src="assets/docs.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button class="icon-btn nav-toggle" id="nav-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" width="26" height="26"><span>setu</span><small>docs</small></a>
+  <div class="search" role="search">
+    <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input id="search" type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false">
+    <kbd class="search-key" aria-hidden="true">/</kbd>
+    <ul id="search-results" class="search-results" role="listbox" aria-label="Search results" hidden></ul>
+  </div>
+  <nav class="toplinks" aria-label="Site">
+    <a href="../">Web client</a>
+    <a href="https://github.com/dmdhrumilmistry/setu">GitHub</a>
+  </nav>
+  <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <svg class="sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+</header>
+<div class="layout">
+  <nav id="sidebar" class="sidebar" aria-label="Documentation">
+    <div class="nav-section">
+      <p class="nav-title">Get started</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="quickstart.html">Quick start</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Guides</p>
+      <ul>
+        <li><a href="sharing.html" aria-current="page">Sharing a terminal</a></li>
+        <li><a href="joining.html">Joining a session</a></li>
+        <li><a href="claude-code.html">Claude Code from your phone</a></li>
+        <li><a href="service.html">Always-on service</a></li>
+        <li><a href="audit.html">Audit logging</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Administration</p>
+      <ul>
+        <li><a href="mdm.html">MDM and managed policy</a></li>
+        <li><a href="security.html">Security model</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Reference</p>
+      <ul>
+        <li><a href="cli.html">CLI reference</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting and FAQ</a></li>
+        <li><a href="design.html">Design and protocol</a></li>
+      </ul>
+    </div>
+    
+  </nav>
+  <div class="scrim" id="scrim" hidden></div>
+  <main id="main" tabindex="-1">
+    <article class="content">
+<h1 id="sharing-a-terminal">Sharing a terminal</h1>
+<p><code>setu share</code> runs a command in a pseudo terminal and lets other devices join
+it. Everything after <code>--</code> is the command; without one, setu shares your shell.</p>
+<pre><code class="language-sh">setu share [flags] [--] [command [args...]]
+</code></pre>
+<h2 id="choose-who-can-join">Choose who can join</h2>
+<h3 id="passwords">Passwords</h3>
+<pre><code class="language-sh">setu share --password -- claude
+</code></pre>
+<p>setu prompts for a password (8 characters or more). Joiners must enter it. The
+password never crosses the network: the host sends a challenge and the joiner
+answers with a proof bound to that exact encrypted connection. After 5 wrong
+passwords the share refuses new joiners for 10 minutes, and after 20 the invite
+is disabled for good.</p>
+<p>For scripts, set <code>SETU_PASSWORD</code> instead of being prompted. setu removes it from
+the environment before starting the shared command.</p>
+<h3 id="view-only-links">View-only links</h3>
+<pre><code class="language-sh">setu share --view-link -- htop
+</code></pre>
+<p>Prints a second, independent link whose holders can watch but not type. The
+role is decided by which link was used, never by anything the client claims.
+View-only clients' keystrokes and resizes are dropped.</p>
+<h3 id="single-use-expiry-and-limits">Single use, expiry and limits</h3>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--once</code></td>
+<td>The invite stops working after the first successful join.</td>
+</tr>
+<tr>
+<td><code>--expire 30m</code></td>
+<td>Stop accepting new joiners after this long. Connected clients stay connected.</td>
+</tr>
+<tr>
+<td><code>--max-clients 1</code></td>
+<td>At most this many connected clients (default 2).</td>
+</tr>
+<tr>
+<td><code>--approve</code></td>
+<td>Ask <code>y/N</code> on the host terminal for every joiner, showing their verification code.</td>
+</tr>
+</tbody>
+</table>
+<p>Combine them for one-off help sessions:</p>
+<pre><code class="language-sh">setu share --password --once --expire 15m --max-clients 1 -- bash
+</code></pre>
+<h2 id="verify-who-you-are-talking-to">Verify who you are talking to</h2>
+<p>When a client connects, the host terminal prints a line such as:</p>
+<pre><code>[setu] client #1 connected via nostr, role=control: shared-control-link (client #1 from 203.0.113.7:51234, device alice-laptop (linux/amd64, setu-cli), verification code 058 186)
+</code></pre>
+<p>The joiner sees the same 6-digit verification code. The code is derived from
+both ends' DTLS certificates: if the codes differ, someone is intercepting the
+connection, so disconnect.</p>
+<h2 id="run-in-the-background">Run in the background</h2>
+<pre><code class="language-sh">setu share -d --password -- claude
+</code></pre>
+<p><code>-d</code> (or <code>--background</code>) prints the links and QR code and gives you your prompt
+back. The share keeps running after you close the terminal.</p>
+<pre><code class="language-sh">setu ps                 # list background shares
+setu link &lt;id&gt;          # show the links and QR code again
+setu logs &lt;id&gt;          # who connected, with verification codes
+setu stop &lt;id&gt;          # end one share
+setu stop --all         # end all of them
+</code></pre>
+<p>Each background share keeps its state, including its links, in a private
+directory (<code>~/.config/setu/sessions/&lt;id&gt;/</code> on Linux, <code>~/Library/Application Support/setu/sessions/&lt;id&gt;/</code> on macOS, <code>%AppData%\setu\sessions\&lt;id&gt;\</code> on
+Windows) that is deleted when the share ends. The password reaches the
+background process through a pipe, never the command line or environment.</p>
+<p><code>--manual</code> and <code>--approve</code> need someone at the terminal, so they cannot be
+combined with <code>-d</code>. For a share that survives reboots, use the
+<a href="service.html">Always-on service</a>.</p>
+<h2 id="headless-and-scripted-shares">Headless and scripted shares</h2>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--headless</code></td>
+<td>Do not attach this terminal; just serve clients (for tmux, nohup or CI).</td>
+</tr>
+<tr>
+<td><code>--qr=false</code></td>
+<td>Do not print the QR code.</td>
+</tr>
+<tr>
+<td><code>--link-file PATH</code></td>
+<td>Also write the invite link(s) to <code>PATH</code> with mode 0600.</td>
+</tr>
+<tr>
+<td><code>--verbose</code></td>
+<td>Log signaling and connection details.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="no-relays-manual-mode">No relays: manual mode</h2>
+<pre><code class="language-sh">setu share --manual
+</code></pre>
+<p>Manual mode sends nothing to nostr relays. setu prints an <em>offer code</em> (and a
+link containing it). Send it to the joiner, who opens the link or runs
+<code>setu join &lt;offer-code&gt;</code> and gets an <em>answer code</em> back. Paste the answer code
+into the host terminal and press Enter. Pasting the answer is itself the
+approval. Only STUN is used to find a network path.</p>
+<h2 id="strict-networks-stun-and-turn">Strict networks: STUN and TURN</h2>
+<p>Peer-to-peer connections need both sides to reach each other. setu uses
+Google's public STUN servers to discover public addresses. When both sides are
+behind strict NATs or firewalls that block UDP, add a TURN relay:</p>
+<pre><code class="language-sh">export SETU_TURN_PASSWORD='...'
+setu share --turn turn:turn.example.com:3478 --turn-user alice -- claude
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--stun URL</code></td>
+<td>Use these STUN servers instead of Google's (repeatable).</td>
+</tr>
+<tr>
+<td><code>--turn URL</code></td>
+<td>Add a TURN server for networks that block peer-to-peer traffic.</td>
+</tr>
+<tr>
+<td><code>--turn-user NAME</code></td>
+<td>TURN username; the credential comes from <code>SETU_TURN_PASSWORD</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>TURN relays see only DTLS-encrypted bytes.</p>
+<h2 id="choose-relays">Choose relays</h2>
+<p>By default setu uses four public nostr relays: <code>wss://relay.damus.io</code>,
+<code>wss://nos.lol</code>, <code>wss://relay.primal.net</code> and <code>wss://nostr.mom</code>. They only
+carry a few small, encrypted, ephemeral messages per join. To use your own:</p>
+<pre><code class="language-sh">setu share --relay wss://relay.example.com -- claude
+</code></pre>
+<p>Custom relays are embedded in the invite link, so joiners use them too.</p>
+<h2 id="self-host-the-web-client">Self-host the web client</h2>
+<p>The browser client is a static page published from this repository to GitHub
+Pages. You can host the <code>web/</code> directory anywhere that serves static files over
+HTTPS and point links at it:</p>
+<pre><code class="language-sh">setu share --web-url https://setu.example.com/ -- claude
+setu share --web-url= -- claude      # terminal-only links, no browser URL
+</code></pre>
+<h2 id="audit-what-happens">Audit what happens</h2>
+<p>Add <code>--audit-endpoint https://collector.example.com:4318</code> to send an audit log
+of connections and typed commands to your OpenTelemetry collector. See
+<a href="audit.html">Audit logging</a>.</p>
+<h2 id="all-flags">All flags</h2>
+<p>See the <a href="cli.html#setu-share">CLI reference</a>.</p>
+
+    </article>
+    <nav class="pager" aria-label="Previous and next page">
+      <a class="prev" href="quickstart.html"><span>Previous</span>Quick start</a>
+      <a class="next" href="joining.html"><span>Next</span>Joining a session</a>
+    </nav>
+    <footer class="footer">
+      <a href="https://github.com/dmdhrumilmistry/setu/edit/main/docs/src/sharing.md">Edit this page on GitHub</a>
+      <span>setu is open source. Peer-to-peer terminal sharing with no server of your own.</span>
+    </footer>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    <p class="toc-title">On this page</p>
+    <ul>
+      <li class="l2"><a href="#choose-who-can-join">Choose who can join</a></li>
+      <li class="l3"><a href="#passwords">Passwords</a></li>
+      <li class="l3"><a href="#view-only-links">View-only links</a></li>
+      <li class="l3"><a href="#single-use-expiry-and-limits">Single use, expiry and limits</a></li>
+      <li class="l2"><a href="#verify-who-you-are-talking-to">Verify who you are talking to</a></li>
+      <li class="l2"><a href="#run-in-the-background">Run in the background</a></li>
+      <li class="l2"><a href="#headless-and-scripted-shares">Headless and scripted shares</a></li>
+      <li class="l2"><a href="#no-relays-manual-mode">No relays: manual mode</a></li>
+      <li class="l2"><a href="#strict-networks-stun-and-turn">Strict networks: STUN and TURN</a></li>
+      <li class="l2"><a href="#choose-relays">Choose relays</a></li>
+      <li class="l2"><a href="#self-host-the-web-client">Self-host the web client</a></li>
+      <li class="l2"><a href="#audit-what-happens">Audit what happens</a></li>
+      <li class="l2"><a href="#all-flags">All flags</a></li>
+    </ul>
+  </aside>
+</div>
+</body>
+</html>

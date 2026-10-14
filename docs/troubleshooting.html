@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Troubleshooting and FAQ - setu docs</title>
+<meta name="description" content="The two peers could not reach each other.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/theme.js"></script>
+<script src="assets/docs.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button class="icon-btn nav-toggle" id="nav-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" width="26" height="26"><span>setu</span><small>docs</small></a>
+  <div class="search" role="search">
+    <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input id="search" type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false">
+    <kbd class="search-key" aria-hidden="true">/</kbd>
+    <ul id="search-results" class="search-results" role="listbox" aria-label="Search results" hidden></ul>
+  </div>
+  <nav class="toplinks" aria-label="Site">
+    <a href="../">Web client</a>
+    <a href="https://github.com/dmdhrumilmistry/setu">GitHub</a>
+  </nav>
+  <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <svg class="sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+</header>
+<div class="layout">
+  <nav id="sidebar" class="sidebar" aria-label="Documentation">
+    <div class="nav-section">
+      <p class="nav-title">Get started</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="quickstart.html">Quick start</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Guides</p>
+      <ul>
+        <li><a href="sharing.html">Sharing a terminal</a></li>
+        <li><a href="joining.html">Joining a session</a></li>
+        <li><a href="claude-code.html">Claude Code from your phone</a></li>
+        <li><a href="service.html">Always-on service</a></li>
+        <li><a href="audit.html">Audit logging</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Administration</p>
+      <ul>
+        <li><a href="mdm.html">MDM and managed policy</a></li>
+        <li><a href="security.html">Security model</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Reference</p>
+      <ul>
+        <li><a href="cli.html">CLI reference</a></li>
+        <li><a href="troubleshooting.html" aria-current="page">Troubleshooting and FAQ</a></li>
+        <li><a href="design.html">Design and protocol</a></li>
+      </ul>
+    </div>
+    
+  </nav>
+  <div class="scrim" id="scrim" hidden></div>
+  <main id="main" tabindex="-1">
+    <article class="content">
+<h1 id="troubleshooting-and-faq">Troubleshooting and FAQ</h1>
+<h2 id="connecting">Connecting</h2>
+<h3 id="the-browser-stays-on-connecting-or-the-join-times-out">The browser stays on &quot;connecting&quot; or the join times out</h3>
+<p>The two peers could not reach each other.</p>
+<ol>
+<li>Make sure the share is still running on the host (<code>setu ps</code> for background
+shares).</li>
+<li>Check that the link is complete. Links copied from some apps get cut at
+<code>#</code> or <code>&amp;</code>; scanning the QR code avoids that.</li>
+<li>Try <code>--verbose</code> on both sides to see which step fails: relays, offer and
+answer, or the WebRTC connection.</li>
+<li>If the host logs &quot;no nostr relay reachable&quot;, the network blocks the relays;
+try <code>--relay</code> with a relay you can reach, or <code>--manual</code>.</li>
+<li>If signaling works but the connection never opens, both sides are probably
+behind strict NATs or a firewall that blocks UDP. Add a TURN server on the
+host: <code>setu share --turn turn:turn.example.com:3478 --turn-user NAME</code> with
+<code>SETU_TURN_PASSWORD</code> set.</li>
+</ol>
+<h3 id="webrtc-connection-failed">&quot;WebRTC connection failed&quot;</h3>
+<p>Same cause as above: no network path. TURN is the fix for strict networks.</p>
+<h3 id="session-full-or-invite-no-longer-valid">&quot;session full&quot; or &quot;invite no longer valid&quot;</h3>
+<p>The share reached <code>--max-clients</code>, was <code>--once</code> and someone already joined, or
+it expired (<code>--expire</code>), or too many wrong passwords disabled it. Start a new
+share.</p>
+<h3 id="host-is-temporarily-locked-after-failed-logins">&quot;host is temporarily locked after failed logins&quot;</h3>
+<p>Five wrong passwords lock the share for 10 minutes. Twenty disable the invite.</p>
+<h2 id="security">Security</h2>
+<h3 id="the-verification-codes-do-not-match">The verification codes do not match</h3>
+<p>Disconnect immediately. Different codes mean the two ends are not talking to
+each other directly: someone is intercepting the connection. Start a new share
+with a new link and share it over a channel you trust.</p>
+<h3 id="i-leaked-a-link">I leaked a link</h3>
+<ul>
+<li>For <code>setu share</code>: end the share (<code>&lt;Enter&gt; ~ .</code>, or <code>setu stop &lt;id&gt;</code>) and
+start a new one; the old link dies with it.</li>
+<li>For the service: <code>setu service rotate &lt;profile&gt;</code> invalidates every link at
+once, or <code>setu service key remove &lt;profile&gt; &lt;person&gt;</code> revokes one person's.</li>
+</ul>
+<h2 id="service">Service</h2>
+<h3 id="the-service-does-not-serve-a-profile">The service does not serve a profile</h3>
+<p>Run <code>setu service status</code> and <code>setu service list</code>, then read the log
+(<code>journalctl --user -u setu</code> on Linux, <code>service.log</code> in the state directory on
+macOS and Windows). Common causes:</p>
+<ul>
+<li>the profile is <code>disabled</code> or <code>expired</code> (run <code>setu service rotate &lt;profile&gt;</code>);</li>
+<li>auditing is configured but the collector is unreachable (the service fails
+closed until it is back);</li>
+<li>a <a href="mdm.html">managed policy</a> blocks the profile (the log says which setting);</li>
+<li><code>config.json</code> is readable by other users (<code>chmod 600</code> it).</li>
+</ul>
+<h3 id="setu-service-is-already-running">&quot;setu service is already running&quot;</h3>
+<p>Only one supervisor may serve a state directory. Stop the other one, or use
+<code>SETU_SERVICE_DIR</code> for a second, independent set of profiles.</p>
+<h3 id="the-service-stops-when-i-log-out-linux">The service stops when I log out (Linux)</h3>
+<p>systemd user services stop at logout. Run <code>loginctl enable-linger $USER</code> once.</p>
+<h3 id="claude-is-not-found-by-the-service"><code>claude</code> is not found by the service</h3>
+<p>The service resolves commands to absolute paths when you add a profile. If you
+installed the tool later or moved it, remove and re-add the profile. On Linux
+and macOS, reinstall the service (<code>setu service install</code>) from a shell whose
+<code>PATH</code> contains the tool.</p>
+<h2 id="audit-and-policy">Audit and policy</h2>
+<h3 id="audit-collector-rejected-the-startup-probe">&quot;audit collector rejected the startup probe&quot;</h3>
+<p><code>--audit-required</code> (or the service default) checks the collector before
+sharing. Check the URL, the <code>OTEL_EXPORTER_OTLP_HEADERS</code> token, and TLS. Plain
+<code>http://</code> is refused for remote collectors unless you pass <code>--audit-insecure</code>.</p>
+<h3 id="blocked-by-your-organizations-policy-">&quot;blocked by your organization's policy (...)&quot;</h3>
+<p>A managed policy forbids that setting. <code>setu policy</code> shows the policy and where
+it came from; the key in parentheses tells you which rule applied.</p>
+<h3 id="managed-policy--writable-by-group-or-others-or-unknown-setting">&quot;managed policy ...: writable by group or others&quot; or &quot;unknown setting&quot;</h3>
+<p>The policy exists but is unsafe or malformed, so setu refuses to run. Ask your
+administrator to fix it; it must be owned by root (or Administrators) and use
+only known settings.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>Do I need to run a server?</strong> No. Relays and STUN are public infrastructure,
+and you can choose your own or use <code>--manual</code> to need neither.</p>
+<p><strong>Can the relays or GitHub see my terminal?</strong> No. Relays carry only encrypted
+connection setup messages, and the terminal stream goes directly between the
+two peers over DTLS. GitHub Pages only serves the static web page; the secret
+in the link's <code>#fragment</code> is never sent to it.</p>
+<p><strong>Does it work on Windows?</strong> Yes, for both sharing (Windows 10 1809+) and
+joining.</p>
+<p><strong>Can several people join at once?</strong> Yes, up to <code>--max-clients</code>. The latest
+control client to resize the window sets the terminal size.</p>
+<p><strong>Can I use it without the browser client?</strong> Yes: <code>setu join</code> works from any
+terminal, and <code>--web-url=</code> prints terminal-only links.</p>
+
+    </article>
+    <nav class="pager" aria-label="Previous and next page">
+      <a class="prev" href="cli.html"><span>Previous</span>CLI reference</a>
+      <a class="next" href="design.html"><span>Next</span>Design and protocol</a>
+    </nav>
+    <footer class="footer">
+      <a href="https://github.com/dmdhrumilmistry/setu/edit/main/docs/src/troubleshooting.md">Edit this page on GitHub</a>
+      <span>setu is open source. Peer-to-peer terminal sharing with no server of your own.</span>
+    </footer>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    <p class="toc-title">On this page</p>
+    <ul>
+      <li class="l2"><a href="#connecting">Connecting</a></li>
+      <li class="l3"><a href="#the-browser-stays-on-connecting-or-the-join-times-out">The browser stays on &#34;connecting&#34; or the join times out</a></li>
+      <li class="l3"><a href="#webrtc-connection-failed">&#34;WebRTC connection failed&#34;</a></li>
+      <li class="l3"><a href="#session-full-or-invite-no-longer-valid">&#34;session full&#34; or &#34;invite no longer valid&#34;</a></li>
+      <li class="l3"><a href="#host-is-temporarily-locked-after-failed-logins">&#34;host is temporarily locked after failed logins&#34;</a></li>
+      <li class="l2"><a href="#security">Security</a></li>
+      <li class="l3"><a href="#the-verification-codes-do-not-match">The verification codes do not match</a></li>
+      <li class="l3"><a href="#i-leaked-a-link">I leaked a link</a></li>
+      <li class="l2"><a href="#service">Service</a></li>
+      <li class="l3"><a href="#the-service-does-not-serve-a-profile">The service does not serve a profile</a></li>
+      <li class="l3"><a href="#setu-service-is-already-running">&#34;setu service is already running&#34;</a></li>
+      <li class="l3"><a href="#the-service-stops-when-i-log-out-linux">The service stops when I log out (Linux)</a></li>
+      <li class="l3"><a href="#claude-is-not-found-by-the-service">claude is not found by the service</a></li>
+      <li class="l2"><a href="#audit-and-policy">Audit and policy</a></li>
+      <li class="l3"><a href="#audit-collector-rejected-the-startup-probe">&#34;audit collector rejected the startup probe&#34;</a></li>
+      <li class="l3"><a href="#blocked-by-your-organizations-policy-">&#34;blocked by your organization&#39;s policy (...)&#34;</a></li>
+      <li class="l3"><a href="#managed-policy--writable-by-group-or-others-or-unknown-setting">&#34;managed policy ...: writable by group or others&#34; or &#34;unknown setting&#34;</a></li>
+      <li class="l2"><a href="#faq">FAQ</a></li>
+    </ul>
+  </aside>
+</div>
+</body>
+</html>

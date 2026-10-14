@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Design and protocol - setu docs</title>
+<meta name="description" content="setu (सेतु, &#34;bridge&#34;) shares a local terminal with a browser or another terminal, peer-to-peer over WebRTC, with no server you have to run. Its main ...">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/theme.js"></script>
+<script src="assets/docs.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button class="icon-btn nav-toggle" id="nav-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" width="26" height="26"><span>setu</span><small>docs</small></a>
+  <div class="search" role="search">
+    <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input id="search" type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false">
+    <kbd class="search-key" aria-hidden="true">/</kbd>
+    <ul id="search-results" class="search-results" role="listbox" aria-label="Search results" hidden></ul>
+  </div>
+  <nav class="toplinks" aria-label="Site">
+    <a href="../">Web client</a>
+    <a href="https://github.com/dmdhrumilmistry/setu">GitHub</a>
+  </nav>
+  <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <svg class="sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+</header>
+<div class="layout">
+  <nav id="sidebar" class="sidebar" aria-label="Documentation">
+    <div class="nav-section">
+      <p class="nav-title">Get started</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="quickstart.html">Quick start</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Guides</p>
+      <ul>
+        <li><a href="sharing.html">Sharing a terminal</a></li>
+        <li><a href="joining.html">Joining a session</a></li>
+        <li><a href="claude-code.html">Claude Code from your phone</a></li>
+        <li><a href="service.html">Always-on service</a></li>
+        <li><a href="audit.html">Audit logging</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Administration</p>
+      <ul>
+        <li><a href="mdm.html">MDM and managed policy</a></li>
+        <li><a href="security.html">Security model</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Reference</p>
+      <ul>
+        <li><a href="cli.html">CLI reference</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting and FAQ</a></li>
+        <li><a href="design.html" aria-current="page">Design and protocol</a></li>
+      </ul>
+    </div>
+    
+  </nav>
+  <div class="scrim" id="scrim" hidden></div>
+  <main id="main" tabindex="-1">
+    <article class="content">
+<h1 id="setu--design-and-implementation-plan">setu — design and implementation plan</h1>
+<p><em>setu</em> (सेतु, &quot;bridge&quot;) shares a local terminal with a browser or another
+terminal, peer-to-peer over WebRTC, with <strong>no server you have to run</strong>. Its
+main job is driving Claude Code and other AI agents on your machine from
+anywhere, such as your phone.</p>
+<h2 id="goals">Goals</h2>
+<table>
+<thead>
+<tr>
+<th>Goal</th>
+<th>How</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No central server</td>
+<td>WebRTC data channel straight between the peers. Signaling goes over public <strong>nostr relays</strong> (a decentralised network with many independent operators) or over <strong>copy/paste</strong>. Google STUN only helps the peers find a network path.</td>
+</tr>
+<tr>
+<td>Works from a phone</td>
+<td>Static web client on <strong>GitHub Pages</strong>, with a QR code, a mobile key bar (Esc, Tab, ⇧Tab, Ctrl, arrows) and a compose box for long prompts.</td>
+</tr>
+<tr>
+<td>CLI on both ends</td>
+<td><code>setu share</code> (host) and <code>setu join</code> (terminal client). Both are one static Go binary.</td>
+</tr>
+<tr>
+<td>Secure by default</td>
+<td>The link is a 256-bit key, relays only see ciphertext, DTLS runs end to end, and there are optional passwords, view-only links, single-use links, expiry and host approval. See <a href="security.html">SECURITY.md</a>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="why-go">Why Go?</h2>
+<p>Go has <a href="https://github.com/pion/webrtc">pion/webrtc</a>, the most mature WebRTC
+stack outside browsers, and <a href="https://github.com/creack/pty">creack/pty</a>. It also
+cross-compiles to a single static binary with <code>CGO_ENABLED=0</code>, and it has
+HKDF, PBKDF2, AES-GCM and HMAC in its standard library. The Rust options
+(<code>webrtc-rs</code>) are less mature for this use.</p>
+<h2 id="architecture">Architecture</h2>
+<pre><code>  ┌────────────── host machine ───────────────┐                 ┌──── phone / laptop ────┐
+  │ claude / $SHELL ⇄ PTY ⇄ setu share         │                 │ browser (GitHub Pages) │
+  │                       │  ▲                 │                 │   or `setu join`       │
+  │        local mirror ◀─┘  │ pion/webrtc     │                 │                        │
+  └──────────────────────────┼─────────────────┘                 └───────────┬────────────┘
+                             │  ① encrypted hello / offer / answer          │
+                             └──────▶  public nostr relays  ◀────────────────┘
+                                       (ephemeral events, ciphertext only)
+                             │  ② STUN binding (stun.l.google.com)          │
+                             │  ③ DTLS/SCTP data channel, peer-to-peer ═════│
+</code></pre>
+<h3 id="packages">Packages</h3>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cmd/setu</code></td>
+<td>CLI: flags, prompts, printing invites and QR codes</td>
+</tr>
+<tr>
+<td><code>internal/host</code></td>
+<td>PTY session (creack/pty on Unix, ConPTY on Windows), output fan-out with a 256 KiB replay buffer, admission control, per-peer handshake, nostr and manual signaling</td>
+</tr>
+<tr>
+<td><code>internal/client</code></td>
+<td><code>Dial</code> (signaling, WebRTC, handshake) and the raw-mode terminal attach for <code>setu join</code></td>
+</tr>
+<tr>
+<td><code>internal/secure</code></td>
+<td>Invite secrets, HKDF room derivation, AES-GCM sealing, SAS, PBKDF2/HMAC password proof</td>
+</tr>
+<tr>
+<td><code>internal/nostr</code></td>
+<td>A minimal NIP-01 client: BIP-340 signed events and a relay pool with reconnects</td>
+</tr>
+<tr>
+<td><code>internal/rtc</code></td>
+<td>pion helpers: non-trickle offer/answer, ICE config validation</td>
+</tr>
+<tr>
+<td><code>internal/link</code></td>
+<td>Invite links (secrets in the <code>#fragment</code>) and deflate+base64url copy/paste codes</td>
+</tr>
+<tr>
+<td><code>internal/proto</code></td>
+<td>Wire messages shared with <code>web/js/*.mjs</code></td>
+</tr>
+<tr>
+<td><code>internal/audit</code></td>
+<td>OpenTelemetry audit log: rebuilds commands from keystrokes, redacts secrets, exports OTLP/HTTP log records through a bounded batch queue</td>
+</tr>
+<tr>
+<td><code>internal/service</code></td>
+<td>The <code>setu service</code> supervisor: persistent profiles (keys, password verifiers), hot-reloaded config, restart with backoff, and the systemd / launchd / Task Scheduler autostart entries</td>
+</tr>
+<tr>
+<td><code>internal/daemon</code></td>
+<td>Detached <code>setu share -d</code> processes and their registry</td>
+</tr>
+<tr>
+<td><code>web/</code></td>
+<td>The static client: <code>crypto.mjs</code> mirrors <code>secure</code>/<code>link</code>, <code>nostr.mjs</code> mirrors <code>nostr</code>, <code>app.mjs</code> handles the UI, WebRTC and xterm.js</td>
+</tr>
+</tbody>
+</table>
+<h2 id="protocol">Protocol</h2>
+<h3 id="invite">Invite</h3>
+<p><code>https://&lt;pages&gt;/#k=&lt;secret&gt;[&amp;r=&lt;relays&gt;]</code></p>
+<p>The secret is 32 random bytes in base64url. It is derived into two values:</p>
+<ul>
+<li><code>room_id = HKDF-SHA256(secret, info=&quot;setu/v1/room-id&quot;)</code>: a public rendezvous
+tag that looks like a nostr pubkey.</li>
+<li><code>key = HKDF-SHA256(secret, info=&quot;setu/v1/signal-key&quot;)</code>: the AES-256-GCM key
+for every signaling message.</li>
+</ul>
+<p>A <code>--view-link</code> creates a second, independent secret. The host decides each
+client's role from which room the request arrived on, never from anything the
+client claims.</p>
+<h3 id="signaling-over-nostr-default">Signaling over nostr (default)</h3>
+<p>Every message is an <strong>ephemeral</strong> event (kind <code>21210</code>, which relays forward but
+never store). Each one is signed by a throwaway keypair, carries a <code>p</code> tag
+naming the recipient, and has this content:
+<code>base64(nonce ‖ AES-GCM(key, json, aad=&quot;setu/v1/signal|room|from|to&quot;))</code>.</p>
+<pre><code>client ──hello{sid,ts}──────────────▶ p=room_id         (retransmitted every 2 s)
+client ◀─offer{sid,sdp,ice,ts}─────── p=client_pubkey   (host owns the ICE config)
+client ──answer{sid,sdp,ts}─────────▶ p=room_id         (sent twice)
+</code></pre>
+<p>The host drops any message that:</p>
+<ul>
+<li>fails decryption,</li>
+<li>is more than ±2 minutes old,</li>
+<li>repeats a <code>(pubkey, sid)</code> pair it has already seen (replay),</li>
+<li>arrives faster than the hello rate limit allows,</li>
+<li>is an answer from a pubkey other than the one that sent the hello.</li>
+</ul>
+<h3 id="manual-signaling---manual">Manual signaling (<code>--manual</code>)</h3>
+<p>The offer is <code>base64url(deflate-raw(json))</code> inside a link (<code>#o=&lt;code&gt;</code>). The
+joiner turns it into an answer code, and the host user pastes that code back.
+Only STUN is involved, and pasting the answer is itself the approval.</p>
+<h3 id="data-channel-setu-reliable-and-ordered">Data channel (<code>&quot;setu&quot;</code>, reliable and ordered)</h3>
+<pre><code>host  → {t:&quot;hello&quot;, v:1, auth:&quot;none&quot;|&quot;password&quot;, salt, iter, nonce, role}
+client→ {t:&quot;auth&quot;, proof?}      proof = HMAC(PBKDF2(pw,salt,iter), &quot;setu/v1/auth\n&quot;‖nonce‖fpA‖fpB)
+host  → {t:&quot;ready&quot;, role, cmd, host, cols, rows}   then the replay buffer
+host  → binary PTY output        client → binary keystrokes (dropped for role=view)
+client→ {t:&quot;resize&quot;, cols, rows} (control only)
+host  → {t:&quot;exit&quot;, code} | {t:&quot;error&quot;, msg}
+</code></pre>
+<p><code>fpA</code> and <code>fpB</code> are the DTLS fingerprints from both SDPs. They feed the proof
+and the 6-digit <strong>SAS</strong> that both sides display.</p>
+<h2 id="audit-log">Audit log</h2>
+<p>The host hands every keystroke it writes to the PTY to a per-client
+<code>audit.Input</code>. That input is attached in the same critical section that
+marks the client ready, so nothing reaches the PTY unaudited. A small line
+editor model applies backspace, ^U, ^W and bracketed paste, and emits a
+<code>setu.command</code> record on Enter. On Unix the host reads the PTY's termios
+through the master: canonical mode with echo off means a password prompt, and
+that line is recorded as a marker. Line editors and TUIs turn canonical mode
+off, so their input is still recorded. Records then pass through regex
+redaction and an OpenTelemetry <code>BatchProcessor</code> (queue 8192, 1 s interval,
+gzip OTLP/HTTP). Export failures are reported at most once a minute.</p>
+<h2 id="service">Service</h2>
+<p><code>setu service run</code> is a single supervisor per state directory, guarded by a
+pid lock file. Every 2 s it checks <code>config.json</code> for changes, and it
+reconciles at least every 30 s:</p>
+<ol>
+<li>If the audit settings changed (or failed last time), it stops every
+session, rebuilds the audit pipeline and fails closed if that does not
+work.</li>
+<li>It computes the desired set (enabled, unexpired, valid profiles), keyed by
+a hash of each profile.</li>
+<li>It stops the sessions that are no longer desired or whose hash changed,
+and starts the missing ones.</li>
+</ol>
+<p>Each profile runs <code>host.Session</code> in-process, in its own goroutine. When the
+command exits, the supervisor restarts it with exponential backoff (1 s up to
+1 min, reset after a minute of uptime). A context deadline at <code>expires_at</code>
+stops serving the moment the keys expire.</p>
+<h2 id="implementation-steps">Implementation steps</h2>
+<ol>
+<li>Crypto primitives with Go↔JS test vectors (<code>secure</code>, <code>web/js/crypto.mjs</code>).</li>
+<li>A minimal nostr client with BIP-340 signing, plus an in-memory test relay.</li>
+<li>A pion wrapper and non-trickle offer/answer.</li>
+<li>The host: PTY, fan-out, replay, resize policy (the latest control client
+wins), admission control (max clients, pending limit, lockout, <code>--once</code>,
+<code>--expire</code>, <code>--approve</code>), and a local mirror with the <code>~.</code> escape.</li>
+<li>The client <code>Dial</code> and attach, then the CLI.</li>
+<li>The web client: a vendored xterm.js and noble-curves, strict CSP, a mobile
+key bar and a compose box.</li>
+<li>Tests:
+<ul>
+<li>unit tests,</li>
+<li>a Go e2e test (real PTY and WebRTC over the in-memory relay),</li>
+<li>a JS parity test,</li>
+<li>a Playwright browser e2e test.</li>
+</ul>
+</li>
+<li>CI, the GitHub Pages deploy and cross-platform releases.</li>
+</ol>
+<h2 id="future-work">Future work</h2>
+<ul>
+<li>Optional TOTP as a second factor for long-lived links.</li>
+<li>Session recording (asciicast) for auditing what agents did.</li>
+<li>Trickle ICE, for faster connects on networks where STUN is slow.</li>
+</ul>
+
+    </article>
+    <nav class="pager" aria-label="Previous and next page">
+      <a class="prev" href="troubleshooting.html"><span>Previous</span>Troubleshooting and FAQ</a>
+      
+    </nav>
+    <footer class="footer">
+      <a href="https://github.com/dmdhrumilmistry/setu/edit/main/docs/DESIGN.md">Edit this page on GitHub</a>
+      <span>setu is open source. Peer-to-peer terminal sharing with no server of your own.</span>
+    </footer>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    <p class="toc-title">On this page</p>
+    <ul>
+      <li class="l2"><a href="#goals">Goals</a></li>
+      <li class="l2"><a href="#why-go">Why Go?</a></li>
+      <li class="l2"><a href="#architecture">Architecture</a></li>
+      <li class="l3"><a href="#packages">Packages</a></li>
+      <li class="l2"><a href="#protocol">Protocol</a></li>
+      <li class="l3"><a href="#invite">Invite</a></li>
+      <li class="l3"><a href="#signaling-over-nostr-default">Signaling over nostr (default)</a></li>
+      <li class="l3"><a href="#manual-signaling---manual">Manual signaling (--manual)</a></li>
+      <li class="l3"><a href="#data-channel-setu-reliable-and-ordered">Data channel (&#34;setu&#34;, reliable and ordered)</a></li>
+      <li class="l2"><a href="#audit-log">Audit log</a></li>
+      <li class="l2"><a href="#service">Service</a></li>
+      <li class="l2"><a href="#implementation-steps">Implementation steps</a></li>
+      <li class="l2"><a href="#future-work">Future work</a></li>
+    </ul>
+  </aside>
+</div>
+</body>
+</html>

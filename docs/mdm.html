@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>MDM and managed policy - setu docs</title>
+<meta name="description" content="Organizations can manage setu through their MDM (Microsoft Intune, Jamf Pro, Kandji, Mosyle, VaanarSena, Workspace ONE, ...), Group Policy, or configuration ...">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/theme.js"></script>
+<script src="assets/docs.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button class="icon-btn nav-toggle" id="nav-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" width="26" height="26"><span>setu</span><small>docs</small></a>
+  <div class="search" role="search">
+    <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input id="search" type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false">
+    <kbd class="search-key" aria-hidden="true">/</kbd>
+    <ul id="search-results" class="search-results" role="listbox" aria-label="Search results" hidden></ul>
+  </div>
+  <nav class="toplinks" aria-label="Site">
+    <a href="../">Web client</a>
+    <a href="https://github.com/dmdhrumilmistry/setu">GitHub</a>
+  </nav>
+  <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <svg class="sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+</header>
+<div class="layout">
+  <nav id="sidebar" class="sidebar" aria-label="Documentation">
+    <div class="nav-section">
+      <p class="nav-title">Get started</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="quickstart.html">Quick start</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Guides</p>
+      <ul>
+        <li><a href="sharing.html">Sharing a terminal</a></li>
+        <li><a href="joining.html">Joining a session</a></li>
+        <li><a href="claude-code.html">Claude Code from your phone</a></li>
+        <li><a href="service.html">Always-on service</a></li>
+        <li><a href="audit.html">Audit logging</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Administration</p>
+      <ul>
+        <li><a href="mdm.html" aria-current="page">MDM and managed policy</a></li>
+        <li><a href="security.html">Security model</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Reference</p>
+      <ul>
+        <li><a href="cli.html">CLI reference</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting and FAQ</a></li>
+        <li><a href="design.html">Design and protocol</a></li>
+      </ul>
+    </div>
+    
+  </nav>
+  <div class="scrim" id="scrim" hidden></div>
+  <main id="main" tabindex="-1">
+    <article class="content">
+<h1 id="mdm-and-managed-policy">MDM and managed policy</h1>
+<p>Organizations can manage setu through their MDM (Microsoft Intune, Jamf Pro,
+Kandji, Mosyle, VaanarSena, Workspace ONE, ...), Group Policy, or configuration
+management (Ansible, Puppet, Chef, Salt). An administrator deploys a <strong>managed
+policy</strong>; setu enforces it on every device. Users see the policy in force with:</p>
+<pre><code class="language-sh">setu policy
+</code></pre>
+<p>Ready-made templates are in
+<a href="https://github.com/dmdhrumilmistry/setu/tree/main/deploy/mdm"><code>deploy/mdm</code></a>.</p>
+<h2 id="what-a-policy-can-do">What a policy can do</h2>
+<ul>
+<li>turn off ad-hoc sharing, the background service, or manual mode;</li>
+<li>require passwords (with a minimum length) and personal keys;</li>
+<li>cap concurrent clients, share duration and service key lifetime;</li>
+<li>allow only certain programs, relays and web client URLs;</li>
+<li>force audit logging to the organization's collector, and add device
+attributes (such as an asset tag) to every record.</li>
+</ul>
+<h2 id="where-setu-reads-it">Where setu reads it</h2>
+<p>The first source found wins. All of them are writable only by administrators.</p>
+<table>
+<thead>
+<tr>
+<th>OS</th>
+<th>Source</th>
+<th>Deploy with</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Windows</td>
+<td>registry <code>HKLM\SOFTWARE\Policies\setu</code></td>
+<td>the ADMX template (Group Policy, Intune, VaanarSena) or the <code>.reg</code> file</td>
+</tr>
+<tr>
+<td>Windows</td>
+<td><code>%ProgramData%\setu\policy.json</code>, owned by Administrators or SYSTEM</td>
+<td>a script</td>
+</tr>
+<tr>
+<td>macOS</td>
+<td>managed preferences for <code>io.github.dmdhrumilmistry.setu</code></td>
+<td>the <code>.mobileconfig</code> profile, installed at <strong>device</strong> level</td>
+</tr>
+<tr>
+<td>macOS</td>
+<td><code>/Library/Application Support/setu/policy.json</code>, root-owned</td>
+<td>a script</td>
+</tr>
+<tr>
+<td>Linux</td>
+<td><code>/etc/setu/policy.json</code>, root-owned, not group or world writable</td>
+<td><code>install-policy.sh</code>, Ansible, Puppet, ...</td>
+</tr>
+</tbody>
+</table>
+<h2 id="settings">Settings</h2>
+<p>Every setting is optional; without a policy setu behaves as unmanaged.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DisableShare</code></td>
+<td>bool</td>
+<td><code>setu share</code> is refused.</td>
+</tr>
+<tr>
+<td><code>DisableService</code></td>
+<td>bool</td>
+<td><code>setu service</code> cannot add profiles, and a running service stops serving.</td>
+</tr>
+<tr>
+<td><code>DisableManual</code></td>
+<td>bool</td>
+<td><code>setu share --manual</code> is refused, so all signaling uses the allowed relays.</td>
+</tr>
+<tr>
+<td><code>RequirePassword</code></td>
+<td>bool</td>
+<td>Every share and profile needs a password; <code>setu share</code> prompts even without <code>--password</code>.</td>
+</tr>
+<tr>
+<td><code>MinPasswordLength</code></td>
+<td>int</td>
+<td>Minimum password length (setu's own floors of 8 and 12 still apply).</td>
+</tr>
+<tr>
+<td><code>RequirePersonalKeys</code></td>
+<td>bool</td>
+<td>Service profiles cannot have a shared control link, so every audited command names a person.</td>
+</tr>
+<tr>
+<td><code>MaxClients</code></td>
+<td>int</td>
+<td>Cap on concurrent clients. An unset <code>--max-clients</code> becomes the cap; a larger explicit value is refused.</td>
+</tr>
+<tr>
+<td><code>MaxShareDuration</code></td>
+<td>duration</td>
+<td><code>setu share</code> must expire within this time; without <code>--expire</code> it gets this value.</td>
+</tr>
+<tr>
+<td><code>MaxKeyValidity</code></td>
+<td>duration</td>
+<td>Service keys must expire within this time; profiles that exceed it are not served until rotated.</td>
+</tr>
+<tr>
+<td><code>AllowedCommands</code></td>
+<td>list</td>
+<td>Only these programs may be shared. A bare name (<code>claude</code>) matches the program name on any OS; an absolute path matches exactly.</td>
+</tr>
+<tr>
+<td><code>AllowedRelays</code></td>
+<td>list</td>
+<td>Only these relays may be used; they also become the default.</td>
+</tr>
+<tr>
+<td><code>AllowedWebURLs</code></td>
+<td>list</td>
+<td>Invite links may only point at these web client URLs.</td>
+</tr>
+<tr>
+<td><code>AuditEndpoint</code></td>
+<td>string</td>
+<td>Force audit logging on, to this OTLP/HTTP collector. Users cannot turn it off, reduce it or redirect it.</td>
+</tr>
+<tr>
+<td><code>AuditHeaders</code></td>
+<td>map</td>
+<td>Headers for the collector, such as <code>Authorization</code>.</td>
+</tr>
+<tr>
+<td><code>AuditCAFile</code>, <code>AuditCertFile</code>, <code>AuditKeyFile</code></td>
+<td>path</td>
+<td>Pin the collector's CA; mutual TLS.</td>
+</tr>
+<tr>
+<td><code>AuditRequired</code></td>
+<td>bool</td>
+<td>Fail closed: nothing is shared unless the collector accepts a test record.</td>
+</tr>
+<tr>
+<td><code>AuditInput</code></td>
+<td><code>lines</code> or <code>off</code></td>
+<td>Record commands, or connections only.</td>
+</tr>
+<tr>
+<td><code>AuditInsecure</code></td>
+<td>bool</td>
+<td>Allow plain <code>http://</code> to a remote collector.</td>
+</tr>
+<tr>
+<td><code>AuditRedact</code></td>
+<td>list</td>
+<td>Extra regular expressions to redact.</td>
+</tr>
+<tr>
+<td><code>ResourceAttributes</code></td>
+<td>map</td>
+<td>Added to every audit record (for example <code>device.asset_tag</code>).</td>
+</tr>
+</tbody>
+</table>
+<p>Durations are written like <code>30m</code>, <code>8h</code> or <code>720h</code>, or as a number of seconds.
+Example policy:</p>
+<pre><code class="language-json">{
+  &quot;DisableManual&quot;: true,
+  &quot;RequirePassword&quot;: true,
+  &quot;MinPasswordLength&quot;: 14,
+  &quot;RequirePersonalKeys&quot;: true,
+  &quot;MaxClients&quot;: 2,
+  &quot;MaxShareDuration&quot;: &quot;8h&quot;,
+  &quot;MaxKeyValidity&quot;: &quot;720h&quot;,
+  &quot;AllowedCommands&quot;: [&quot;claude&quot;, &quot;bash&quot;, &quot;pwsh&quot;],
+  &quot;AuditEndpoint&quot;: &quot;https://otel.example.com:4318/v1/logs&quot;,
+  &quot;AuditHeaders&quot;: {&quot;Authorization&quot;: &quot;Bearer REPLACE_WITH_INGEST_ONLY_TOKEN&quot;},
+  &quot;AuditRequired&quot;: true,
+  &quot;ResourceAttributes&quot;: {&quot;deployment.environment&quot;: &quot;corp&quot;}
+}
+</code></pre>
+<h2 id="deploy-it">Deploy it</h2>
+<h3 id="microsoft-intune">Microsoft Intune</h3>
+<ol>
+<li>In <strong>Devices &gt; Configuration &gt; Import ADMX</strong>, upload
+<a href="https://github.com/dmdhrumilmistry/setu/blob/main/deploy/mdm/windows/setu.admx"><code>setu.admx</code></a>
+and
+<a href="https://github.com/dmdhrumilmistry/setu/blob/main/deploy/mdm/windows/en-US/setu.adml"><code>en-US/setu.adml</code></a>.</li>
+<li>Create an <strong>Administrative templates (imported)</strong> profile and configure the
+settings under <strong>setu (terminal sharing)</strong>.</li>
+</ol>
+<p>For Macs, upload the <code>.mobileconfig</code> as a custom device-level profile.</p>
+<h3 id="group-policy">Group Policy</h3>
+<p>Copy <code>setu.admx</code> to <code>\\&lt;domain&gt;\SYSVOL\&lt;domain&gt;\Policies\PolicyDefinitions\</code>
+and <code>setu.adml</code> to its <code>en-US</code> folder. The settings appear under
+<strong>Computer Configuration &gt; Administrative Templates &gt; setu (terminal sharing)</strong>.
+To test on one machine, import
+<a href="https://github.com/dmdhrumilmistry/setu/blob/main/deploy/mdm/windows/setu-policy.reg"><code>setu-policy.reg</code></a>
+as an administrator.</p>
+<h3 id="jamf-pro-kandji-mosyle">Jamf Pro, Kandji, Mosyle</h3>
+<p>Upload
+<a href="https://github.com/dmdhrumilmistry/setu/blob/main/deploy/mdm/macos/setu.mobileconfig"><code>setu.mobileconfig</code></a>
+as a custom profile with device-level (System) scope. In Jamf's
+<strong>Application &amp; Custom Settings</strong> you can instead set the preference domain to
+<code>io.github.dmdhrumilmistry.setu</code> and paste the keys from the example policy.</p>
+<h3 id="vaanarsena">VaanarSena</h3>
+<pre><code class="language-sh">vsctl apply -f deploy/mdm/vaanarsena/setu.yaml
+</code></pre>
+<p>The <a href="https://github.com/dmdhrumilmistry/setu/blob/main/deploy/mdm/vaanarsena/setu.yaml">manifest</a>
+applies the policy on macOS (custom payload), Windows (ADMX ingestion plus
+OMA-URI settings) and Linux (an onboarding script that installs
+<code>/etc/setu/policy.json</code>; it runs once per device, so re-run it after changing
+the policy).</p>
+<h3 id="linux-configuration-management">Linux configuration management</h3>
+<pre><code class="language-sh">sudo sh deploy/mdm/linux/install-policy.sh policy.json
+</code></pre>
+<p>With Ansible, copy the file to <code>/etc/setu/policy.json</code> with <code>owner: root</code>,
+<code>group: root</code> and <code>mode: &quot;0644&quot;</code>.</p>
+<h2 id="guarantees-and-limits">Guarantees and limits</h2>
+<ul>
+<li><strong>Fail closed.</strong> If a policy source exists but is unreadable, malformed, has
+an unknown key (a typo such as <code>DisableShre</code> must not silently allow
+sharing), or could have been written by a non-administrator, setu refuses to
+run rather than ignoring it.</li>
+<li><strong>Enforced where it runs.</strong> <code>setu share</code> checks the policy at start; the
+service checks profiles when they are created and re-checks every profile
+every 10 seconds before serving it, because users can edit their own service
+configuration. A policy pushed to a device applies within seconds.</li>
+<li><strong>A guardrail, not a sandbox.</strong> A local administrator can remove the policy,
+and a user can run a different build of setu. Combine it with egress controls
+(allow only your relays and collector) if that matters.</li>
+<li><strong>Collector credentials are visible to the device's user</strong>, because setu
+runs as that user. Use an ingest-only credential, ideally per-device mutual
+TLS.</li>
+</ul>
+<h2 id="checking-a-device">Checking a device</h2>
+<pre><code class="language-console">$ setu policy
+source: /etc/setu/policy.json
+hash:   7637e6a00b7572df
+
+{
+  &quot;DisableManual&quot;: true,
+  ...
+}
+
+$ setu share -- htop
+setu: blocked by your organization's policy (AllowedCommands): &quot;htop&quot; may not be shared (allowed: claude, bash, pwsh)
+</code></pre>
+<p>Header values are shown as <code>[hidden]</code>. Every audit record carries
+<code>setu.policy.hash</code>, so your SIEM can show which policy version applied to each
+session.</p>
+
+    </article>
+    <nav class="pager" aria-label="Previous and next page">
+      <a class="prev" href="audit.html"><span>Previous</span>Audit logging</a>
+      <a class="next" href="security.html"><span>Next</span>Security model</a>
+    </nav>
+    <footer class="footer">
+      <a href="https://github.com/dmdhrumilmistry/setu/edit/main/docs/src/mdm.md">Edit this page on GitHub</a>
+      <span>setu is open source. Peer-to-peer terminal sharing with no server of your own.</span>
+    </footer>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    <p class="toc-title">On this page</p>
+    <ul>
+      <li class="l2"><a href="#what-a-policy-can-do">What a policy can do</a></li>
+      <li class="l2"><a href="#where-setu-reads-it">Where setu reads it</a></li>
+      <li class="l2"><a href="#settings">Settings</a></li>
+      <li class="l2"><a href="#deploy-it">Deploy it</a></li>
+      <li class="l3"><a href="#microsoft-intune">Microsoft Intune</a></li>
+      <li class="l3"><a href="#group-policy">Group Policy</a></li>
+      <li class="l3"><a href="#jamf-pro-kandji-mosyle">Jamf Pro, Kandji, Mosyle</a></li>
+      <li class="l3"><a href="#vaanarsena">VaanarSena</a></li>
+      <li class="l3"><a href="#linux-configuration-management">Linux configuration management</a></li>
+      <li class="l2"><a href="#guarantees-and-limits">Guarantees and limits</a></li>
+      <li class="l2"><a href="#checking-a-device">Checking a device</a></li>
+    </ul>
+  </aside>
+</div>
+</body>
+</html>

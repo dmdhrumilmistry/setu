@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Audit logging - setu docs</title>
+<meta name="description" content="setu can keep an audit trail of every shared session: who connected, from where and on what device, and every command they typed. Records are exported as ...">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/theme.js"></script>
+<script src="assets/docs.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button class="icon-btn nav-toggle" id="nav-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" width="26" height="26"><span>setu</span><small>docs</small></a>
+  <div class="search" role="search">
+    <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input id="search" type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false">
+    <kbd class="search-key" aria-hidden="true">/</kbd>
+    <ul id="search-results" class="search-results" role="listbox" aria-label="Search results" hidden></ul>
+  </div>
+  <nav class="toplinks" aria-label="Site">
+    <a href="../">Web client</a>
+    <a href="https://github.com/dmdhrumilmistry/setu">GitHub</a>
+  </nav>
+  <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <svg class="sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+</header>
+<div class="layout">
+  <nav id="sidebar" class="sidebar" aria-label="Documentation">
+    <div class="nav-section">
+      <p class="nav-title">Get started</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="quickstart.html">Quick start</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Guides</p>
+      <ul>
+        <li><a href="sharing.html">Sharing a terminal</a></li>
+        <li><a href="joining.html">Joining a session</a></li>
+        <li><a href="claude-code.html">Claude Code from your phone</a></li>
+        <li><a href="service.html">Always-on service</a></li>
+        <li><a href="audit.html" aria-current="page">Audit logging</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Administration</p>
+      <ul>
+        <li><a href="mdm.html">MDM and managed policy</a></li>
+        <li><a href="security.html">Security model</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Reference</p>
+      <ul>
+        <li><a href="cli.html">CLI reference</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting and FAQ</a></li>
+        <li><a href="design.html">Design and protocol</a></li>
+      </ul>
+    </div>
+    
+  </nav>
+  <div class="scrim" id="scrim" hidden></div>
+  <main id="main" tabindex="-1">
+    <article class="content">
+<h1 id="audit-logging">Audit logging</h1>
+<p>setu can keep an audit trail of every shared session: who connected, from
+where and on what device, and every command they typed. Records are exported as
+<a href="https://opentelemetry.io">OpenTelemetry</a> log records over OTLP/HTTP, so they go
+to any collector and from there to Loki, Elasticsearch, Splunk, Datadog or any
+other OTLP-capable backend.</p>
+<h2 id="turn-it-on">Turn it on</h2>
+<p>For one share:</p>
+<pre><code class="language-sh">export OTEL_EXPORTER_OTLP_HEADERS='Authorization=Bearer%20&lt;ingest-token&gt;'
+setu share --audit-endpoint https://otel.example.com:4318 --audit-required -- claude
+</code></pre>
+<p>For the <a href="service.html">always-on service</a>:</p>
+<pre><code class="language-sh">setu service audit --endpoint https://otel.example.com:4318
+</code></pre>
+<p>On managed devices, an <a href="mdm.html">MDM policy</a> can force auditing on and users
+cannot turn it off or redirect it.</p>
+<table>
+<thead>
+<tr>
+<th>Flag (<code>setu share</code>)</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--audit</code></td>
+<td>Enable, using <code>OTEL_EXPORTER_OTLP_LOGS_ENDPOINT</code> or <code>OTEL_EXPORTER_OTLP_ENDPOINT</code>.</td>
+</tr>
+<tr>
+<td><code>--audit-endpoint URL</code></td>
+<td>Collector URL; <code>/v1/logs</code> is added to a bare origin. Implies <code>--audit</code>.</td>
+</tr>
+<tr>
+<td><code>--audit-required</code></td>
+<td>Fail closed: refuse to share unless the collector accepts a test record.</td>
+</tr>
+<tr>
+<td><code>--audit-ca</code>, <code>--audit-cert</code>, <code>--audit-key</code></td>
+<td>Pin the collector's CA; use mutual TLS.</td>
+</tr>
+<tr>
+<td><code>--audit-insecure</code></td>
+<td>Allow plain <code>http://</code> to a collector that is not on this machine.</td>
+</tr>
+<tr>
+<td><code>--audit-input lines</code> or <code>off</code></td>
+<td>Record commands, or connections only.</td>
+</tr>
+<tr>
+<td><code>--audit-redact REGEX</code></td>
+<td>Extra pattern to redact from recorded commands (repeatable).</td>
+</tr>
+</tbody>
+</table>
+<p>Credentials (such as <code>Authorization</code>) are read only from
+<code>OTEL_EXPORTER_OTLP_HEADERS</code> or <code>OTEL_EXPORTER_OTLP_LOGS_HEADERS</code>, never from
+flags (which other users can see in the process list), and are removed from the
+environment before the shared command starts.</p>
+<h2 id="what-a-command-record-contains">What a command record contains</h2>
+<p>Every <code>setu.command</code> record answers who ran it, from where, on what device,
+when, and what it was:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Attributes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Who</strong></td>
+<td><code>setu.actor</code> (a readable summary), <code>setu.actor.name</code> (the personal key's owner, <code>host-terminal</code>, or <code>shared-control-link</code>), <code>setu.client.id</code>, <code>setu.client.role</code>, <code>setu.client.verification_code</code>, <code>setu.client.dtls_fingerprint</code>, and the account and machine the command ran as: <code>user.name</code>, <code>host.name</code>, <code>host.id</code></td>
+</tr>
+<tr>
+<td><strong>From where</strong></td>
+<td><code>client.address</code> and <code>client.port</code> (the selected network path), <code>network.transport</code>, <code>setu.client.candidate_type</code>, <code>setu.client.public_addresses</code> (the client's public IP and port behind its router, which stays correct when the path goes through a TURN relay) and <code>setu.client.local_addresses</code></td>
+</tr>
+<tr>
+<td><strong>On what device</strong></td>
+<td><code>setu.client.device.*</code>: <code>app</code>, <code>version</code>, <code>id</code>, <code>os</code>, <code>os_version</code>, <code>arch</code>, <code>model</code>, <code>hostname</code>, <code>user</code>, <code>language</code>, <code>timezone</code>, <code>screen</code>, <code>mobile</code>, and <code>user_agent.original</code>; all flagged <code>setu.client.device.self_reported=true</code></td>
+</tr>
+<tr>
+<td><strong>When</strong></td>
+<td>the record timestamp (when Enter was pressed), <code>setu.command.submitted_at</code> and <code>setu.command.started_at</code> (first keystroke), RFC 3339 UTC</td>
+</tr>
+<tr>
+<td><strong>What</strong></td>
+<td>the record body and <code>setu.command.text</code>, plus <code>setu.session.command</code> (the program it was typed into)</td>
+</tr>
+</tbody>
+</table>
+<p>An example <code>setu.actor</code>:</p>
+<pre><code>alice (client #2 from 203.0.113.7:51234, device alice-laptop (linux/amd64, setu-cli), verification code 769 168)
+</code></pre>
+<p><code>setu.actor.name</code> can name a person only when each person has a
+<a href="service.html#concepts">personal key</a>. With a shared link every holder looks the
+same.</p>
+<h2 id="all-events">All events</h2>
+<table>
+<thead>
+<tr>
+<th>Event (<code>event.name</code>)</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>setu.session.start</code>, <code>setu.session.end</code></td>
+<td>A share starts or ends (command, password on or off, exit code).</td>
+</tr>
+<tr>
+<td><code>setu.client.connect</code>, <code>setu.client.disconnect</code></td>
+<td>A client joins or leaves.</td>
+</tr>
+<tr>
+<td><code>setu.client.rejected</code>, <code>setu.client.auth_failure</code>, <code>setu.client.approval</code></td>
+<td>Admission decisions.</td>
+</tr>
+<tr>
+<td><code>setu.command</code></td>
+<td>A submitted command line.</td>
+</tr>
+<tr>
+<td><code>setu.input.control</code></td>
+<td>^C, ^D or ^Z.</td>
+</tr>
+<tr>
+<td><code>setu.audit.start</code></td>
+<td>The startup probe sent by <code>--audit-required</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Every record carries <code>setu.session.id</code>; service records also carry
+<code>setu.profile</code>. The resource identifies the host (<code>service.name=setu</code>,
+<code>service.version</code>, <code>host.name</code>, <code>host.id</code>, <code>user.name</code>) and, on managed devices,
+<code>setu.policy.source</code>, <code>setu.policy.hash</code> and any attributes from the policy.</p>
+<h2 id="how-commands-are-recorded-and-the-limits">How commands are recorded, and the limits</h2>
+<p>setu sees keystrokes, not what the shell finally ran. It rebuilds each line the
+way a line editor would (backspace, Ctrl+U, Ctrl+W, bracketed paste, Enter) and
+attributes it to the client that typed it. Lines that used arrow keys, history
+or tab completion are flagged <code>setu.input.edited=true</code>, because the shell may
+have run something slightly different. Text typed but never submitted is
+recorded with <code>setu.input.submitted=false</code> when the client leaves.</p>
+<p>Commands an agent runs by itself are not keystrokes, so setu does not see them.
+Claude Code's own OpenTelemetry export covers those.</p>
+<h2 id="secrets-stay-out">Secrets stay out</h2>
+<ul>
+<li>On Linux and macOS, a line typed while the terminal has echo off (sudo,
+ssh, other password prompts) is replaced by
+<code>[REDACTED: typed with terminal echo off]</code>. Windows ConPTY does not expose
+this state, so there only pattern redaction applies.</li>
+<li>Known secret formats are redacted: AWS keys, GitHub and Slack tokens,
+Anthropic and OpenAI keys, JWTs, bearer tokens, <code>password=</code>-style
+assignments, credentials in URLs, private keys and setu invite keys. Add your
+own with <code>--audit-redact</code>.</li>
+<li><code>--audit-input off</code> records connections only.</li>
+</ul>
+<h2 id="delivery-guarantees">Delivery guarantees</h2>
+<p>Records are batched and sent every second through a bounded queue (8192
+records; the oldest are dropped if the collector is down for long). The
+terminal never waits for the network. Because records leave the machine
+within about a second, someone who later gains control of the host cannot erase
+what was already exported. Export errors are logged at most once a minute.</p>
+<h2 id="a-collector-to-send-to">A collector to send to</h2>
+<p>Any OTLP/HTTP endpoint works. Here is an example configuration for the
+<a href="https://opentelemetry.io/docs/collector/">OpenTelemetry Collector</a>
+<em>contrib</em> distribution (<code>otelcol-contrib</code>) that accepts setu records over TLS
+with a bearer token and writes them to a file. Replace the file exporter with
+your backend's exporter. Adjust and test it for your environment.</p>
+<pre><code class="language-yaml">extensions:
+  bearertokenauth:
+    token: ${env:SETU_INGEST_TOKEN}
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+        tls:
+          cert_file: /etc/otelcol/tls/server.crt
+          key_file: /etc/otelcol/tls/server.key
+        auth:
+          authenticator: bearertokenauth
+
+processors:
+  batch: {}
+
+exporters:
+  file:
+    path: /var/log/setu/audit.jsonl
+
+service:
+  extensions: [bearertokenauth]
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [file]
+</code></pre>
+<p>Then point setu at it:</p>
+<pre><code class="language-sh">export OTEL_EXPORTER_OTLP_HEADERS=&quot;Authorization=Bearer%20$SETU_INGEST_TOKEN&quot;
+setu share --audit-endpoint https://collector.example.com:4318 --audit-required -- claude
+</code></pre>
+<p>For stronger device identity, use mutual TLS instead of a shared token: add
+<code>client_ca_file</code> under the receiver's <code>tls</code>, issue each device a client
+certificate, and pass <code>--audit-cert</code> and <code>--audit-key</code> to setu.</p>
+<div class="callout warn">
+<p><strong>Give setu an ingest-only credential.</strong> setu runs as the user, so the user
+can read whatever credential setu uses. Make sure it can write logs but not
+read or delete them.</p>
+</div>
+
+    </article>
+    <nav class="pager" aria-label="Previous and next page">
+      <a class="prev" href="service.html"><span>Previous</span>Always-on service</a>
+      <a class="next" href="mdm.html"><span>Next</span>MDM and managed policy</a>
+    </nav>
+    <footer class="footer">
+      <a href="https://github.com/dmdhrumilmistry/setu/edit/main/docs/src/audit.md">Edit this page on GitHub</a>
+      <span>setu is open source. Peer-to-peer terminal sharing with no server of your own.</span>
+    </footer>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    <p class="toc-title">On this page</p>
+    <ul>
+      <li class="l2"><a href="#turn-it-on">Turn it on</a></li>
+      <li class="l2"><a href="#what-a-command-record-contains">What a command record contains</a></li>
+      <li class="l2"><a href="#all-events">All events</a></li>
+      <li class="l2"><a href="#how-commands-are-recorded-and-the-limits">How commands are recorded, and the limits</a></li>
+      <li class="l2"><a href="#secrets-stay-out">Secrets stay out</a></li>
+      <li class="l2"><a href="#delivery-guarantees">Delivery guarantees</a></li>
+      <li class="l2"><a href="#a-collector-to-send-to">A collector to send to</a></li>
+    </ul>
+  </aside>
+</div>
+</body>
+</html>

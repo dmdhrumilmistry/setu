@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Install - setu docs</title>
+<meta name="description" content="setu is a single static binary. You need it on the machine you share from and on any machine you want to join from a terminal. Joining from a browser needs ...">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/theme.js"></script>
+<script src="assets/docs.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button class="icon-btn nav-toggle" id="nav-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" width="26" height="26"><span>setu</span><small>docs</small></a>
+  <div class="search" role="search">
+    <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input id="search" type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false">
+    <kbd class="search-key" aria-hidden="true">/</kbd>
+    <ul id="search-results" class="search-results" role="listbox" aria-label="Search results" hidden></ul>
+  </div>
+  <nav class="toplinks" aria-label="Site">
+    <a href="../">Web client</a>
+    <a href="https://github.com/dmdhrumilmistry/setu">GitHub</a>
+  </nav>
+  <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <svg class="sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+</header>
+<div class="layout">
+  <nav id="sidebar" class="sidebar" aria-label="Documentation">
+    <div class="nav-section">
+      <p class="nav-title">Get started</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="install.html" aria-current="page">Install</a></li>
+        <li><a href="quickstart.html">Quick start</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Guides</p>
+      <ul>
+        <li><a href="sharing.html">Sharing a terminal</a></li>
+        <li><a href="joining.html">Joining a session</a></li>
+        <li><a href="claude-code.html">Claude Code from your phone</a></li>
+        <li><a href="service.html">Always-on service</a></li>
+        <li><a href="audit.html">Audit logging</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Administration</p>
+      <ul>
+        <li><a href="mdm.html">MDM and managed policy</a></li>
+        <li><a href="security.html">Security model</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Reference</p>
+      <ul>
+        <li><a href="cli.html">CLI reference</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting and FAQ</a></li>
+        <li><a href="design.html">Design and protocol</a></li>
+      </ul>
+    </div>
+    
+  </nav>
+  <div class="scrim" id="scrim" hidden></div>
+  <main id="main" tabindex="-1">
+    <article class="content">
+<h1 id="install">Install</h1>
+<p>setu is a single static binary. You need it on the machine you share from and
+on any machine you want to join from a terminal. Joining from a browser needs
+nothing installed.</p>
+<h2 id="with-go">With Go</h2>
+<pre><code class="language-sh">go install github.com/dmdhrumilmistry/setu/cmd/setu@latest
+</code></pre>
+<p>This needs Go 1.27.2 or newer. The binary lands in <code>$(go env GOPATH)/bin</code>
+(usually <code>~/go/bin</code>); make sure that directory is on your <code>PATH</code>.</p>
+<p>Check the installation:</p>
+<pre><code class="language-sh">setu version
+</code></pre>
+<p><code>setu version</code> prints the version, the commit it was built from and your
+platform, for example <code>setu v0.0.0-... (1a2b3c4d5e6f 2026-10-14T12:00:00Z) linux/amd64</code>.</p>
+<h2 id="release-binaries">Release binaries</h2>
+<p>Tagged releases publish binaries for Linux, macOS and Windows (amd64 and
+arm64) on the <a href="https://github.com/dmdhrumilmistry/setu/releases">releases page</a>,
+named <code>setu-&lt;version&gt;-&lt;os&gt;-&lt;arch&gt;</code> (<code>.exe</code> on Windows), together with a
+<code>SHA256SUMS</code> file.</p>
+<pre><code class="language-sh"># Linux / macOS example
+curl -LO https://github.com/dmdhrumilmistry/setu/releases/download/&lt;version&gt;/setu-&lt;version&gt;-linux-amd64
+curl -LO https://github.com/dmdhrumilmistry/setu/releases/download/&lt;version&gt;/SHA256SUMS
+sha256sum --ignore-missing -c SHA256SUMS
+chmod +x setu-&lt;version&gt;-linux-amd64
+sudo mv setu-&lt;version&gt;-linux-amd64 /usr/local/bin/setu
+</code></pre>
+<p>On macOS, a downloaded binary may be quarantined; clear it with
+<code>xattr -d com.apple.quarantine /usr/local/bin/setu</code>.</p>
+<h2 id="from-source">From source</h2>
+<pre><code class="language-sh">git clone https://github.com/dmdhrumilmistry/setu
+cd setu
+go build -o setu ./cmd/setu      # setu.exe on Windows
+</code></pre>
+<p>Cross-compile with <code>GOOS</code> and <code>GOARCH</code>, for example
+<code>GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build ./cmd/setu</code>.</p>
+<h2 id="platform-notes">Platform notes</h2>
+<p><strong>Windows.</strong> Hosting uses the ConPTY pseudo console, so it needs Windows 10
+1809 / Server 2019 or newer. With no command, setu shares PowerShell 7
+(<code>pwsh</code>), then Windows PowerShell, then <code>cmd.exe</code>. npm shims such as
+<code>claude.cmd</code> work. The shared command runs in a job object, so it cannot
+outlive setu.</p>
+<p><strong>macOS and Linux.</strong> With no command, setu shares <code>$SHELL</code> (or <code>/bin/sh</code>).</p>
+<p><strong>Networks.</strong> setu needs outbound access to the nostr relays (<code>wss://</code>, port
+443) and to a STUN server (UDP 19302 for the default Google STUN). On networks
+that block peer-to-peer UDP, add a TURN server; see
+<a href="sharing.html#strict-networks-stun-and-turn">Strict networks</a>.</p>
+<h2 id="next">Next</h2>
+<p>Continue with the <a href="quickstart.html">Quick start</a>.</p>
+
+    </article>
+    <nav class="pager" aria-label="Previous and next page">
+      <a class="prev" href="index.html"><span>Previous</span>Overview</a>
+      <a class="next" href="quickstart.html"><span>Next</span>Quick start</a>
+    </nav>
+    <footer class="footer">
+      <a href="https://github.com/dmdhrumilmistry/setu/edit/main/docs/src/install.md">Edit this page on GitHub</a>
+      <span>setu is open source. Peer-to-peer terminal sharing with no server of your own.</span>
+    </footer>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    <p class="toc-title">On this page</p>
+    <ul>
+      <li class="l2"><a href="#with-go">With Go</a></li>
+      <li class="l2"><a href="#release-binaries">Release binaries</a></li>
+      <li class="l2"><a href="#from-source">From source</a></li>
+      <li class="l2"><a href="#platform-notes">Platform notes</a></li>
+      <li class="l2"><a href="#next">Next</a></li>
+    </ul>
+  </aside>
+</div>
+</body>
+</html>

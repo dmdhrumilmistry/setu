@@ -49,6 +49,18 @@ jobs:
         shell: bash
         run: scripts/smoke.sh ./bin/setu
 
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: docs are generated, links resolve, every CLI flag is documented
+        run: cd tools/docsgen && go vet . && go run . -check
+      - name: docs scripts parse
+        run: for f in docs/assets/*.js; do node --check "$f"; done
+
   web:
     runs-on: ubuntu-latest
     steps:

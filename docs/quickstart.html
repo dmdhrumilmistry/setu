@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Quick start - setu docs</title>
+<meta name="description" content="This takes about two minutes: share a terminal from your computer and open it on your phone.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/theme.js"></script>
+<script src="assets/docs.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button class="icon-btn nav-toggle" id="nav-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" width="26" height="26"><span>setu</span><small>docs</small></a>
+  <div class="search" role="search">
+    <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input id="search" type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false">
+    <kbd class="search-key" aria-hidden="true">/</kbd>
+    <ul id="search-results" class="search-results" role="listbox" aria-label="Search results" hidden></ul>
+  </div>
+  <nav class="toplinks" aria-label="Site">
+    <a href="../">Web client</a>
+    <a href="https://github.com/dmdhrumilmistry/setu">GitHub</a>
+  </nav>
+  <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <svg class="sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+</header>
+<div class="layout">
+  <nav id="sidebar" class="sidebar" aria-label="Documentation">
+    <div class="nav-section">
+      <p class="nav-title">Get started</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="quickstart.html" aria-current="page">Quick start</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Guides</p>
+      <ul>
+        <li><a href="sharing.html">Sharing a terminal</a></li>
+        <li><a href="joining.html">Joining a session</a></li>
+        <li><a href="claude-code.html">Claude Code from your phone</a></li>
+        <li><a href="service.html">Always-on service</a></li>
+        <li><a href="audit.html">Audit logging</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Administration</p>
+      <ul>
+        <li><a href="mdm.html">MDM and managed policy</a></li>
+        <li><a href="security.html">Security model</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Reference</p>
+      <ul>
+        <li><a href="cli.html">CLI reference</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting and FAQ</a></li>
+        <li><a href="design.html">Design and protocol</a></li>
+      </ul>
+    </div>
+    
+  </nav>
+  <div class="scrim" id="scrim" hidden></div>
+  <main id="main" tabindex="-1">
+    <article class="content">
+<h1 id="quick-start">Quick start</h1>
+<p>This takes about two minutes: share a terminal from your computer and open it on
+your phone.</p>
+<h2 id="1-share">1. Share</h2>
+<p>On the computer you want to share from:</p>
+<pre><code class="language-sh">setu share --password
+</code></pre>
+<p>setu asks you to choose a session password, then prints the invite:</p>
+<pre><code>setu v1.0.0 - sharing /bin/bash peer-to-peer
+
+CONTROL link - anyone holding it can type into this terminal. Keep it secret:
+  browser:  https://dmdhrumilmistry.github.io/setu/#k=Pqv4WrBl...
+  terminal: setu join 'k=Pqv4WrBl...'
+  [QR code]
+
+Security: password required, max 2 client(s). Compare the verification code shown on both sides.
+
+This terminal is attached to the session. Type &lt;Enter&gt; ~ . to end sharing.
+Press Enter to start...
+</code></pre>
+<p>Press Enter. Your terminal is now attached to the shared session, so you see
+everything the other side does and can type along.</p>
+<p>To share one program instead of your shell, put it after <code>--</code>:</p>
+<pre><code class="language-sh">setu share --password -- claude
+setu share --password -- htop
+</code></pre>
+<h2 id="2-join-from-your-phone">2. Join from your phone</h2>
+<p>Scan the QR code with your phone's camera (or send yourself the browser link
+over a channel you trust) and open it.</p>
+<ol>
+<li>Enter the session password.</li>
+<li>Compare the <strong>verification code</strong> on your phone with the one the host
+terminal prints for the new client. They must be the same.</li>
+<li>Type. On a phone, use the key bar for Esc, Tab, Ctrl, arrows and ^C, and the
+pencil button to compose longer text.</li>
+</ol>
+<h2 id="3-join-from-another-terminal-optional">3. Join from another terminal (optional)</h2>
+<pre><code class="language-sh">setu join 'k=Pqv4WrBl...'
+</code></pre>
+<p>Quote the link: it contains characters your shell would otherwise interpret.
+Type <code>&lt;Enter&gt; ~ .</code> to detach.</p>
+<h2 id="4-end-the-share">4. End the share</h2>
+<p>On the host, type <code>&lt;Enter&gt; ~ .</code> (Enter, then tilde, then period), or press
+Ctrl+C in a headless share. When the shared program exits, the share ends too.</p>
+<div class="callout warn">
+<p><strong>Treat the link like a password.</strong> Anyone with a control link (and the
+password, if you set one) gets a shell on your machine. Do not paste links into
+chats, issue trackers or AI prompts.</p>
+</div>
+<h2 id="next-steps">Next steps</h2>
+<ul>
+<li><a href="sharing.html">Sharing a terminal</a>: view-only links, single-use links, expiry,
+approvals and background shares.</li>
+<li><a href="claude-code.html">Claude Code from your phone</a>: a safe setup for agents.</li>
+<li><a href="service.html">Always-on service</a>: a link that keeps working after reboots.</li>
+</ul>
+
+    </article>
+    <nav class="pager" aria-label="Previous and next page">
+      <a class="prev" href="install.html"><span>Previous</span>Install</a>
+      <a class="next" href="sharing.html"><span>Next</span>Sharing a terminal</a>
+    </nav>
+    <footer class="footer">
+      <a href="https://github.com/dmdhrumilmistry/setu/edit/main/docs/src/quickstart.md">Edit this page on GitHub</a>
+      <span>setu is open source. Peer-to-peer terminal sharing with no server of your own.</span>
+    </footer>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    <p class="toc-title">On this page</p>
+    <ul>
+      <li class="l2"><a href="#1-share">1. Share</a></li>
+      <li class="l2"><a href="#2-join-from-your-phone">2. Join from your phone</a></li>
+      <li class="l2"><a href="#3-join-from-another-terminal-optional">3. Join from another terminal (optional)</a></li>
+      <li class="l2"><a href="#4-end-the-share">4. End the share</a></li>
+      <li class="l2"><a href="#next-steps">Next steps</a></li>
+    </ul>
+  </aside>
+</div>
+</body>
+</html>

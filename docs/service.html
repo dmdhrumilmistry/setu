@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Always-on service - setu docs</title>
+<meta name="description" content="setu share links last as long as the share. The setu service keeps shares available all the time: it starts at login, serves every enabled profile, restarts ...">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/theme.js"></script>
+<script src="assets/docs.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button class="icon-btn nav-toggle" id="nav-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" width="26" height="26"><span>setu</span><small>docs</small></a>
+  <div class="search" role="search">
+    <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input id="search" type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false">
+    <kbd class="search-key" aria-hidden="true">/</kbd>
+    <ul id="search-results" class="search-results" role="listbox" aria-label="Search results" hidden></ul>
+  </div>
+  <nav class="toplinks" aria-label="Site">
+    <a href="../">Web client</a>
+    <a href="https://github.com/dmdhrumilmistry/setu">GitHub</a>
+  </nav>
+  <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <svg class="sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+</header>
+<div class="layout">
+  <nav id="sidebar" class="sidebar" aria-label="Documentation">
+    <div class="nav-section">
+      <p class="nav-title">Get started</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="quickstart.html">Quick start</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Guides</p>
+      <ul>
+        <li><a href="sharing.html">Sharing a terminal</a></li>
+        <li><a href="joining.html">Joining a session</a></li>
+        <li><a href="claude-code.html">Claude Code from your phone</a></li>
+        <li><a href="service.html" aria-current="page">Always-on service</a></li>
+        <li><a href="audit.html">Audit logging</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Administration</p>
+      <ul>
+        <li><a href="mdm.html">MDM and managed policy</a></li>
+        <li><a href="security.html">Security model</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Reference</p>
+      <ul>
+        <li><a href="cli.html">CLI reference</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting and FAQ</a></li>
+        <li><a href="design.html">Design and protocol</a></li>
+      </ul>
+    </div>
+    
+  </nav>
+  <div class="scrim" id="scrim" hidden></div>
+  <main id="main" tabindex="-1">
+    <article class="content">
+<h1 id="always-on-service">Always-on service</h1>
+<p><code>setu share</code> links last as long as the share. The setu <strong>service</strong> keeps
+shares available all the time: it starts at login, serves every enabled
+<em>profile</em>, restarts the shared program when it exits, and keeps each profile's
+links the same across reboots.</p>
+<h2 id="concepts">Concepts</h2>
+<p><strong>Profile.</strong> A command plus its persistent invite keys and settings, for
+example &quot;<code>claude</code> in <code>~/projects/app</code>&quot;. Each profile has a name.</p>
+<p><strong>Personal key.</strong> A link that belongs to one named person. The service knows
+who connected from which key decrypted their request, so the
+<a href="audit.html">audit log</a> names them. Revoking one person's key affects nobody else.</p>
+<p><strong>Shared link.</strong> A link anyone can hold; audit records can only say
+&quot;someone with the shared link&quot;. Use personal keys when you need to know who did
+what.</p>
+<h2 id="create-a-profile">Create a profile</h2>
+<pre><code class="language-sh">setu service add --person alice --person bob --no-shared-key \
+  --dir ~/projects/app claude -- claude
+</code></pre>
+<p>setu asks for a profile password (12 characters or more), resolves <code>claude</code> to
+an absolute path, and prints each person's link and QR code once. Send each
+person only their own link.</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--person NAME</code></td>
+<td>none</td>
+<td>Create a personal control link for NAME (repeatable).</td>
+</tr>
+<tr>
+<td><code>--no-shared-key</code></td>
+<td>off</td>
+<td>No shared control link; only people with personal keys can type.</td>
+</tr>
+<tr>
+<td><code>--view-link</code></td>
+<td>off</td>
+<td>Also create a shared read-only link.</td>
+</tr>
+<tr>
+<td><code>--valid-for 720h</code></td>
+<td><code>2160h</code> (90 days)</td>
+<td>Keys stop working after this long; <code>0</code> means never.</td>
+</tr>
+<tr>
+<td><code>--max-clients N</code></td>
+<td>1</td>
+<td>Concurrent clients.</td>
+</tr>
+<tr>
+<td><code>--dir PATH</code></td>
+<td>the service's (usually your home)</td>
+<td>Working directory for the command.</td>
+</tr>
+<tr>
+<td><code>--no-password</code></td>
+<td>off</td>
+<td>Allow joining with the link alone. Not recommended.</td>
+</tr>
+<tr>
+<td><code>--password-stdin</code></td>
+<td>off</td>
+<td>Read the password from stdin (or set <code>SETU_PASSWORD</code>).</td>
+</tr>
+<tr>
+<td><code>--relay</code>, <code>--stun</code>, <code>--turn</code>, <code>--turn-user</code>, <code>--web-url</code></td>
+<td>as for <code>setu share</code></td>
+<td>Networking.</td>
+</tr>
+</tbody>
+</table>
+<p>Profile names use 1 to 32 lowercase letters, digits, <code>-</code> or <code>_</code>. The service
+stores only a PBKDF2 verifier of the password, never the password itself.</p>
+<h2 id="start-it-at-login">Start it at login</h2>
+<pre><code class="language-sh">setu service install
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>OS</th>
+<th>What install does</th>
+<th>Logs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Linux</td>
+<td>systemd <strong>user</strong> unit <code>~/.config/systemd/user/setu.service</code>, enabled and started</td>
+<td><code>journalctl --user -u setu -f</code></td>
+</tr>
+<tr>
+<td>macOS</td>
+<td>launchd agent <code>~/Library/LaunchAgents/io.github.dmdhrumilmistry.setu.plist</code></td>
+<td><code>service.log</code> in the state directory</td>
+</tr>
+<tr>
+<td>Windows</td>
+<td>Task Scheduler task <code>setu</code>, at logon, least privilege, no time limit, hidden window</td>
+<td><code>service.log</code> in the state directory</td>
+</tr>
+</tbody>
+</table>
+<p>On Linux, user services stop when you log out. To keep them running and start
+them at boot, run <code>loginctl enable-linger $USER</code> once.</p>
+<p>On Linux and macOS the service runs with the <code>PATH</code> of the shell you installed
+it from, so tools like <code>claude</code> are found; on Windows it uses your normal user
+environment. <code>setu service install --no-start</code> registers it without
+starting it now; <code>setu service uninstall</code> removes it and stops all profiles.</p>
+<p>Prefer your own supervisor? Run <code>setu service run</code> in the foreground under it.</p>
+<h2 id="manage-profiles">Manage profiles</h2>
+<p>The running service picks up every change within a few seconds; you never need
+to restart it.</p>
+<pre><code class="language-sh">setu service list                          # profiles, state, expiry
+setu service status                        # autostart, supervisor, audit, policy
+setu service link claude                   # all links again (+ QR)
+setu service link claude alice             # only Alice's link
+
+setu service key add claude carol          # give Carol her own control link
+setu service key add --view claude dave    # Dave can watch only
+setu service key list claude
+setu service key remove claude alice       # revoke Alice; nobody else is affected
+
+setu service rotate claude                 # new keys for everyone; old links stop working
+setu service rotate --password claude      # ...and a new password
+setu service disable claude                # stop serving, keep the profile
+setu service enable claude
+setu service remove claude                 # delete the profile and its keys
+</code></pre>
+<p>When keys expire the profile stops being served and <code>setu service list</code> shows
+it as <code>expired</code>; <code>setu service rotate</code> issues fresh keys with a new expiry.</p>
+<h2 id="audit-the-service">Audit the service</h2>
+<pre><code class="language-sh">export OTEL_EXPORTER_OTLP_HEADERS='Authorization=Bearer%20&lt;ingest-token&gt;'
+setu service audit --endpoint https://otel.example.com:4318
+</code></pre>
+<p>setu sends a test record first and saves the settings only if the collector
+accepts it. For the service, auditing is <strong>required</strong> by default: if the
+collector becomes unreachable when the service starts, it serves nothing until
+the collector is back. Credentials are stored in the service configuration
+(an owner-only file), never on the command line. Use <code>--headers-stdin</code> to type
+them instead of using the environment. <code>setu service audit</code> with no flags shows
+the current settings; <code>--off</code> disables auditing. See <a href="audit.html">Audit logging</a>.</p>
+<h2 id="where-things-live">Where things live</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Linux</th>
+<th>macOS</th>
+<th>Windows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>State directory</td>
+<td><code>~/.config/setu/service/</code></td>
+<td><code>~/Library/Application Support/setu/service/</code></td>
+<td><code>%LOCALAPPDATA%\setu\service\</code></td>
+</tr>
+</tbody>
+</table>
+<p>The directory holds <code>config.json</code> (profiles, keys, password verifiers and audit
+settings), <code>supervisor.pid</code> (the single-instance lock) and <code>service.log</code>.
+<code>config.json</code> contains secrets: setu refuses to load it if other users can read
+it (<code>chmod 600</code> fixes that). On Windows it lives in non-roaming
+<code>%LOCALAPPDATA%</code>. Set <code>SETU_SERVICE_DIR</code> to use another directory.</p>
+<h2 id="safety-rules-the-service-applies">Safety rules the service applies</h2>
+<ul>
+<li>Passwords are required by default and must be 12+ characters.</li>
+<li>Keys expire (90 days by default).</li>
+<li>At most one client by default.</li>
+<li><code>--once</code> and <code>--approve</code> are not available: nobody is at the host to answer.</li>
+<li>Commands are pinned to absolute paths, so a directory added to <code>PATH</code> later
+cannot substitute another program.</li>
+<li>Only one supervisor can serve a state directory at a time.</li>
+<li>An <a href="mdm.html">MDM policy</a> can tighten all of this; the service re-checks every
+profile against it before serving.</li>
+</ul>
+
+    </article>
+    <nav class="pager" aria-label="Previous and next page">
+      <a class="prev" href="claude-code.html"><span>Previous</span>Claude Code from your phone</a>
+      <a class="next" href="audit.html"><span>Next</span>Audit logging</a>
+    </nav>
+    <footer class="footer">
+      <a href="https://github.com/dmdhrumilmistry/setu/edit/main/docs/src/service.md">Edit this page on GitHub</a>
+      <span>setu is open source. Peer-to-peer terminal sharing with no server of your own.</span>
+    </footer>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    <p class="toc-title">On this page</p>
+    <ul>
+      <li class="l2"><a href="#concepts">Concepts</a></li>
+      <li class="l2"><a href="#create-a-profile">Create a profile</a></li>
+      <li class="l2"><a href="#start-it-at-login">Start it at login</a></li>
+      <li class="l2"><a href="#manage-profiles">Manage profiles</a></li>
+      <li class="l2"><a href="#audit-the-service">Audit the service</a></li>
+      <li class="l2"><a href="#where-things-live">Where things live</a></li>
+      <li class="l2"><a href="#safety-rules-the-service-applies">Safety rules the service applies</a></li>
+    </ul>
+  </aside>
+</div>
+</body>
+</html>

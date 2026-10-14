@@ -4,6 +4,8 @@
 Built for driving Claude Code and other AI agents on your machine from your
 phone or another computer.
 
+**Documentation: https://dmdhrumilmistry.github.io/setu/docs/**
+
 ```
 $ setu share --password -- claude
 
@@ -275,3 +277,18 @@ node --test web/test/crypto.test.mjs      # JS crypto parity with Go test vector
 go build -o setu ./cmd/setu && SETU_LOCAL_RELAY=1 node web/test/browser-e2e.mjs   # headless Chromium e2e
 web/vendor/update.sh                      # re-vendor xterm.js / noble-curves
 ```
+
+### Documentation
+
+The docs site is written in Markdown under [`docs/src`](docs/src) (plus
+[`docs/DESIGN.md`](docs/DESIGN.md)) and rendered to static HTML in `docs/` by
+[`tools/docsgen`](tools/docsgen). The HTML is committed because GitHub Pages
+serves the `main` branch as is. After editing a page:
+
+```sh
+cd tools/docsgen && go run .          # regenerate docs/*.html and the search index
+cd tools/docsgen && go run . -check   # what CI runs: stale output, broken links, undocumented CLI flags
+```
+
+Preview locally with any static server from the repository root, for example
+`python -m http.server` and http://localhost:8000/docs/.
