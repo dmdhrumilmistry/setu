@@ -113,7 +113,10 @@ setu service add claude -- claude      # prompts for a password, prints the link
 setu service install                   # start at login: systemd user unit / launchd agent / Task Scheduler
 setu service list                      # profiles, state, expiry
 setu service link claude               # show the links (+ QR) again
-setu service rotate claude             # new keys; the old links stop working immediately
+setu service key add claude alice      # Alice's own link: the audit log names her
+setu service key list claude
+setu service key remove claude alice   # revoke only Alice's link
+setu service rotate claude             # new keys for everyone; the old links stop working immediately
 setu service disable claude            # stop serving without deleting (enable to resume)
 setu service remove claude
 setu service status                    # autostart, supervisor and audit state
@@ -124,6 +127,12 @@ The running service picks up changes within a few seconds, so you don't need
 to restart it. Because these links live for a long time, profiles are
 stricter than `setu share`:
 
+* Give each person their own key (`--person alice` on `add`, or
+  `setu service key add`). The service tells people apart by which key
+  decrypted their join request, never by anything the client claims, so
+  audit records name them reliably. `--no-shared-key` leaves no shared,
+  anonymous control link at all. You can also revoke one person without
+  affecting anyone else.
 * A password (12+ characters) is required unless you pass `--no-password`.
   The service stores only a PBKDF2 verifier, never the password.
 * Keys expire after `--valid-for` (default 90 days). `rotate` renews them.
@@ -159,8 +168,19 @@ setu service audit --endpoint https://otel.example.com:4318          # for the s
 | `setu.input.control` | ^C, ^D or ^Z |
 
 Every record carries `setu.session.id`, and service records also carry
-`setu.profile`. The resource attributes identify the host (`host.name`,
-`user.name`, `service.version`).
+`setu.profile`. Each `setu.command` record stands on its own and answers
+three questions:
+
+| | Attributes |
+| --- | --- |
+| **Who** ran it | `setu.actor` (for example `alice (client #2 from 203.0.113.7:51234, verification code 769 168)`), `setu.actor.name` (the personal key's owner, `host-terminal`, or `shared-control-link`), `client.address`/`client.port`, `setu.client.verification_code`, `setu.client.dtls_fingerprint`, and the account and machine it ran as (`user.name`, `host.name`) |
+| **When** | the record timestamp, plus `setu.command.submitted_at` (Enter pressed) and `setu.command.started_at` (first keystroke), in RFC 3339 UTC |
+| **What** | the record body and `setu.command.text`, plus `setu.session.command` (the program it was typed into, for example `bash` or `claude`) |
+
+`setu.actor.name` can only name a person if each person has their own key.
+With a shared link, every holder looks the same (`shared-control-link`), so
+use personal keys (`setu service key add`) when you need to know who typed a
+command.
 
 Commands are rebuilt from keystrokes, so they are best effort. setu sees what
 was typed, not what the shell finally ran. Lines that used arrow keys, history

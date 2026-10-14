@@ -1,6 +1,9 @@
 package audit
 
-import "unicode/utf8"
+import (
+	"time"
+	"unicode/utf8"
+)
 
 // maxLineBytes bounds one reconstructed command; longer input is truncated
 // (and flagged) so a huge paste cannot produce an unbounded log record.
@@ -15,6 +18,8 @@ type event struct {
 	truncated bool
 	secret    bool // typed while the terminal had echo off (a password prompt)
 	submitted bool
+	started   time.Time // first keystroke of the line
+	at        time.Time // when the line was submitted (or the key pressed)
 }
 
 type escState int
@@ -38,9 +43,13 @@ type lineEditor struct {
 	edited    bool
 	truncated bool
 	secret    bool
+	started   time.Time // first keystroke of the current line
+	now       time.Time // arrival time of the keystrokes being fed
 }
 
-func (e *lineEditor) feed(b []byte, emit func(event)) {
+// feed processes keystrokes that arrived at now.
+func (e *lineEditor) feed(b []byte, now time.Time, emit func(event)) {
+	e.now = now
 	for _, c := range b {
 		switch e.esc {
 		case escStart:
@@ -104,15 +113,15 @@ func (e *lineEditor) feed(b []byte, emit func(event)) {
 			e.buf = e.buf[:i]
 		case c == 0x03:
 			e.reset()
-			emit(event{control: "^C"})
+			emit(event{control: "^C", at: e.now})
 		case c == 0x04:
 			if len(e.buf) == 0 {
-				emit(event{control: "^D"})
+				emit(event{control: "^D", at: e.now})
 			} else {
 				e.edited = true // delete-char in readline
 			}
 		case c == 0x1a:
-			emit(event{control: "^Z"})
+			emit(event{control: "^Z", at: e.now})
 		case c == '\t':
 			e.add('\t')
 			if !e.paste {
@@ -133,6 +142,9 @@ func (e *lineEditor) add(c byte) {
 		e.truncated = true
 		return
 	}
+	if len(e.buf) == 0 && e.started.IsZero() {
+		e.started = e.now
+	}
 	e.buf = append(e.buf, c)
 }
 
@@ -145,6 +157,8 @@ func (e *lineEditor) flush(submitted bool, emit func(event)) {
 			truncated: e.truncated,
 			secret:    e.secret,
 			submitted: submitted,
+			started:   e.started,
+			at:        e.now,
 		})
 	}
 	e.reset()
@@ -153,4 +167,5 @@ func (e *lineEditor) flush(submitted bool, emit func(event)) {
 func (e *lineEditor) reset() {
 	e.buf = e.buf[:0]
 	e.edited, e.truncated, e.secret = false, false, false
+	e.started = time.Time{}
 }

@@ -83,7 +83,7 @@ func TestSupervisor(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := &Profile{Command: echoCommand(), Enabled: true, MaxClients: 2, Password: v, Relays: []string{r.URL()}}
-	if err := p.NewKeys(false, time.Now()); err != nil {
+	if err := p.NewKeys(true, false, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	cfg := &Config{Profiles: map[string]*Profile{"echo": p}}
@@ -116,7 +116,7 @@ func TestSupervisor(t *testing.T) {
 
 	// Rotation: the old key stops working, the new one works.
 	old := p.ControlKey
-	if err := p.NewKeys(false, time.Now()); err != nil {
+	if err := p.NewKeys(true, false, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if err := Save(path, cfg); err != nil {
@@ -151,7 +151,7 @@ func TestSupervisorAuditFailsClosed(t *testing.T) {
 	cfg.Audit.Endpoint = "http://127.0.0.1:1/v1/logs" // nothing listens here
 	cfg.Audit.Required = true
 	p := &Profile{Command: echoCommand(), Enabled: true, MaxClients: 1}
-	if err := p.NewKeys(false, time.Now()); err != nil {
+	if err := p.NewKeys(true, false, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	cfg.Profiles["echo"] = p

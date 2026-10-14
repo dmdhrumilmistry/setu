@@ -37,6 +37,10 @@ type peer struct {
 	id    int
 	role  string
 	label string
+	// keyName is the personal key the client joined with ("" for the
+	// shared links). The host derives it from which key decrypted the join
+	// request, never from anything the client claims.
+	keyName string
 
 	pc *webrtc.PeerConnection
 	dc *webrtc.DataChannel
@@ -54,7 +58,7 @@ type peer struct {
 }
 
 // newPeer registers a peer after checking admission.
-func (s *Session) newPeer(role, label string) (*peer, error) {
+func (s *Session) newPeer(role, label, keyName string) (*peer, error) {
 	if err := s.admit(); err != nil {
 		return nil, err
 	}
@@ -69,7 +73,7 @@ func (s *Session) newPeer(role, label string) (*peer, error) {
 	}
 	s.mu.Lock()
 	s.nextID++
-	p := &peer{s: s, id: s.nextID, role: role, label: label, pc: pc, dc: dc, nonce: secure.RandomBytes(32)}
+	p := &peer{s: s, id: s.nextID, role: role, label: label, keyName: keyName, pc: pc, dc: dc, nonce: secure.RandomBytes(32)}
 	s.peers[p.id] = p
 	s.mu.Unlock()
 
@@ -213,7 +217,7 @@ func (p *peer) activate() {
 	s.mu.Unlock()
 	p.deadline.Stop()
 	s.audit.ClientConnected(c)
-	s.logf("client #%d connected via %s, role=%s, verification code %s", p.id, p.label, p.role, p.sas)
+	s.logf("client #%d (%s) connected via %s, role=%s, verification code %s", p.id, c.ActorName(), p.label, p.role, p.sas)
 	if s.cfg.Once {
 		s.stopAccepting("--once: first client connected")
 	}
@@ -278,7 +282,7 @@ func (p *peer) addCloseHook(f func()) {
 // address of the selected ICE candidate once connected.
 func (p *peer) auditClient() audit.Client {
 	p.mu.Lock()
-	c := audit.Client{ID: p.id, Role: p.role, Via: p.label, SAS: p.sas, Fingerprint: p.remoteFP}
+	c := audit.Client{ID: p.id, Role: p.role, Via: p.label, KeyName: p.keyName, SAS: p.sas, Fingerprint: p.remoteFP}
 	p.mu.Unlock()
 	if sctp := p.pc.SCTP(); sctp != nil {
 		if pair, err := sctp.Transport().ICETransport().GetSelectedCandidatePair(); err == nil && pair != nil && pair.Remote != nil {

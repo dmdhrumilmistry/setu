@@ -48,13 +48,18 @@ type Config struct {
 // Profile is one persistent share. Its keys are secrets: whoever holds the
 // control key (and the password) gets a shell.
 type Profile struct {
-	Command    []string                 `json:"command"`
-	Dir        string                   `json:"dir,omitempty"`
-	Enabled    bool                     `json:"enabled"`
-	ControlKey string                   `json:"control_key"`
-	ViewKey    string                   `json:"view_key,omitempty"`
-	Password   *secure.PasswordVerifier `json:"password,omitempty"`
-	MaxClients int                      `json:"max_clients"`
+	Command []string `json:"command"`
+	Dir     string   `json:"dir,omitempty"`
+	Enabled bool     `json:"enabled"`
+	// ControlKey and ViewKey are shared links: audit records can only say
+	// "someone holding the shared link". Either may be empty.
+	ControlKey string `json:"control_key,omitempty"`
+	ViewKey    string `json:"view_key,omitempty"`
+	// PersonalKeys gives each person their own link, keyed by their name,
+	// so audit records say who connected and typed each command.
+	PersonalKeys map[string]*PersonalKey  `json:"personal_keys,omitempty"`
+	Password     *secure.PasswordVerifier `json:"password,omitempty"`
+	MaxClients   int                      `json:"max_clients"`
 
 	// Keys stop working at ExpiresAt; rotating them restarts the clock
 	// with ValidFor.
@@ -70,6 +75,13 @@ type Profile struct {
 
 	Created time.Time `json:"created"`
 	Rotated time.Time `json:"rotated,omitzero"`
+}
+
+// PersonalKey is an invite key held by one named person.
+type PersonalKey struct {
+	Key     string    `json:"key"`
+	Role    string    `json:"role"` // proto.RoleControl or proto.RoleView
+	Created time.Time `json:"created"`
 }
 
 // Duration is a time.Duration that reads and writes as "720h0m0s".
@@ -210,26 +222,83 @@ func (c *Config) Get(name string) (*Profile, error) {
 	return p, nil
 }
 
-// NewKeys replaces the profile's invite keys (and adds a view key if
-// withView), restarting the expiry clock. Old links stop working.
-func (p *Profile) NewKeys(withView bool, now time.Time) error {
-	cs, err := secure.NewSecret()
-	if err != nil {
-		return err
-	}
-	p.ControlKey, p.ViewKey = cs.String(), ""
-	if withView {
-		vs, err := secure.NewSecret()
-		if err != nil {
+func newKey() (string, error) {
+	s, err := secure.NewSecret()
+	return s.String(), err
+}
+
+// NewKeys sets fresh shared keys (a shared control link if sharedControl,
+// a shared view link if sharedView) and restarts the expiry clock.
+func (p *Profile) NewKeys(sharedControl, sharedView bool, now time.Time) error {
+	p.ControlKey, p.ViewKey = "", ""
+	var err error
+	if sharedControl {
+		if p.ControlKey, err = newKey(); err != nil {
 			return err
 		}
-		p.ViewKey = vs.String()
 	}
+	if sharedView {
+		if p.ViewKey, err = newKey(); err != nil {
+			return err
+		}
+	}
+	p.restartExpiry(now)
+	return nil
+}
+
+// Rotate replaces every key the profile has (shared and personal) and
+// restarts the expiry clock. All old links stop working.
+func (p *Profile) Rotate(now time.Time) error {
+	if err := p.NewKeys(p.ControlKey != "", p.ViewKey != "", now); err != nil {
+		return err
+	}
+	for _, k := range p.PersonalKeys {
+		var err error
+		if k.Key, err = newKey(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *Profile) restartExpiry(now time.Time) {
 	p.ExpiresAt = time.Time{}
 	if p.ValidFor > 0 {
 		p.ExpiresAt = now.Add(time.Duration(p.ValidFor)).UTC()
 	}
+}
+
+// AddPersonalKey creates a key for one person (role proto.RoleControl or
+// proto.RoleView). Their records are attributed to person.
+func (p *Profile) AddPersonalKey(person, role string, now time.Time) error {
+	if err := ValidName(person); err != nil {
+		return fmt.Errorf("person: %w", err)
+	}
+	if role != proto.RoleControl && role != proto.RoleView {
+		return fmt.Errorf("role %q: want %q or %q", role, proto.RoleControl, proto.RoleView)
+	}
+	if _, dup := p.PersonalKeys[person]; dup {
+		return fmt.Errorf("%s already has a key (remove it first to issue a new one)", person)
+	}
+	key, err := newKey()
+	if err != nil {
+		return err
+	}
+	if p.PersonalKeys == nil {
+		p.PersonalKeys = map[string]*PersonalKey{}
+	}
+	p.PersonalKeys[person] = &PersonalKey{Key: key, Role: role, Created: now.UTC()}
 	return nil
+}
+
+// People returns the names of the personal key holders, sorted.
+func (p *Profile) People() []string {
+	names := make([]string, 0, len(p.PersonalKeys))
+	for n := range p.PersonalKeys {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // Validate checks a profile before it is saved or served.
@@ -242,13 +311,46 @@ func (p *Profile) Validate() error {
 			return fmt.Errorf("working directory %q does not exist", p.Dir)
 		}
 	}
-	if _, err := secure.ParseSecret(p.ControlKey); err != nil {
-		return fmt.Errorf("control key: %w", err)
+	seen := map[string]bool{}
+	check := func(what, key string) error {
+		if _, err := secure.ParseSecret(key); err != nil {
+			return fmt.Errorf("%s: %w", what, err)
+		}
+		if seen[key] {
+			return fmt.Errorf("%s: the same key is used twice", what)
+		}
+		seen[key] = true
+		return nil
+	}
+	controls := 0
+	if p.ControlKey != "" {
+		if err := check("shared control key", p.ControlKey); err != nil {
+			return err
+		}
+		controls++
 	}
 	if p.ViewKey != "" {
-		if _, err := secure.ParseSecret(p.ViewKey); err != nil {
-			return fmt.Errorf("view key: %w", err)
+		if err := check("shared view key", p.ViewKey); err != nil {
+			return err
 		}
+	}
+	for _, name := range p.People() {
+		k := p.PersonalKeys[name]
+		if err := ValidName(name); err != nil {
+			return err
+		}
+		if k.Role != proto.RoleControl && k.Role != proto.RoleView {
+			return fmt.Errorf("key of %s: bad role %q", name, k.Role)
+		}
+		if err := check("key of "+name, k.Key); err != nil {
+			return err
+		}
+		if k.Role == proto.RoleControl {
+			controls++
+		}
+	}
+	if controls == 0 && p.ViewKey == "" && len(p.PersonalKeys) == 0 {
+		return errors.New("profile has no keys")
 	}
 	if p.Password != nil {
 		if err := p.Password.Validate(); err != nil {
@@ -294,14 +396,28 @@ func (p *Profile) relays() []string {
 	return nostr.DefaultRelays
 }
 
-// Links returns the control link and, if configured, the view-only link.
-func (p *Profile) Links() []string {
+// Link is one invite link of a profile.
+type Link struct {
+	Person string // "" for the shared links
+	Role   string
+	URL    string
+}
+
+// Links returns the shared links and then every personal link.
+func (p *Profile) Links() []Link {
 	inv := func(key string) string {
 		return link.Build(p.WebURL, link.Invite{Secret: key, Relays: p.Relays})
 	}
-	out := []string{inv(p.ControlKey)}
+	var out []Link
+	if p.ControlKey != "" {
+		out = append(out, Link{Role: proto.RoleControl, URL: inv(p.ControlKey)})
+	}
 	if p.ViewKey != "" {
-		out = append(out, inv(p.ViewKey))
+		out = append(out, Link{Role: proto.RoleView, URL: inv(p.ViewKey)})
+	}
+	for _, name := range p.People() {
+		k := p.PersonalKeys[name]
+		out = append(out, Link{Person: name, Role: k.Role, URL: inv(k.Key)})
 	}
 	return out
 }

@@ -246,19 +246,21 @@ func (sv *Supervisor) serve(ctx context.Context, name string, p *Profile, al *au
 }
 
 func hostConfig(name string, p *Profile) (host.Config, error) {
-	cs, err := secure.ParseSecret(p.ControlKey)
-	if err != nil {
-		return host.Config{}, err
-	}
 	cfg := host.Config{
 		Command:          p.Command,
 		Dir:              p.Dir,
 		Profile:          name,
-		ControlSecret:    &cs,
 		Relays:           p.relays(),
 		ICE:              p.ICE(),
 		PasswordVerifier: p.Password,
 		MaxClients:       p.MaxClients,
+	}
+	if p.ControlKey != "" {
+		cs, err := secure.ParseSecret(p.ControlKey)
+		if err != nil {
+			return host.Config{}, err
+		}
+		cfg.ControlSecret = &cs
 	}
 	if p.ViewKey != "" {
 		vs, err := secure.ParseSecret(p.ViewKey)
@@ -266,6 +268,14 @@ func hostConfig(name string, p *Profile) (host.Config, error) {
 			return host.Config{}, err
 		}
 		cfg.ViewSecret = &vs
+	}
+	for _, person := range p.People() {
+		k := p.PersonalKeys[person]
+		s, err := secure.ParseSecret(k.Key)
+		if err != nil {
+			return host.Config{}, err
+		}
+		cfg.Keys = append(cfg.Keys, host.Key{Name: person, Role: k.Role, Secret: s})
 	}
 	return cfg, nil
 }

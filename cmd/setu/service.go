@@ -19,6 +19,7 @@ import (
 
 	"github.com/dmdhrumilmistry/setu/internal/audit"
 	"github.com/dmdhrumilmistry/setu/internal/link"
+	"github.com/dmdhrumilmistry/setu/internal/proto"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
 	"github.com/dmdhrumilmistry/setu/internal/service"
 	"github.com/dmdhrumilmistry/setu/internal/tty"
@@ -29,8 +30,11 @@ const serviceUsage = `setu service - always-on shares with persistent links, sta
 Usage:
   setu service add [flags] <name> [--] command [args...]   create a profile (prints its links once)
   setu service list                                       list profiles
-  setu service link <name>                                show a profile's links (+ QR)
-  setu service rotate [--password] <name>                 new keys: old links stop working
+  setu service link <name> [person]                       show a profile's links (+ QR)
+  setu service key add [--view] <name> <person>           give one person their own link (audited by name)
+  setu service key list <name>                            list the people holding personal keys
+  setu service key remove <name> <person>                 revoke one person's link
+  setu service rotate [--password] <name>                 new keys: every old link stops working
   setu service enable|disable <name>                      serve / stop serving a profile
   setu service remove <name>                              delete a profile and its keys
   setu service audit [flags] | --off                      send an audit log to an OpenTelemetry collector
@@ -58,6 +62,8 @@ func runService(args []string) (int, error) {
 		return serviceList()
 	case "link", "links":
 		return serviceLink(rest)
+	case "key", "keys":
+		return serviceKey(rest)
 	case "rotate":
 		return serviceRotate(rest)
 	case "enable", "disable":
@@ -169,7 +175,10 @@ func profilePassword(fromStdin bool) (*secure.PasswordVerifier, error) {
 func serviceAdd(args []string) (int, error) {
 	fs := flag.NewFlagSet("service add", flag.ExitOnError)
 	var relays, stun listFlag
-	viewLink := fs.Bool("view-link", false, "also create a read-only link")
+	viewLink := fs.Bool("view-link", false, "also create a shared read-only link")
+	var people listFlag
+	fs.Var(&people, "person", "give this person their own control link, so the audit log names them (repeatable / comma separated)")
+	noShared := fs.Bool("no-shared-key", false, "no shared control link: only people added with --person (or `setu service key add`) can type")
 	maxClients := fs.Int("max-clients", 1, "maximum concurrent clients")
 	validFor := fs.Duration("valid-for", 90*24*time.Hour, "keys stop working after this long; `setu service rotate` renews them (0 = never)")
 	dir := fs.String("dir", "", "working directory for the command (default: the service's, usually your home)")
@@ -239,8 +248,16 @@ func serviceAdd(args []string) (int, error) {
 			return 1, err
 		}
 	}
-	if err := p.NewKeys(*viewLink, now); err != nil {
+	if *noShared && len(people) == 0 {
+		return 1, errors.New("--no-shared-key needs at least one --person")
+	}
+	if err := p.NewKeys(!*noShared, *viewLink, now); err != nil {
 		return 1, err
+	}
+	for _, person := range people {
+		if err := p.AddPersonalKey(person, proto.RoleControl, now); err != nil {
+			return 1, err
+		}
 	}
 	if err := p.Validate(); err != nil {
 		return 1, err
@@ -249,13 +266,31 @@ func serviceAdd(args []string) (int, error) {
 	if err := st.save(); err != nil {
 		return 1, err
 	}
-	printProfile(name, p)
+	printProfile(name, p, "")
 	return 0, nil
 }
 
-func printProfile(name string, p *service.Profile) {
+// printProfile prints a profile's links (only person's, if person is set)
+// and its security settings.
+func printProfile(name string, p *service.Profile, person string) {
 	fmt.Fprintf(os.Stderr, "\nProfile %s: %s\n", name, strings.Join(p.Command, " "))
-	printLinkList(os.Stderr, p.Links())
+	for _, l := range p.Links() {
+		if person != "" && l.Person != person {
+			continue
+		}
+		var title string
+		switch {
+		case l.Person != "" && l.Role == proto.RoleControl:
+			title = fmt.Sprintf("\x1b[1;31mCONTROL link for %s\x1b[0m - give it only to %s; their commands are logged under that name:", l.Person, l.Person)
+		case l.Person != "":
+			title = fmt.Sprintf("\x1b[1;33mVIEW-ONLY link for %s\x1b[0m - can watch, cannot type:", l.Person)
+		case l.Role == proto.RoleControl:
+			title = "\x1b[1;31mSHARED CONTROL link\x1b[0m - anyone holding it can type; the audit log cannot tell holders apart:"
+		default:
+			title = "\x1b[1;33mSHARED VIEW-ONLY link\x1b[0m - can watch, cannot type:"
+		}
+		printLink(os.Stderr, title, l.URL)
+	}
 	var notes []string
 	if p.Password != nil {
 		notes = append(notes, "password required")
@@ -310,20 +345,108 @@ func serviceList() (int, error) {
 }
 
 func serviceLink(args []string) (int, error) {
-	name, err := oneName(args, "link")
-	if err != nil {
-		return 2, err
+	if len(args) < 1 || len(args) > 2 {
+		return 2, errors.New("usage: setu service link <name> [person]")
 	}
 	st, err := loadService()
 	if err != nil {
 		return 1, err
 	}
-	p, err := st.cfg.Get(name)
+	p, err := st.cfg.Get(args[0])
 	if err != nil {
 		return 1, err
 	}
-	printProfile(name, p)
+	person := ""
+	if len(args) == 2 {
+		person = args[1]
+		if _, ok := p.PersonalKeys[person]; !ok {
+			return 1, fmt.Errorf("%s has no personal key on %s (see `setu service key list %s`)", person, args[0], args[0])
+		}
+	}
+	printProfile(args[0], p, person)
 	return 0, nil
+}
+
+func serviceKey(args []string) (int, error) {
+	usage := errors.New("usage: setu service key add [--view] <name> <person> | key list <name> | key remove <name> <person>")
+	if len(args) == 0 {
+		return 2, usage
+	}
+	fs := flag.NewFlagSet("service key "+args[0], flag.ExitOnError)
+	view := fs.Bool("view", false, "the person can watch but not type")
+	_ = fs.Parse(args[1:])
+	rest := fs.Args()
+	st, err := loadService()
+	if err != nil {
+		return 1, err
+	}
+	switch args[0] {
+	case "add":
+		if len(rest) != 2 {
+			return 2, usage
+		}
+		p, err := st.cfg.Get(rest[0])
+		if err != nil {
+			return 1, err
+		}
+		role := proto.RoleControl
+		if *view {
+			role = proto.RoleView
+		}
+		if err := p.AddPersonalKey(rest[1], role, time.Now()); err != nil {
+			return 1, err
+		}
+		if err := p.Validate(); err != nil {
+			return 1, err
+		}
+		if err := st.save(); err != nil {
+			return 1, err
+		}
+		printProfile(rest[0], p, rest[1])
+		return 0, nil
+	case "remove", "rm", "revoke":
+		if len(rest) != 2 {
+			return 2, usage
+		}
+		p, err := st.cfg.Get(rest[0])
+		if err != nil {
+			return 1, err
+		}
+		if _, ok := p.PersonalKeys[rest[1]]; !ok {
+			return 1, fmt.Errorf("%s has no personal key on %s", rest[1], rest[0])
+		}
+		delete(p.PersonalKeys, rest[1])
+		if err := p.Validate(); err != nil {
+			return 1, fmt.Errorf("cannot remove the last key: %w (remove the profile instead)", err)
+		}
+		if err := st.save(); err != nil {
+			return 1, err
+		}
+		fmt.Fprintf(os.Stderr, "revoked %s's link to %s\n", rest[1], rest[0])
+		return 0, nil
+	case "list", "ls":
+		if len(rest) != 1 {
+			return 2, usage
+		}
+		p, err := st.cfg.Get(rest[0])
+		if err != nil {
+			return 1, err
+		}
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, "PERSON\tROLE\tCREATED")
+		if p.ControlKey != "" {
+			fmt.Fprintln(w, "(shared link)\tcontrol\t-")
+		}
+		if p.ViewKey != "" {
+			fmt.Fprintln(w, "(shared link)\tview\t-")
+		}
+		for _, person := range p.People() {
+			k := p.PersonalKeys[person]
+			fmt.Fprintf(w, "%s\t%s\t%s\n", person, k.Role, k.Created.Local().Format("2006-01-02"))
+		}
+		return 0, w.Flush()
+	}
+	return 2, usage
 }
 
 func serviceRotate(args []string) (int, error) {
@@ -349,15 +472,15 @@ func serviceRotate(args []string) (int, error) {
 		}
 	}
 	now := time.Now()
-	if err := p.NewKeys(p.ViewKey != "", now); err != nil {
+	if err := p.Rotate(now); err != nil {
 		return 1, err
 	}
 	p.Rotated = now.UTC()
 	if err := st.save(); err != nil {
 		return 1, err
 	}
-	fmt.Fprintln(os.Stderr, "New keys created; the old links no longer work.")
-	printProfile(name, p)
+	fmt.Fprintln(os.Stderr, "New keys created for everyone; the old links no longer work.")
+	printProfile(name, p, "")
 	return 0, nil
 }
 

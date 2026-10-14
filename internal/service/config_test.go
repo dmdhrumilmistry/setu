@@ -8,13 +8,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dmdhrumilmistry/setu/internal/proto"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
 )
 
 func testProfile(t *testing.T) *Profile {
 	t.Helper()
 	p := &Profile{Command: []string{"sh"}, Enabled: true, MaxClients: 1, ValidFor: Duration(time.Hour), WebURL: "https://example.invalid/"}
-	if err := p.NewKeys(true, time.Now()); err != nil {
+	if err := p.NewKeys(true, true, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	return p
@@ -101,7 +102,7 @@ func TestProfileValidateAndActive(t *testing.T) {
 		t.Error("disabled profile is active")
 	}
 	old := p.ControlKey
-	if err := p.NewKeys(false, now); err != nil {
+	if err := p.NewKeys(true, false, now); err != nil {
 		t.Fatal(err)
 	}
 	if p.ControlKey == old || p.ViewKey != "" {
@@ -123,6 +124,59 @@ func TestProfileValidateAndActive(t *testing.T) {
 		if err := q.Validate(); err == nil {
 			t.Errorf("invalid profile accepted: %+v", q)
 		}
+	}
+}
+
+func TestPersonalKeys(t *testing.T) {
+	now := time.Now()
+	p := &Profile{Command: []string{"sh"}, Enabled: true, MaxClients: 1}
+	if err := p.NewKeys(false, false, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Validate(); err == nil {
+		t.Fatal("profile without any key accepted")
+	}
+	if err := p.AddPersonalKey("alice", proto.RoleControl, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.AddPersonalKey("bob", proto.RoleView, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.AddPersonalKey("alice", proto.RoleControl, now); err == nil {
+		t.Error("duplicate person accepted")
+	}
+	for _, bad := range [][2]string{{"Alice", proto.RoleControl}, {"carol", "admin"}} {
+		if err := p.AddPersonalKey(bad[0], bad[1], now); err == nil {
+			t.Errorf("AddPersonalKey(%q, %q) accepted", bad[0], bad[1])
+		}
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	links := p.Links()
+	if len(links) != 2 || links[0].Person != "alice" || links[1].Person != "bob" || links[1].Role != proto.RoleView {
+		t.Fatalf("links %+v", links)
+	}
+
+	cfg, err := hostConfig("x", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ControlSecret != nil || len(cfg.Keys) != 2 || cfg.Keys[0].Name != "alice" || cfg.Keys[0].Role != proto.RoleControl {
+		t.Fatalf("host config keys %+v", cfg.Keys)
+	}
+
+	old := p.PersonalKeys["alice"].Key
+	if err := p.Rotate(now); err != nil {
+		t.Fatal(err)
+	}
+	if p.PersonalKeys["alice"].Key == old || p.ControlKey != "" {
+		t.Error("Rotate must replace personal keys and keep the shared link off")
+	}
+
+	p.PersonalKeys["bob"].Key = p.PersonalKeys["alice"].Key
+	if err := p.Validate(); err == nil {
+		t.Error("two people sharing one key accepted")
 	}
 }
 

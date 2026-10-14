@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dmdhrumilmistry/setu/internal/audit/audittest"
+	logspb "go.opentelemetry.io/proto/otlp/logs/v1"
 )
 
 func TestEndToEndExport(t *testing.T) {
@@ -22,7 +23,7 @@ func TestEndToEndExport(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := l.Session(SessionInfo{ID: "abc", Command: "bash", Mode: "nostr", MaxClients: 2})
-	c := Client{ID: 1, Role: "control", Via: "nostr", SAS: "123 456", Address: "203.0.113.7", Port: 5000}
+	c := Client{ID: 1, Role: "control", Via: "nostr", KeyName: "alice", SAS: "123 456", Address: "203.0.113.7", Port: 5000}
 	s.ClientConnected(c)
 
 	pw := false
@@ -62,6 +63,12 @@ func TestEndToEndExport(t *testing.T) {
 	if strings.Join(bodies, "|") != strings.Join(want, "|") {
 		t.Fatalf("commands = %q, want %q", bodies, want)
 	}
+	for _, r := range cmds {
+		assertWhoWhenWhat(t, r, "alice")
+	}
+	if a := audittest.Attr(cmds[1], "setu.actor"); a != "alice (client #1 from 203.0.113.7:5000, verification code 123 456)" {
+		t.Errorf("setu.actor = %q", a)
+	}
 	if audittest.Attr(cmds[0], "setu.input.redacted") != "true" || audittest.Attr(cmds[1], "setu.input.redacted") != "false" {
 		t.Error("redacted flag not set correctly")
 	}
@@ -76,6 +83,53 @@ func TestEndToEndExport(t *testing.T) {
 	for _, h := range col.Headers() {
 		if h.Get("Authorization") != "Bearer test-token" {
 			t.Fatalf("Authorization header %q", h.Get("Authorization"))
+		}
+	}
+}
+
+// assertWhoWhenWhat checks that a command record answers, on its own, who
+// ran it, when, and what it was.
+func assertWhoWhenWhat(t *testing.T, r *logspb.LogRecord, actor string) {
+	t.Helper()
+	// Who.
+	if got := audittest.Attr(r, "setu.actor.name"); got != actor {
+		t.Errorf("setu.actor.name = %q, want %q", got, actor)
+	}
+	for _, k := range []string{"setu.actor", "setu.client.id", "setu.client.role", "user.name", "host.name"} {
+		if audittest.Attr(r, k) == "" {
+			t.Errorf("command record lacks %s", k)
+		}
+	}
+	// When.
+	at, err := time.Parse(time.RFC3339Nano, audittest.Attr(r, "setu.command.submitted_at"))
+	if err != nil {
+		t.Errorf("setu.command.submitted_at: %v", err)
+	} else if uint64(at.UnixNano()) != r.TimeUnixNano {
+		t.Errorf("record timestamp %d differs from submitted_at %v", r.TimeUnixNano, at)
+	}
+	start, err := time.Parse(time.RFC3339Nano, audittest.Attr(r, "setu.command.started_at"))
+	if err != nil || start.After(at) {
+		t.Errorf("setu.command.started_at %v (err %v) is after submitted_at %v", start, err, at)
+	}
+	// What.
+	if got := audittest.Attr(r, "setu.command.text"); got == "" || got != audittest.Body(r) {
+		t.Errorf("setu.command.text %q, body %q", got, audittest.Body(r))
+	}
+	if audittest.Attr(r, "setu.session.command") == "" {
+		t.Error("command record lacks setu.session.command")
+	}
+}
+
+func TestActorName(t *testing.T) {
+	cases := map[string]Client{
+		"bob":                 {Role: "control", Via: "nostr", KeyName: "bob"},
+		"host-terminal":       {Role: "control", Via: "local"},
+		"shared-control-link": {Role: "control", Via: "nostr"},
+		"shared-view-link":    {Role: "view", Via: "nostr"},
+	}
+	for want, c := range cases {
+		if got := c.ActorName(); got != want {
+			t.Errorf("ActorName(%+v) = %q, want %q", c, got, want)
 		}
 	}
 }

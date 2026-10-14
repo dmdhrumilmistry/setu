@@ -3,13 +3,14 @@ package audit
 import (
 	"reflect"
 	"testing"
+	"time"
 )
 
 func feedAll(chunks ...string) []event {
 	var ed lineEditor
 	var out []event
 	for _, c := range chunks {
-		ed.feed([]byte(c), func(e event) { out = append(out, e) })
+		ed.feed([]byte(c), time.Time{}, func(e event) { out = append(out, e) })
 	}
 	return out
 }
@@ -62,9 +63,29 @@ func TestLineEditorTruncates(t *testing.T) {
 func TestLineEditorFlushUnsubmitted(t *testing.T) {
 	var ed lineEditor
 	var out []event
-	ed.feed([]byte("half typed"), func(e event) { out = append(out, e) })
+	ed.feed([]byte("half typed"), time.Time{}, func(e event) { out = append(out, e) })
 	ed.flush(false, func(e event) { out = append(out, e) })
 	if len(out) != 1 || out[0].submitted || out[0].text != "half typed" {
 		t.Fatalf("%+v", out)
+	}
+}
+
+func TestLineEditorTimes(t *testing.T) {
+	var ed lineEditor
+	var out []event
+	t0 := time.Date(2026, 10, 14, 9, 0, 0, 0, time.UTC)
+	emit := func(e event) { out = append(out, e) }
+	ed.feed([]byte("git "), t0, emit)
+	ed.feed([]byte("push"), t0.Add(2*time.Second), emit)
+	ed.feed([]byte("\r"), t0.Add(5*time.Second), emit)
+	ed.feed([]byte("ls\r"), t0.Add(9*time.Second), emit)
+	if len(out) != 2 {
+		t.Fatalf("%+v", out)
+	}
+	if !out[0].started.Equal(t0) || !out[0].at.Equal(t0.Add(5*time.Second)) {
+		t.Errorf("first line started %v at %v", out[0].started, out[0].at)
+	}
+	if !out[1].started.Equal(t0.Add(9 * time.Second)) {
+		t.Errorf("second line started %v; the start time must reset per line", out[1].started)
 	}
 }

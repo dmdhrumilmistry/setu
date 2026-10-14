@@ -24,6 +24,13 @@ type Invite struct {
 	Code string // manual mode: the raw offer code
 }
 
+// Key is a named, personal invite key.
+type Key struct {
+	Name   string
+	Role   string // proto.RoleControl or proto.RoleView
+	Secret secure.Secret
+}
+
 // Config controls a sharing session.
 type Config struct {
 	Command []string
@@ -34,8 +41,11 @@ type Config struct {
 	Manual        bool           // copy/paste signaling instead of nostr
 	ControlSecret *secure.Secret // nostr mode: full-control invite
 	ViewSecret    *secure.Secret // nostr mode: optional read-only invite
-	Relays        []string
-	ICE           []proto.ICEServer
+	// Keys are personal invites: each names the one person who holds it,
+	// so logs and audit records can say who connected and typed.
+	Keys   []Key
+	Relays []string
+	ICE    []proto.ICEServer
 
 	// Access control.
 	Password string // empty = no password
@@ -108,8 +118,13 @@ func New(cfg Config) (*Session, error) {
 	if len(cfg.Command) == 0 {
 		return nil, errors.New("no command to run")
 	}
-	if !cfg.Manual && cfg.ControlSecret == nil {
-		return nil, errors.New("nostr mode needs a control secret")
+	if !cfg.Manual && cfg.ControlSecret == nil && len(cfg.Keys) == 0 {
+		return nil, errors.New("nostr mode needs a control secret or a personal key")
+	}
+	for _, k := range cfg.Keys {
+		if k.Name == "" || (k.Role != proto.RoleControl && k.Role != proto.RoleView) {
+			return nil, fmt.Errorf("personal key %q: needs a name and a role", k.Name)
+		}
 	}
 	if cfg.MaxClients <= 0 {
 		cfg.MaxClients = 1

@@ -271,6 +271,69 @@ func TestAudit(t *testing.T) {
 	}
 }
 
+// TestAuditPersonalKey checks that a command typed through a personal link
+// is recorded with who typed it, when, and what it was.
+func TestAuditPersonalKey(t *testing.T) {
+	r := relaytest.New()
+	defer r.Close()
+	col := audittest.New(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	al, err := audit.New(ctx, audit.Config{Endpoint: col.URL}, audit.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	alice, _ := secure.NewSecret()
+	startHost(t, ctx, r.URL(), func(c *host.Config) {
+		c.Audit = al
+		c.Keys = []host.Key{{Name: "alice", Role: proto.RoleControl, Secret: alice}}
+	})
+	before := time.Now()
+	c, err := dial(t, ctx, link.Build("", link.Invite{Secret: alice.String(), Relays: []string{r.URL()}}), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, c, "READY")
+	_ = c.Write([]byte("whoami\r"))
+	waitFor(t, c, "got:whoami")
+	c.Close()
+	time.Sleep(300 * time.Millisecond)
+	if err := al.Shutdown(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	cmds := col.Events("setu.command")
+	if len(cmds) != 1 {
+		t.Fatalf("want 1 command record, got %d", len(cmds))
+	}
+	rec := cmds[0]
+	// Who.
+	if got := audittest.Attr(rec, "setu.actor.name"); got != "alice" {
+		t.Errorf("setu.actor.name = %q, want alice", got)
+	}
+	if got := audittest.Attr(rec, "setu.actor"); !strings.HasPrefix(got, "alice (client #") || !strings.Contains(got, c.SAS) {
+		t.Errorf("setu.actor = %q", got)
+	}
+	if audittest.Attr(rec, "user.name") == "" || audittest.Attr(rec, "host.name") == "" || audittest.Attr(rec, "client.address") == "" {
+		t.Errorf("who attributes missing: %v", rec.Attributes)
+	}
+	// When.
+	at, err := time.Parse(time.RFC3339Nano, audittest.Attr(rec, "setu.command.submitted_at"))
+	if err != nil || at.Before(before) || at.After(time.Now()) {
+		t.Errorf("submitted_at %v (err %v) outside the test window", at, err)
+	}
+	// What.
+	if audittest.Body(rec) != "whoami" || audittest.Attr(rec, "setu.command.text") != "whoami" {
+		t.Errorf("what: body %q text %q", audittest.Body(rec), audittest.Attr(rec, "setu.command.text"))
+	}
+	if !strings.Contains(audittest.Attr(rec, "setu.session.command"), echoCommand()[0]) {
+		t.Errorf("setu.session.command = %q", audittest.Attr(rec, "setu.session.command"))
+	}
+	if got := audittest.Attr(col.Events("setu.client.connect")[0], "setu.actor.name"); got != "alice" {
+		t.Errorf("connect record actor %q", got)
+	}
+}
+
 // TestAuditEchoOff checks that a line typed at a password prompt (canonical
 // mode, echo off) never reaches the collector.
 func TestAuditEchoOff(t *testing.T) {

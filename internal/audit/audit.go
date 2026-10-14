@@ -238,6 +238,8 @@ type Logger struct {
 	log      otellog.Logger
 	input    bool
 	redact   *redactor
+	user     string // OS account that shared commands run as
+	host     string
 }
 
 const (
@@ -287,8 +289,14 @@ func New(ctx context.Context, cfg Config, opt Options) (*Logger, error) {
 	}
 	setErrorHandler(opt.Logf)
 
+	host, _ := os.Hostname()
+	username := ""
+	if u, err := user.Current(); err == nil {
+		username = u.Username
+	}
+
 	provider := sdklog.NewLoggerProvider(
-		sdklog.WithResource(processResource(opt.Version)),
+		sdklog.WithResource(processResource(opt.Version, host, username)),
 		sdklog.WithProcessor(sdklog.NewBatchProcessor(exp,
 			sdklog.WithMaxQueueSize(queueSize),
 			sdklog.WithExportInterval(exportInterval),
@@ -301,6 +309,8 @@ func New(ctx context.Context, cfg Config, opt Options) (*Logger, error) {
 		log:      provider.Logger("github.com/dmdhrumilmistry/setu/audit", otellog.WithInstrumentationVersion(opt.Version)),
 		input:    cfg.Input != InputOff,
 		redact:   red,
+		user:     username,
+		host:     host,
 	}
 	if cfg.Required {
 		if err := l.probe(ctx); err != nil {
@@ -330,10 +340,15 @@ func (l *Logger) Shutdown(ctx context.Context) error {
 }
 
 func (l *Logger) emit(sev otellog.Severity, name, body string, attrs ...attribute.KeyValue) {
+	l.emitAt(time.Now(), sev, name, body, attrs...)
+}
+
+// emitAt emits a record that happened at at (the record timestamp); the
+// observed timestamp is when setu produced it.
+func (l *Logger) emitAt(at time.Time, sev otellog.Severity, name, body string, attrs ...attribute.KeyValue) {
 	var r otellog.Record
-	now := time.Now()
-	r.SetTimestamp(now)
-	r.SetObservedTimestamp(now)
+	r.SetTimestamp(at)
+	r.SetObservedTimestamp(time.Now())
 	r.SetEventName(name)
 	r.SetSeverity(sev)
 	r.SetSeverityText(sev.String())
@@ -366,8 +381,7 @@ func setErrorHandler(logf func(string, ...any)) {
 	})
 }
 
-func processResource(version string) *resource.Resource {
-	host, _ := os.Hostname()
+func processResource(version, host, username string) *resource.Resource {
 	attrs := []attribute.KeyValue{
 		attribute.String("service.name", "setu"),
 		attribute.String("service.version", version),
@@ -376,8 +390,8 @@ func processResource(version string) *resource.Resource {
 		attribute.String("os.type", runtime.GOOS),
 		attribute.Int("process.pid", os.Getpid()),
 	}
-	if u, err := user.Current(); err == nil {
-		attrs = append(attrs, attribute.String("user.name", u.Username))
+	if username != "" {
+		attrs = append(attrs, attribute.String("user.name", username))
 	}
 	return resource.NewSchemaless(attrs...)
 }
@@ -395,8 +409,9 @@ type SessionInfo struct {
 
 // Session records events for one shared session. A nil *Session is valid.
 type Session struct {
-	l     *Logger
-	attrs []attribute.KeyValue
+	l       *Logger
+	attrs   []attribute.KeyValue
+	command string
 }
 
 // Session starts recording a session.
@@ -408,7 +423,7 @@ func (l *Logger) Session(info SessionInfo) *Session {
 	if info.Profile != "" {
 		attrs = append(attrs, attribute.String("setu.profile", info.Profile))
 	}
-	s := &Session{l: l, attrs: attrs}
+	s := &Session{l: l, attrs: attrs, command: info.Command}
 	s.emit(otellog.SeverityInfo, "setu.session.start", "session started: "+info.Command,
 		attribute.String("setu.session.command", info.Command),
 		attribute.String("setu.session.mode", info.Mode),
@@ -420,7 +435,11 @@ func (l *Logger) Session(info SessionInfo) *Session {
 }
 
 func (s *Session) emit(sev otellog.Severity, name, body string, attrs ...attribute.KeyValue) {
-	s.l.emit(sev, name, body, append(append([]attribute.KeyValue(nil), s.attrs...), attrs...)...)
+	s.emitAt(time.Now(), sev, name, body, attrs...)
+}
+
+func (s *Session) emitAt(at time.Time, sev otellog.Severity, name, body string, attrs ...attribute.KeyValue) {
+	s.l.emitAt(at, sev, name, body, append(append([]attribute.KeyValue(nil), s.attrs...), attrs...)...)
 }
 
 // Client identifies who is connected (or, with Via "local", the host's own
@@ -429,6 +448,7 @@ type Client struct {
 	ID            int
 	Role          string
 	Via           string // "nostr", "manual" or "local"
+	KeyName       string // the named invite key the client used, if any
 	SAS           string
 	Fingerprint   string // remote DTLS certificate fingerprint
 	Address       string
@@ -436,11 +456,47 @@ type Client struct {
 	CandidateType string // host, srflx, prflx or relay
 }
 
+// ActorName is the best identity setu has for a client: the name of the
+// personal key it joined with, the host's own terminal, or (for a shared
+// link that several people may hold) the link it used.
+func (c Client) ActorName() string {
+	switch {
+	case c.KeyName != "":
+		return c.KeyName
+	case c.Via == "local":
+		return "host-terminal"
+	case c.Role == "view":
+		return "shared-view-link"
+	}
+	return "shared-control-link"
+}
+
+// actor is a one-line, human-readable "who" for a record.
+func (c Client) actor() string {
+	s := c.ActorName()
+	if c.Via != "local" {
+		s += fmt.Sprintf(" (client #%d", c.ID)
+		if c.Address != "" {
+			s += fmt.Sprintf(" from %s", net.JoinHostPort(c.Address, fmt.Sprint(c.Port)))
+		}
+		if c.SAS != "" {
+			s += ", verification code " + c.SAS
+		}
+		s += ")"
+	}
+	return s
+}
+
 func (c Client) attrs() []attribute.KeyValue {
 	a := []attribute.KeyValue{
+		attribute.String("setu.actor", c.actor()),
+		attribute.String("setu.actor.name", c.ActorName()),
 		attribute.Int("setu.client.id", c.ID),
 		attribute.String("setu.client.role", c.Role),
 		attribute.String("setu.client.via", c.Via),
+	}
+	if c.KeyName != "" {
+		a = append(a, attribute.String("setu.actor.key", c.KeyName))
 	}
 	if c.SAS != "" {
 		a = append(a, attribute.String("setu.client.verification_code", c.SAS))
@@ -486,12 +542,14 @@ func (s *Session) ClientDisconnected(c Client, reason string) {
 }
 
 // ClientRejected records a join request refused before a connection existed.
-func (s *Session) ClientRejected(role, reason string) {
+func (s *Session) ClientRejected(c Client, reason string) {
 	if s == nil {
 		return
 	}
-	s.emit(otellog.SeverityWarn, "setu.client.rejected", "join request rejected: "+reason,
-		attribute.String("setu.client.role", role), attribute.String("setu.reason", reason))
+	s.emit(otellog.SeverityWarn, "setu.client.rejected", "join request from "+c.ActorName()+" rejected: "+reason,
+		attribute.String("setu.actor.name", c.ActorName()),
+		attribute.String("setu.client.role", c.Role),
+		attribute.String("setu.reason", reason))
 }
 
 // AuthFailed records a wrong password.
@@ -556,7 +614,7 @@ func (in *Input) Write(b []byte) {
 	if in.sensitive != nil && in.sensitive() {
 		in.ed.secret = true
 	}
-	in.ed.feed(b, in.record)
+	in.ed.feed(b, time.Now(), in.record)
 }
 
 // Close records any typed but unsubmitted text.
@@ -566,13 +624,30 @@ func (in *Input) Close() {
 	}
 	in.mu.Lock()
 	defer in.mu.Unlock()
+	in.ed.now = time.Now() // an unsubmitted remainder is recorded as of now
 	in.ed.flush(false, in.record)
 }
 
+// record emits one command (or control key) as a self-contained record:
+// who typed it (setu.actor*, client.*, and the account it ran as), when
+// (the record timestamp plus explicit started/submitted times) and what
+// (the body and setu.command.text, plus the program it was typed into).
 func (in *Input) record(e event) {
+	at := e.at
+	if at.IsZero() {
+		at = time.Now()
+	}
+	who := append(slices.Clip(in.attrs),
+		attribute.String("user.name", in.s.l.user),
+		attribute.String("host.name", in.s.l.host),
+	)
 	if e.control != "" {
-		in.s.emit(otellog.SeverityInfo, "setu.input.control", e.control,
-			append(in.attrs, attribute.String("setu.input.key", e.control))...)
+		in.s.emitAt(at, otellog.SeverityInfo, "setu.input.control", e.control,
+			append(who,
+				attribute.String("setu.input.key", e.control),
+				attribute.String("setu.command.submitted_at", at.UTC().Format(time.RFC3339Nano)),
+				attribute.String("setu.session.command", in.s.command),
+			)...)
 		return
 	}
 	text, wasRedacted := e.text, false
@@ -581,8 +656,16 @@ func (in *Input) record(e event) {
 	} else {
 		text, wasRedacted = in.s.l.redact.apply(text)
 	}
-	in.s.emit(otellog.SeverityInfo, "setu.command", text,
-		append(in.attrs,
+	started := e.started
+	if started.IsZero() {
+		started = at
+	}
+	in.s.emitAt(at, otellog.SeverityInfo, "setu.command", text,
+		append(who,
+			attribute.String("setu.command.text", text),
+			attribute.String("setu.command.submitted_at", at.UTC().Format(time.RFC3339Nano)),
+			attribute.String("setu.command.started_at", started.UTC().Format(time.RFC3339Nano)),
+			attribute.String("setu.session.command", in.s.command),
 			attribute.Bool("setu.input.submitted", e.submitted),
 			attribute.Bool("setu.input.edited", e.edited),
 			attribute.Bool("setu.input.truncated", e.truncated),

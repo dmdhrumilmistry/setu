@@ -86,20 +86,30 @@ func printLinkList(w io.Writer, links []string) {
 		"\x1b[1;33mVIEW-ONLY link\x1b[0m — can watch, cannot type:",
 	}
 	for i, l := range links {
+		title := ""
 		if i < len(titles) {
-			fmt.Fprintf(w, "\n%s\n", titles[i])
+			title = titles[i]
 		}
-		if strings.HasPrefix(l, "http") {
-			fmt.Fprintf(w, "  browser:  %s\n", l)
-			if j := strings.IndexByte(l, '#'); j >= 0 {
-				fmt.Fprintf(w, "  terminal: setu join '%s'\n", l[j+1:])
-			}
-			if f, ok := w.(*os.File); ok && tty.IsTerminal(f) {
-				printQR(w, l)
-			}
-		} else {
-			fmt.Fprintf(w, "  terminal: setu join '%s'\n", l)
+		printLink(w, title, l)
+	}
+}
+
+// printLink prints one invite link (browser and terminal forms) under a
+// title, with a QR code when w is a terminal.
+func printLink(w io.Writer, title, l string) {
+	if title != "" {
+		fmt.Fprintf(w, "\n%s\n", title)
+	}
+	if strings.HasPrefix(l, "http") {
+		fmt.Fprintf(w, "  browser:  %s\n", l)
+		if j := strings.IndexByte(l, '#'); j >= 0 {
+			fmt.Fprintf(w, "  terminal: setu join '%s'\n", l[j+1:])
 		}
+		if f, ok := w.(*os.File); ok && tty.IsTerminal(f) {
+			printQR(w, l)
+		}
+	} else {
+		fmt.Fprintf(w, "  terminal: setu join '%s'\n", l)
 	}
 }
 
