@@ -27,9 +27,16 @@ var notForwarded = map[string]bool{
 func startBackground(fs *flag.FlagSet, command []string, password string) (int, error) {
 	var forwarded []string
 	fs.Visit(func(f *flag.Flag) {
-		if !notForwarded[f.Name] {
-			forwarded = append(forwarded, "-"+f.Name+"="+f.Value.String())
+		if notForwarded[f.Name] {
+			return
 		}
+		if rf, ok := f.Value.(*repeatFlag); ok {
+			for _, v := range *rf {
+				forwarded = append(forwarded, "-"+f.Name+"="+v)
+			}
+			return
+		}
+		forwarded = append(forwarded, "-"+f.Name+"="+f.Value.String())
 	})
 	childArgs := func(dir string) []string {
 		args := []string{"share", "-session-dir", dir}
@@ -67,27 +74,43 @@ func printLinks(w io.Writer, dir string) error {
 	if err != nil {
 		return fmt.Errorf("read links: %w", err)
 	}
+	printLinkList(w, strings.Fields(string(b)))
+	return nil
+}
+
+// printLinkList prints a control link and an optional view-only link, with
+// QR codes when w is a terminal.
+func printLinkList(w io.Writer, links []string) {
 	titles := []string{
 		"\x1b[1;31mCONTROL link\x1b[0m — anyone holding it can type into the shared terminal. Keep it secret:",
 		"\x1b[1;33mVIEW-ONLY link\x1b[0m — can watch, cannot type:",
 	}
-	for i, l := range strings.Fields(string(b)) {
+	for i, l := range links {
+		title := ""
 		if i < len(titles) {
-			fmt.Fprintf(w, "\n%s\n", titles[i])
+			title = titles[i]
 		}
-		if strings.HasPrefix(l, "http") {
-			fmt.Fprintf(w, "  browser:  %s\n", l)
-			if j := strings.IndexByte(l, '#'); j >= 0 {
-				fmt.Fprintf(w, "  terminal: setu join '%s'\n", l[j+1:])
-			}
-			if f, ok := w.(*os.File); ok && tty.IsTerminal(f) {
-				printQR(w, l)
-			}
-		} else {
-			fmt.Fprintf(w, "  terminal: setu join '%s'\n", l)
-		}
+		printLink(w, title, l)
 	}
-	return nil
+}
+
+// printLink prints one invite link (browser and terminal forms) under a
+// title, with a QR code when w is a terminal.
+func printLink(w io.Writer, title, l string) {
+	if title != "" {
+		fmt.Fprintf(w, "\n%s\n", title)
+	}
+	if strings.HasPrefix(l, "http") {
+		fmt.Fprintf(w, "  browser:  %s\n", l)
+		if j := strings.IndexByte(l, '#'); j >= 0 {
+			fmt.Fprintf(w, "  terminal: setu join '%s'\n", l[j+1:])
+		}
+		if f, ok := w.(*os.File); ok && tty.IsTerminal(f) {
+			printQR(w, l)
+		}
+	} else {
+		fmt.Fprintf(w, "  terminal: setu join '%s'\n", l)
+	}
 }
 
 func printQR(w io.Writer, s string) {

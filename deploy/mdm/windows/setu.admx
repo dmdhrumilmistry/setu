@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- setu managed policy. Writes HKLM\Software\Policies\setu. Works with Group Policy
+     (copy to PolicyDefinitions) and with MDM ADMX ingestion (Intune, VaanarSena):
+     ./Device/Vendor/MSFT/Policy/ConfigOperations/ADMXInstall/setu/Policy/SetuAdmx -->
+<policyDefinitions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <policyNamespaces>
+    <target prefix="setu" namespace="Setu.Policies.Setu" />
+  </policyNamespaces>
+  <resources minRequiredRevision="1.0" />
+  <supportedOn>
+    <definitions>
+      <definition name="SUPPORTED_Setu" displayName="$(string.SUPPORTED_Setu)" />
+    </definitions>
+  </supportedOn>
+  <categories>
+    <category name="Setu" displayName="$(string.Setu)" />
+  </categories>
+  <policies>
+    <policy name="DisableShare" class="Machine" displayName="$(string.DisableShare)" explainText="$(string.DisableShare_Help)" key="Software\Policies\setu" valueName="DisableShare">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="DisableService" class="Machine" displayName="$(string.DisableService)" explainText="$(string.DisableService_Help)" key="Software\Policies\setu" valueName="DisableService">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="DisableManual" class="Machine" displayName="$(string.DisableManual)" explainText="$(string.DisableManual_Help)" key="Software\Policies\setu" valueName="DisableManual">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="RequirePassword" class="Machine" displayName="$(string.RequirePassword)" explainText="$(string.RequirePassword_Help)" presentation="$(presentation.RequirePassword)" key="Software\Policies\setu" valueName="RequirePassword">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+      <elements>
+        <decimal id="MinPasswordLength" valueName="MinPasswordLength" minValue="0" maxValue="256" />
+      </elements>
+    </policy>
+    <policy name="RequirePersonalKeys" class="Machine" displayName="$(string.RequirePersonalKeys)" explainText="$(string.RequirePersonalKeys_Help)" key="Software\Policies\setu" valueName="RequirePersonalKeys">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="MaxClients" class="Machine" displayName="$(string.MaxClients)" explainText="$(string.MaxClients_Help)" presentation="$(presentation.MaxClients)" key="Software\Policies\setu">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <elements>
+        <decimal id="MaxClients" valueName="MaxClients" minValue="1" maxValue="16" required="true" />
+      </elements>
+    </policy>
+    <policy name="MaxShareDuration" class="Machine" displayName="$(string.MaxShareDuration)" explainText="$(string.MaxShareDuration_Help)" presentation="$(presentation.MaxShareDuration)" key="Software\Policies\setu">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <elements>
+        <text id="MaxShareDuration" valueName="MaxShareDuration" required="true" />
+      </elements>
+    </policy>
+    <policy name="MaxKeyValidity" class="Machine" displayName="$(string.MaxKeyValidity)" explainText="$(string.MaxKeyValidity_Help)" presentation="$(presentation.MaxKeyValidity)" key="Software\Policies\setu">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <elements>
+        <text id="MaxKeyValidity" valueName="MaxKeyValidity" required="true" />
+      </elements>
+    </policy>
+    <policy name="AllowedCommands" class="Machine" displayName="$(string.AllowedCommands)" explainText="$(string.AllowedCommands_Help)" presentation="$(presentation.AllowedCommands)" key="Software\Policies\setu\AllowedCommands">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <elements>
+        <list id="AllowedCommands" key="Software\Policies\setu\AllowedCommands" valuePrefix="" />
+      </elements>
+    </policy>
+    <policy name="AllowedRelays" class="Machine" displayName="$(string.AllowedRelays)" explainText="$(string.AllowedRelays_Help)" presentation="$(presentation.AllowedRelays)" key="Software\Policies\setu\AllowedRelays">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <elements>
+        <list id="AllowedRelays" key="Software\Policies\setu\AllowedRelays" valuePrefix="" />
+      </elements>
+    </policy>
+    <policy name="AllowedWebURLs" class="Machine" displayName="$(string.AllowedWebURLs)" explainText="$(string.AllowedWebURLs_Help)" presentation="$(presentation.AllowedWebURLs)" key="Software\Policies\setu\AllowedWebURLs">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <elements>
+        <list id="AllowedWebURLs" key="Software\Policies\setu\AllowedWebURLs" valuePrefix="" />
+      </elements>
+    </policy>
+    <policy name="Audit" class="Machine" displayName="$(string.Audit)" explainText="$(string.Audit_Help)" presentation="$(presentation.Audit)" key="Software\Policies\setu">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <elements>
+        <text id="AuditEndpoint" valueName="AuditEndpoint" required="true" />
+        <boolean id="AuditRequired" valueName="AuditRequired">
+          <trueValue><decimal value="1" /></trueValue>
+          <falseValue><decimal value="0" /></falseValue>
+        </boolean>
+        <text id="AuditInput" valueName="AuditInput" />
+        <text id="AuditCAFile" valueName="AuditCAFile" />
+        <text id="AuditCertFile" valueName="AuditCertFile" />
+        <text id="AuditKeyFile" valueName="AuditKeyFile" />
+        <boolean id="AuditInsecure" valueName="AuditInsecure">
+          <trueValue><decimal value="1" /></trueValue>
+          <falseValue><decimal value="0" /></falseValue>
+        </boolean>
+      </elements>
+    </policy>
+    <policy name="AuditHeaders" class="Machine" displayName="$(string.AuditHeaders)" explainText="$(string.AuditHeaders_Help)" presentation="$(presentation.AuditHeaders)" key="Software\Policies\setu\AuditHeaders">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <elements>
+        <list id="AuditHeaders" key="Software\Policies\setu\AuditHeaders" explicitValue="true" />
+      </elements>
+    </policy>
+    <policy name="AuditRedact" class="Machine" displayName="$(string.AuditRedact)" explainText="$(string.AuditRedact_Help)" presentation="$(presentation.AuditRedact)" key="Software\Policies\setu\AuditRedact">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <elements>
+        <list id="AuditRedact" key="Software\Policies\setu\AuditRedact" valuePrefix="" />
+      </elements>
+    </policy>
+    <policy name="ResourceAttributes" class="Machine" displayName="$(string.ResourceAttributes)" explainText="$(string.ResourceAttributes_Help)" presentation="$(presentation.ResourceAttributes)" key="Software\Policies\setu\ResourceAttributes">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <elements>
+        <list id="ResourceAttributes" key="Software\Policies\setu\ResourceAttributes" explicitValue="true" />
+      </elements>
+    </policy>
+  </policies>
+</policyDefinitions>

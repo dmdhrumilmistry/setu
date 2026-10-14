@@ -49,6 +49,9 @@ HKDF, PBKDF2, AES-GCM and HMAC in its standard library. The Rust options
 | `internal/rtc` | pion helpers: non-trickle offer/answer, ICE config validation |
 | `internal/link` | Invite links (secrets in the `#fragment`) and deflate+base64url copy/paste codes |
 | `internal/proto` | Wire messages shared with `web/js/*.mjs` |
+| `internal/audit` | OpenTelemetry audit log: rebuilds commands from keystrokes, redacts secrets, exports OTLP/HTTP log records through a bounded batch queue |
+| `internal/service` | The `setu service` supervisor: persistent profiles (keys, password verifiers), hot-reloaded config, restart with backoff, and the systemd / launchd / Task Scheduler autostart entries |
+| `internal/daemon` | Detached `setu share -d` processes and their registry |
 | `web/` | The static client: `crypto.mjs` mirrors `secure`/`link`, `nostr.mjs` mirrors `nostr`, `app.mjs` handles the UI, WebRTC and xterm.js |
 
 ## Protocol
@@ -108,6 +111,38 @@ host  → {t:"exit", code} | {t:"error", msg}
 
 `fpA` and `fpB` are the DTLS fingerprints from both SDPs. They feed the proof
 and the 6-digit **SAS** that both sides display.
+
+## Audit log
+
+The host hands every keystroke it writes to the PTY to a per-client
+`audit.Input`. That input is attached in the same critical section that
+marks the client ready, so nothing reaches the PTY unaudited. A small line
+editor model applies backspace, ^U, ^W and bracketed paste, and emits a
+`setu.command` record on Enter. On Unix the host reads the PTY's termios
+through the master: canonical mode with echo off means a password prompt, and
+that line is recorded as a marker. Line editors and TUIs turn canonical mode
+off, so their input is still recorded. Records then pass through regex
+redaction and an OpenTelemetry `BatchProcessor` (queue 8192, 1 s interval,
+gzip OTLP/HTTP). Export failures are reported at most once a minute.
+
+## Service
+
+`setu service run` is a single supervisor per state directory, guarded by a
+pid lock file. Every 2 s it checks `config.json` for changes, and it
+reconciles at least every 30 s:
+
+1. If the audit settings changed (or failed last time), it stops every
+   session, rebuilds the audit pipeline and fails closed if that does not
+   work.
+2. It computes the desired set (enabled, unexpired, valid profiles), keyed by
+   a hash of each profile.
+3. It stops the sessions that are no longer desired or whose hash changed,
+   and starts the missing ones.
+
+Each profile runs `host.Session` in-process, in its own goroutine. When the
+command exits, the supervisor restarts it with exponential backoff (1 s up to
+1 min, reset after a minute of uptime). A context deadline at `expires_at`
+stops serving the moment the keys expire.
 
 ## Implementation steps
 

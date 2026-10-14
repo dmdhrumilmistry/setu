@@ -1,0 +1,29 @@
+Windows Registry Editor Version 5.00
+
+; setu managed policy, same settings as ../policy.example.json.
+; Import as an administrator: reg import setu-policy.reg
+; Prefer setu.admx (Group Policy / Intune ADMX ingestion) for managed fleets.
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\setu]
+"DisableManual"=dword:00000001
+"RequirePassword"=dword:00000001
+"MinPasswordLength"=dword:0000000e
+"RequirePersonalKeys"=dword:00000001
+"MaxClients"=dword:00000002
+"MaxShareDuration"="8h"
+"MaxKeyValidity"="720h"
+"AuditEndpoint"="https://otel.example.com:4318/v1/logs"
+"AuditRequired"=dword:00000001
+"AuditInput"="lines"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\setu\AllowedCommands]
+"1"="claude"
+"2"="bash"
+"3"="pwsh"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\setu\AuditHeaders]
+"Authorization"="Bearer REPLACE_WITH_INGEST_ONLY_TOKEN"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\setu\ResourceAttributes]
+"deployment.environment"="corp"
+"device.owner.team"="platform"

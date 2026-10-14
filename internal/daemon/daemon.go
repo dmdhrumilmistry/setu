@@ -217,6 +217,9 @@ func Find(id string) (Info, error) {
 	return Info{}, fmt.Errorf("%q matches several sessions; use the full id", id)
 }
 
+// Alive reports whether a process with this pid is running.
+func Alive(pid int) bool { return alive(pid) }
+
 // Stop terminates a session and removes its directory.
 func Stop(s Info) error {
 	if err := terminate(s.PID); err != nil && alive(s.PID) {

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dmdhrumilmistry/setu/internal/audit"
 	"github.com/dmdhrumilmistry/setu/internal/proto"
 	"github.com/dmdhrumilmistry/setu/internal/rtc"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
@@ -36,6 +37,10 @@ type peer struct {
 	id    int
 	role  string
 	label string
+	// keyName is the personal key the client joined with ("" for the
+	// shared links). The host derives it from which key decrypted the join
+	// request, never from anything the client claims.
+	keyName string
 
 	pc *webrtc.PeerConnection
 	dc *webrtc.DataChannel
@@ -48,10 +53,12 @@ type peer struct {
 	sas      string
 	onClose  []func()
 	deadline *time.Timer
+	input    *audit.Input  // keystroke audit (control clients, once ready)
+	client   *audit.Client // audit identity, fixed once ready
 }
 
 // newPeer registers a peer after checking admission.
-func (s *Session) newPeer(role, label string) (*peer, error) {
+func (s *Session) newPeer(role, label, keyName string) (*peer, error) {
 	if err := s.admit(); err != nil {
 		return nil, err
 	}
@@ -66,7 +73,7 @@ func (s *Session) newPeer(role, label string) (*peer, error) {
 	}
 	s.mu.Lock()
 	s.nextID++
-	p := &peer{s: s, id: s.nextID, role: role, label: label, pc: pc, dc: dc, nonce: secure.RandomBytes(32)}
+	p := &peer{s: s, id: s.nextID, role: role, label: label, keyName: keyName, pc: pc, dc: dc, nonce: secure.RandomBytes(32)}
 	s.peers[p.id] = p
 	s.mu.Unlock()
 
@@ -130,18 +137,19 @@ func (p *peer) onOpen() {
 	if p.s.pwKey != nil {
 		hello.Auth = proto.AuthPassword
 		hello.Salt = p.s.pwSalt
-		hello.Iter = secure.PBKDF2Iterations
+		hello.Iter = p.s.pwIter
 	}
 	p.sendControl(hello)
 }
 
 func (p *peer) onMessage(msg webrtc.DataChannelMessage) {
 	p.mu.Lock()
-	st := p.state
+	st, input := p.state, p.input
 	p.mu.Unlock()
 
 	if !msg.IsString {
 		if st == stateReady && p.role == proto.RoleControl && len(msg.Data) <= maxInputFrame {
+			input.Write(msg.Data)
 			p.s.writeInput(msg.Data)
 		}
 		return
@@ -182,6 +190,7 @@ func (p *peer) activate() {
 		return
 	}
 	s := p.s
+	c := p.auditClient()
 	s.mu.Lock()
 	p.mu.Lock()
 	if p.state != stateApproving {
@@ -189,7 +198,13 @@ func (p *peer) activate() {
 		s.mu.Unlock()
 		return
 	}
+	// The input recorder is set in the same critical section as the state,
+	// so no keystroke can reach the PTY unaudited.
 	p.state = stateReady
+	p.client = &c
+	if p.role == proto.RoleControl {
+		p.input = s.audit.Input(c, s.passwordPrompt)
+	}
 	p.mu.Unlock()
 	s.failures = 0
 	p.sendControl(proto.Control{T: proto.CtlReady, V: proto.Version, Role: p.role, Cmd: s.commandLine(), Host: s.host, Cols: s.cols, Rows: s.rows})
@@ -201,7 +216,8 @@ func (p *peer) activate() {
 	}
 	s.mu.Unlock()
 	p.deadline.Stop()
-	s.logf("client #%d connected via %s, role=%s, verification code %s", p.id, p.label, p.role, p.sas)
+	s.audit.ClientConnected(c)
+	s.logf("client #%d (%s) connected via %s, role=%s, verification code %s", p.id, c.ActorName(), p.label, p.role, p.sas)
 	if s.cfg.Once {
 		s.stopAccepting("--once: first client connected")
 	}
@@ -232,8 +248,12 @@ func (p *peer) close(reason string) {
 	}
 	wasReady := p.state == stateReady
 	p.state = stateClosed
-	hooks := p.onClose
+	hooks, input, client := p.onClose, p.input, p.client
 	p.mu.Unlock()
+	input.Close()
+	if wasReady && client != nil {
+		p.s.audit.ClientDisconnected(*client, reason)
+	}
 
 	if p.deadline != nil {
 		p.deadline.Stop()
@@ -256,4 +276,18 @@ func (p *peer) addCloseHook(f func()) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.onClose = append(p.onClose, f)
+}
+
+// auditClient describes this peer for audit records, including the network
+// address of the selected ICE candidate once connected.
+func (p *peer) auditClient() audit.Client {
+	p.mu.Lock()
+	c := audit.Client{ID: p.id, Role: p.role, Via: p.label, KeyName: p.keyName, SAS: p.sas, Fingerprint: p.remoteFP}
+	p.mu.Unlock()
+	if sctp := p.pc.SCTP(); sctp != nil {
+		if pair, err := sctp.Transport().ICETransport().GetSelectedCandidatePair(); err == nil && pair != nil && pair.Remote != nil {
+			c.Address, c.Port, c.CandidateType = pair.Remote.Address, int(pair.Remote.Port), pair.Remote.Typ.String()
+		}
+	}
+	return c
 }

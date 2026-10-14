@@ -3,9 +3,11 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"time"
 
+	"github.com/dmdhrumilmistry/setu/internal/audit"
 	"github.com/dmdhrumilmistry/setu/internal/nostr"
 	"github.com/dmdhrumilmistry/setu/internal/proto"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
@@ -19,6 +21,7 @@ const (
 type roomRole struct {
 	room *secure.Room
 	role string
+	name string // personal key name; empty for the shared links
 }
 
 type nostrSignaler struct {
@@ -46,7 +49,7 @@ func (s *Session) serveNostr(ctx context.Context) error {
 		return err
 	}
 	ns := &nostrSignaler{s: s, kp: kp, rooms: map[string]roomRole{}, pending: map[string]*pendingJoin{}, seen: map[string]time.Time{}}
-	add := func(sec *secure.Secret, role string) error {
+	add := func(sec *secure.Secret, role, name string) error {
 		if sec == nil {
 			return nil
 		}
@@ -54,14 +57,23 @@ func (s *Session) serveNostr(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		ns.rooms[r.ID] = roomRole{room: r, role: role}
+		if _, dup := ns.rooms[r.ID]; dup {
+			return errors.New("the same invite key is configured twice")
+		}
+		ns.rooms[r.ID] = roomRole{room: r, role: role, name: name}
 		return nil
 	}
-	if err := add(s.cfg.ControlSecret, proto.RoleControl); err != nil {
+	if err := add(s.cfg.ControlSecret, proto.RoleControl, ""); err != nil {
 		return err
 	}
-	if err := add(s.cfg.ViewSecret, proto.RoleView); err != nil {
+	if err := add(s.cfg.ViewSecret, proto.RoleView, ""); err != nil {
 		return err
+	}
+	for i := range s.cfg.Keys {
+		k := &s.cfg.Keys[i]
+		if err := add(&k.Secret, k.Role, k.Name); err != nil {
+			return err
+		}
 	}
 	ids := make([]string, 0, len(ns.rooms))
 	for id := range ns.rooms {
@@ -143,10 +155,12 @@ func (ns *nostrSignaler) onHello(ctx context.Context, ev nostr.Event, rr roomRol
 	ns.lastHello = time.Now()
 	ns.mu.Unlock()
 
-	p, err := ns.s.newPeer(rr.role, "nostr")
+	p, err := ns.s.newPeer(rr.role, "nostr", rr.name)
 	if err != nil {
 		ns.reply(ev.PubKey, rr, proto.Signal{Type: proto.SigReject, SID: m.SID, Reason: err.Error()})
-		ns.s.logf("rejected a join request: %v", err)
+		who := audit.Client{Role: rr.role, Via: "nostr", KeyName: rr.name}
+		ns.s.audit.ClientRejected(who, err.Error())
+		ns.s.logf("rejected a join request from %s: %v", who.ActorName(), err)
 		return
 	}
 	ns.s.debugf("client #%d: join request (role=%s)", p.id, rr.role)

@@ -32,7 +32,7 @@ func coord(cols, rows int) windows.Coord {
 	return windows.Coord{X: int16(cols), Y: int16(rows)}
 }
 
-func startPTY(command []string, cols, rows int) (ptyProcess, error) {
+func startPTY(command []string, dir string, cols, rows int) (ptyProcess, error) {
 	if err := windows.NewLazySystemDLL("kernel32.dll").NewProc("CreatePseudoConsole").Find(); err != nil {
 		return nil, errors.New("this Windows version has no ConPTY (needs Windows 10 1809 or newer)")
 	}
@@ -62,14 +62,14 @@ func startPTY(command []string, cols, rows int) (ptyProcess, error) {
 	windows.CloseHandle(outW)
 
 	p := &conPTY{hpc: hpc, in: os.NewFile(uintptr(inW), "conpty-in"), out: os.NewFile(uintptr(outR), "conpty-out")}
-	if err := p.spawn(cmdLine); err != nil {
+	if err := p.spawn(cmdLine, dir); err != nil {
 		p.Close()
 		return nil, err
 	}
 	return p, nil
 }
 
-func (p *conPTY) spawn(cmdLine string) error {
+func (p *conPTY) spawn(cmdLine, dir string) error {
 	attrs, err := windows.NewProcThreadAttributeList(1)
 	if err != nil {
 		return err
@@ -95,10 +95,16 @@ func (p *conPTY) spawn(cmdLine string) error {
 	if err != nil {
 		return err
 	}
+	var dir16 *uint16
+	if dir != "" {
+		if dir16, err = windows.UTF16PtrFromString(dir); err != nil {
+			return err
+		}
+	}
 	var pi windows.ProcessInformation
 	err = windows.CreateProcess(nil, cmdLine16, nil, nil, false,
 		windows.EXTENDED_STARTUPINFO_PRESENT|windows.CREATE_UNICODE_ENVIRONMENT|windows.CREATE_SUSPENDED,
-		envBlock, nil, &si.StartupInfo, &pi)
+		envBlock, dir16, &si.StartupInfo, &pi)
 	if err != nil {
 		return fmt.Errorf("start %s: %w", cmdLine, err)
 	}

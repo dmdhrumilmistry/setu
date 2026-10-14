@@ -33,7 +33,7 @@ Open the link or scan the QR code and you are in the same terminal session.
 ## Install
 
 ```sh
-go install github.com/dmdhrumilmistry/setu/cmd/setu@latest   # Go 1.27+
+go install github.com/dmdhrumilmistry/setu/cmd/setu@latest   # Go 1.27.2+
 ```
 
 Release binaries for Linux, macOS and Windows are on the
@@ -100,6 +100,131 @@ state includes the invite links. The directory is removed when the share
 ends. The password is passed to the background process through a pipe, never
 on the command line or in the environment. `--manual` and `--approve` need an
 attached terminal, so they cannot be combined with `-d`.
+
+### Always-on shares (`setu service`)
+
+A *profile* is a command plus a persistent invite key. The setu service runs
+in the background, starts at login and serves every enabled profile whose
+keys have not expired. If a profile's command exits, the service restarts it,
+so the profile's link keeps working across reboots.
+
+```sh
+setu service add claude -- claude      # prompts for a password, prints the links once
+setu service install                   # start at login: systemd user unit / launchd agent / Task Scheduler
+setu service list                      # profiles, state, expiry
+setu service link claude               # show the links (+ QR) again
+setu service key add claude alice      # Alice's own link: the audit log names her
+setu service key list claude
+setu service key remove claude alice   # revoke only Alice's link
+setu service rotate claude             # new keys for everyone; the old links stop working immediately
+setu service disable claude            # stop serving without deleting (enable to resume)
+setu service remove claude
+setu service status                    # autostart, supervisor and audit state
+setu service uninstall
+```
+
+The running service picks up changes within a few seconds, so you don't need
+to restart it. Because these links live for a long time, profiles are
+stricter than `setu share`:
+
+* Give each person their own key (`--person alice` on `add`, or
+  `setu service key add`). The service tells people apart by which key
+  decrypted their join request, never by anything the client claims, so
+  audit records name them reliably. `--no-shared-key` leaves no shared,
+  anonymous control link at all. You can also revoke one person without
+  affecting anyone else.
+* A password (12+ characters) is required unless you pass `--no-password`.
+  The service stores only a PBKDF2 verifier, never the password.
+* Keys expire after `--valid-for` (default 90 days). `rotate` renews them.
+* `--max-clients` defaults to 1. `--once` and `--approve` are not available,
+  because nobody is at the host terminal to answer.
+* The command is resolved to an absolute path when you add the profile, so a
+  directory added to `PATH` later cannot substitute another program.
+
+State lives in `~/.config/setu/service/` (`%LOCALAPPDATA%\setu\service\` on
+Windows, which does not roam). `config.json` holds the keys, so it must be
+mode 0600. setu refuses to load it otherwise. Only one supervisor can serve a
+state directory at a time.
+
+### Audit logging (OpenTelemetry)
+
+setu can send an audit trail to an OpenTelemetry collector as OTLP/HTTP log
+records. You can route those records from the collector to Loki,
+Elasticsearch, Splunk, Datadog or any other OTLP backend.
+
+```sh
+export OTEL_EXPORTER_OTLP_HEADERS='Authorization=Bearer%20<token>'   # credentials: env only, never flags
+setu share --audit-endpoint https://otel.example.com:4318 --audit-required -- claude
+
+setu service audit --endpoint https://otel.example.com:4318          # for the service (sends a test record first)
+```
+
+| Event (`event.name`) | When |
+| --- | --- |
+| `setu.session.start` / `setu.session.end` | A share starts or ends (command, password on/off, exit code) |
+| `setu.client.connect` / `setu.client.disconnect` | A client joins or leaves (role, verification code, DTLS fingerprint, `client.address`) |
+| `setu.client.rejected` / `setu.client.auth_failure` / `setu.client.approval` | Admission decisions |
+| `setu.command` | A line someone submitted, attributed to the client (or `via=local` for the host terminal) |
+| `setu.input.control` | ^C, ^D or ^Z |
+
+Every record carries `setu.session.id`, and service records also carry
+`setu.profile`. Each `setu.command` record stands on its own and answers
+three questions:
+
+| | Attributes |
+| --- | --- |
+| **Who** ran it | `setu.actor` (for example `alice (client #2 from 203.0.113.7:51234, verification code 769 168)`), `setu.actor.name` (the personal key's owner, `host-terminal`, or `shared-control-link`), `client.address`/`client.port`, `setu.client.verification_code`, `setu.client.dtls_fingerprint`, and the account and machine it ran as (`user.name`, `host.name`) |
+| **When** | the record timestamp, plus `setu.command.submitted_at` (Enter pressed) and `setu.command.started_at` (first keystroke), in RFC 3339 UTC |
+| **What** | the record body and `setu.command.text`, plus `setu.session.command` (the program it was typed into, for example `bash` or `claude`) |
+
+`setu.actor.name` can only name a person if each person has their own key.
+With a shared link, every holder looks the same (`shared-control-link`), so
+use personal keys (`setu service key add`) when you need to know who typed a
+command.
+
+Commands are rebuilt from keystrokes, so they are best effort. setu sees what
+was typed, not what the shell finally ran. Lines that used arrow keys, history
+or tab completion are flagged `setu.input.edited=true`. Commands that an agent
+runs on its own are not keystrokes, so setu does not see them. Claude Code's
+own OpenTelemetry export covers those.
+
+Secrets are kept out of the log:
+
+* On Linux and macOS, lines typed while the terminal has echo off (sudo,
+  ssh and other password prompts) are replaced with a marker.
+* Common token formats (AWS, GitHub, Slack, Anthropic/OpenAI, JWTs, bearer
+  tokens, `password=`-style assignments, credentials in URLs, private keys
+  and setu invite keys) are redacted. Add your own patterns with
+  `--audit-redact <regex>`.
+* Use `--audit-input off` to record connections only.
+
+| Flag (`setu share`) | Meaning |
+| --- | --- |
+| `--audit` | Enable, using `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` / `OTEL_EXPORTER_OTLP_ENDPOINT`. |
+| `--audit-endpoint` | Collector URL (`/v1/logs` is added to a bare origin). Implies `--audit`. |
+| `--audit-required` | Fail closed: refuse to share unless the collector accepts a test record. |
+| `--audit-ca`, `--audit-cert`, `--audit-key` | Pin the collector's CA, and use mutual TLS. |
+| `--audit-insecure` | Allow plain `http://` to a host other than this machine (refused by default). |
+| `--audit-input` | `lines` (default) or `off`. |
+| `--audit-redact` | Extra regular expression to redact (repeatable). |
+
+### Managed devices (MDM)
+
+Organizations can deploy a **managed policy** through Intune, Jamf, Kandji,
+VaanarSena, Group Policy or configuration management. The policy can:
+
+* disable sharing or the service,
+* require passwords and personal keys,
+* cap clients and lifetimes,
+* restrict which programs, relays and web clients may be used,
+* force audit logging to the organization's collector.
+
+setu fails closed: if a policy is present but malformed or not
+admin-owned, setu will not run. `setu policy` shows what is in force.
+
+Ready-made artifacts are in [deploy/mdm](deploy/mdm): an ADMX/ADML template,
+a `.mobileconfig` profile, a `.reg` file, a Linux installer and a VaanarSena
+manifest.
 
 ### Join
 

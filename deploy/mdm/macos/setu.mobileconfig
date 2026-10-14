@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- setu managed policy, same settings as ../policy.example.json.
+     Install as a device (System) profile through your MDM; macOS then writes
+     /Library/Managed Preferences/io.github.dmdhrumilmistry.setu.plist.
+     Replace the two PayloadUUIDs if you fork this file. -->
+<plist version="1.0">
+<dict>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadType</key>
+      <string>io.github.dmdhrumilmistry.setu</string>
+      <key>PayloadIdentifier</key>
+      <string>io.github.dmdhrumilmistry.setu.policy</string>
+      <key>PayloadUUID</key>
+      <string>436D7F8D-5B6E-4759-963A-F4A9E132DDE3</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>PayloadDisplayName</key>
+      <string>setu policy</string>
+
+      <key>DisableManual</key>
+      <true/>
+      <key>RequirePassword</key>
+      <true/>
+      <key>MinPasswordLength</key>
+      <integer>14</integer>
+      <key>RequirePersonalKeys</key>
+      <true/>
+      <key>MaxClients</key>
+      <integer>2</integer>
+      <key>MaxShareDuration</key>
+      <string>8h</string>
+      <key>MaxKeyValidity</key>
+      <string>720h</string>
+      <key>AllowedCommands</key>
+      <array>
+        <string>claude</string>
+        <string>bash</string>
+        <string>pwsh</string>
+      </array>
+      <key>AuditEndpoint</key>
+      <string>https://otel.example.com:4318/v1/logs</string>
+      <key>AuditHeaders</key>
+      <dict>
+        <key>Authorization</key>
+        <string>Bearer REPLACE_WITH_INGEST_ONLY_TOKEN</string>
+      </dict>
+      <key>AuditRequired</key>
+      <true/>
+      <key>AuditInput</key>
+      <string>lines</string>
+      <key>ResourceAttributes</key>
+      <dict>
+        <key>deployment.environment</key>
+        <string>corp</string>
+        <key>device.owner.team</key>
+        <string>platform</string>
+      </dict>
+    </dict>
+  </array>
+  <key>PayloadDisplayName</key>
+  <string>setu managed policy</string>
+  <key>PayloadDescription</key>
+  <string>Guardrails and audit logging for setu terminal sharing.</string>
+  <key>PayloadIdentifier</key>
+  <string>io.github.dmdhrumilmistry.setu.profile</string>
+  <key>PayloadOrganization</key>
+  <string>Example Corp</string>
+  <key>PayloadScope</key>
+  <string>System</string>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadUUID</key>
+  <string>295EE93A-DBD6-4F5E-9797-D9A8884EB46F</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+  <key>PayloadRemovalDisallowed</key>
+  <true/>
+</dict>
+</plist>
