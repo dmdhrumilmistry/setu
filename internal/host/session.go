@@ -424,8 +424,9 @@ func (s *Session) authFailed(p *peer) {
 		s.failures = 0
 	}
 	s.mu.Unlock()
-	s.audit.AuthFailed(p.auditClient())
-	s.logf("WARNING: client #%d failed password authentication (%d recent, %d total)", p.id, fails, total)
+	who := p.auditClient()
+	s.audit.AuthFailed(who)
+	s.logf("WARNING: client #%d failed password authentication (%d recent, %d total): %s", p.id, fails, total, who.Actor())
 	if fails >= maxAuthFailures {
 		s.logf("WARNING: too many failures — refusing new clients for %s", lockoutDuration)
 	}

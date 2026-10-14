@@ -173,7 +173,9 @@ three questions:
 
 | | Attributes |
 | --- | --- |
-| **Who** ran it | `setu.actor` (for example `alice (client #2 from 203.0.113.7:51234, verification code 769 168)`), `setu.actor.name` (the personal key's owner, `host-terminal`, or `shared-control-link`), `client.address`/`client.port`, `setu.client.verification_code`, `setu.client.dtls_fingerprint`, and the account and machine it ran as (`user.name`, `host.name`) |
+| **Who** ran it | `setu.actor` (for example `alice (client #2 from 203.0.113.7:51234, device alice-laptop (linux/amd64, setu-cli), verification code 769 168)`), `setu.actor.name` (the personal key's owner, `host-terminal`, or `shared-control-link`), `setu.client.verification_code`, `setu.client.dtls_fingerprint`, and the account and machine it ran as (`user.name`, `host.name`, `host.id`) |
+| **From where** | `client.address`/`client.port` (the selected network path), `network.transport`, `setu.client.candidate_type`, `setu.client.public_addresses` (the client's public IP:port as its NAT presents it, which is still the real origin when the path is a TURN relay) and `setu.client.local_addresses` (LAN addresses; browsers hide these) |
+| **On what device** | `setu.client.device.*`: `app`, `version`, `id` (a random id kept per installation or browser, so you can tell a returning device from a new one), `os`, `os_version`, `arch`, `model`, `hostname`, `user`, `language`, `timezone`, `screen`, `mobile`, plus `user_agent.original`. These are **self-reported** (`setu.client.device.self_reported=true`): good for investigation, never used for access decisions. The host strips control characters and caps lengths, so a client cannot inject escape sequences or forge log lines. `setu join --anonymous` sends none of them. |
 | **When** | the record timestamp, plus `setu.command.submitted_at` (Enter pressed) and `setu.command.started_at` (first keystroke), in RFC 3339 UTC |
 | **What** | the record body and `setu.command.text`, plus `setu.session.command` (the program it was typed into, for example `bash` or `claude`) |
 

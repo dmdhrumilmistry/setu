@@ -425,6 +425,7 @@ func runJoin(args []string) (int, error) {
 	var relays listFlag
 	fs.Var(&relays, "relay", "override nostr relay URL(s)")
 	timeout := fs.Duration("timeout", 3*time.Minute, "give up connecting after this long")
+	anonymous := fs.Bool("anonymous", false, "do not send device details (hostname, OS user, device id) to the host; the host still logs your network address")
 	verbose := fs.Bool("verbose", false, "verbose logging")
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "Usage: setu join [flags] <link | k=… | offer code>\n\n")
@@ -439,6 +440,7 @@ func runJoin(args []string) (int, error) {
 		Relays:  relays,
 		Verbose: *verbose,
 		Timeout: *timeout,
+
 		Password: func() (string, error) {
 			if pw := os.Getenv("SETU_PASSWORD"); pw != "" {
 				return pw, nil
@@ -454,6 +456,9 @@ func runJoin(args []string) (int, error) {
 		ShowAnswer: func(code string) {
 			fmt.Fprintf(os.Stderr, "\nSend this answer code back to the host (they paste it into `setu share --manual`):\n\n%s\n\nWaiting for the host…\n", code)
 		},
+	}
+	if !*anonymous {
+		opt.Info = client.LocalInfo(versionString())
 	}
 	ctx, cancel := signalContext()
 	defer cancel()

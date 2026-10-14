@@ -41,6 +41,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dmdhrumilmistry/setu/internal/proto"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -469,9 +470,18 @@ type Client struct {
 	KeyName       string // the named invite key the client used, if any
 	SAS           string
 	Fingerprint   string // remote DTLS certificate fingerprint
-	Address       string
+	Address       string // remote end of the selected ICE path (a TURN server if relayed)
 	Port          int
 	CandidateType string // host, srflx, prflx or relay
+	Transport     string // udp or tcp
+	// PublicAddresses are the client's own public (server reflexive)
+	// addresses, from its SDP: the real network origin even when the
+	// selected path is a relay. LocalAddresses are its LAN addresses
+	// (browsers hide these behind mDNS names, which are skipped).
+	PublicAddresses []string
+	LocalAddresses  []string
+	// Device is what the client reported about itself (self-reported).
+	Device *proto.ClientInfo
 }
 
 // ActorName is the best identity setu has for a client: the name of the
@@ -489,13 +499,20 @@ func (c Client) ActorName() string {
 	return "shared-control-link"
 }
 
-// actor is a one-line, human-readable "who" for a record.
-func (c Client) actor() string {
+// Actor is a one-line, human-readable "who": name, network origin, device
+// and verification code.
+func (c Client) Actor() string {
 	s := c.ActorName()
 	if c.Via != "local" {
 		s += fmt.Sprintf(" (client #%d", c.ID)
-		if c.Address != "" {
+		switch {
+		case c.CandidateType == "relay" && len(c.PublicAddresses) > 0:
+			s += " from " + c.PublicAddresses[0] + " via TURN relay"
+		case c.Address != "":
 			s += fmt.Sprintf(" from %s", net.JoinHostPort(c.Address, fmt.Sprint(c.Port)))
+		}
+		if d := c.Device.Summary(); d != "" {
+			s += ", device " + d
 		}
 		if c.SAS != "" {
 			s += ", verification code " + c.SAS
@@ -507,7 +524,7 @@ func (c Client) actor() string {
 
 func (c Client) attrs() []attribute.KeyValue {
 	a := []attribute.KeyValue{
-		attribute.String("setu.actor", c.actor()),
+		attribute.String("setu.actor", c.Actor()),
 		attribute.String("setu.actor.name", c.ActorName()),
 		attribute.Int("setu.client.id", c.ID),
 		attribute.String("setu.client.role", c.Role),
@@ -527,6 +544,48 @@ func (c Client) attrs() []attribute.KeyValue {
 	}
 	if c.CandidateType != "" {
 		a = append(a, attribute.String("setu.client.candidate_type", c.CandidateType))
+	}
+	if c.Transport != "" {
+		a = append(a, attribute.String("network.transport", c.Transport))
+	}
+	if len(c.PublicAddresses) > 0 {
+		a = append(a, attribute.StringSlice("setu.client.public_addresses", c.PublicAddresses))
+	}
+	if len(c.LocalAddresses) > 0 {
+		a = append(a, attribute.StringSlice("setu.client.local_addresses", c.LocalAddresses))
+	}
+	return append(a, deviceAttrs(c.Device)...)
+}
+
+// deviceAttrs records the client's self-reported device details. They help
+// an investigator, but a client can send anything, so they are flagged.
+func deviceAttrs(d *proto.ClientInfo) []attribute.KeyValue {
+	if d == nil {
+		return nil
+	}
+	a := []attribute.KeyValue{
+		attribute.Bool("setu.client.device.self_reported", true),
+		attribute.Bool("setu.client.device.mobile", d.Mobile),
+	}
+	for _, f := range []struct{ k, v string }{
+		{"setu.client.device.summary", d.Summary()},
+		{"setu.client.device.app", d.App},
+		{"setu.client.device.version", d.Version},
+		{"setu.client.device.id", d.DeviceID},
+		{"setu.client.device.os", d.OS},
+		{"setu.client.device.os_version", d.OSVersion},
+		{"setu.client.device.arch", d.Arch},
+		{"setu.client.device.model", d.Model},
+		{"setu.client.device.hostname", d.Hostname},
+		{"setu.client.device.user", d.User},
+		{"setu.client.device.language", d.Language},
+		{"setu.client.device.timezone", d.Timezone},
+		{"setu.client.device.screen", d.Screen},
+		{"user_agent.original", d.UserAgent},
+	} {
+		if f.v != "" {
+			a = append(a, attribute.String(f.k, f.v))
+		}
 	}
 	return a
 }
