@@ -126,6 +126,52 @@ async function onMessage(e) {
   }
 }
 
+// A random id kept in this browser, so the host's audit log can tell a
+// returning device from a new one. Not derived from any hardware id.
+function deviceId() {
+  try {
+    let id = localStorage.getItem('setu-device-id');
+    if (!/^[0-9a-f]{32}$/.test(id || '')) {
+      id = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+      localStorage.setItem('setu-device-id', id);
+    }
+    return id;
+  } catch {
+    return undefined; // storage blocked (private mode): still join
+  }
+}
+
+// clientInfo describes this device to the host's audit log. It travels only
+// inside the encrypted data channel. Everything is best effort.
+async function clientInfo() {
+  const info = {
+    app: 'setu-web',
+    device_id: deviceId(),
+    user_agent: navigator.userAgent,
+    language: navigator.language,
+    screen: `${screen.width}x${screen.height}@${window.devicePixelRatio || 1}`,
+  };
+  try { info.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { /* ignore */ }
+  const ua = navigator.userAgentData;
+  if (ua) {
+    info.os = ua.platform;
+    info.mobile = !!ua.mobile;
+    try {
+      const hints = await Promise.race([
+        ua.getHighEntropyValues(['model', 'platformVersion', 'architecture']),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 500)),
+      ]);
+      info.model = hints.model || undefined;
+      info.os_version = hints.platformVersion || undefined;
+      info.arch = hints.architecture || undefined;
+    } catch { /* hints unavailable */ }
+  } else {
+    info.os = navigator.platform;
+    info.mobile = /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
+  }
+  return info;
+}
+
 async function onHello(m) {
   if (m.v !== PROTO_VERSION) return fail(`Protocol mismatch (host v${m.v}, page v${PROTO_VERSION}). Update setu or the page.`);
   const localFP = C.fingerprint(state.pc.localDescription.sdp);
@@ -135,6 +181,7 @@ async function onHello(m) {
   $('sas-box').hidden = false;
   step(`Verification code ${code} — the host terminal prints the same code when you join.`, 'ok');
   const nonce = C.b64Decode(m.nonce);
+  const client = await clientInfo();
   if (m.auth === 'password') {
     setStatus('password required', 'warn');
     $('pw-form').hidden = false;
@@ -148,13 +195,13 @@ async function onHello(m) {
       try {
         const key = await C.passwordKey(pw, C.b64Decode(m.salt), m.iter);
         const proof = await C.authProof(key, nonce, localFP, remoteFP);
-        sendCtl({ t: 'auth', proof: C.b64Encode(proof) });
+        sendCtl({ t: 'auth', proof: C.b64Encode(proof), client });
       } catch (err) {
         fail(String(err.message || err));
       }
     };
   } else {
-    sendCtl({ t: 'auth' });
+    sendCtl({ t: 'auth', client });
   }
 }
 

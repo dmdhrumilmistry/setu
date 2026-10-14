@@ -19,6 +19,7 @@ import (
 	"github.com/dmdhrumilmistry/setu/internal/nostr/relaytest"
 	"github.com/dmdhrumilmistry/setu/internal/proto"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
+	logspb "go.opentelemetry.io/proto/otlp/logs/v1"
 )
 
 // echoCommand prints READY, then echoes every input line as "got:<line>".
@@ -289,7 +290,15 @@ func TestAuditPersonalKey(t *testing.T) {
 		c.Keys = []host.Key{{Name: "alice", Role: proto.RoleControl, Secret: alice}}
 	})
 	before := time.Now()
-	c, err := dial(t, ctx, link.Build("", link.Invite{Secret: alice.String(), Relays: []string{r.URL()}}), "")
+	c, err := client.Dial(ctx, link.Build("", link.Invite{Secret: alice.String(), Relays: []string{r.URL()}}), client.Options{
+		Timeout: 30 * time.Second,
+		Logf:    t.Logf,
+		Info: &proto.ClientInfo{
+			App: "setu-cli", Version: "e2e", DeviceID: "0123456789abcdef0123456789abcdef",
+			OS: "linux", Arch: "arm64", User: "alice",
+			Hostname: "alice-laptop\x1b[2J\n[setu] forged line", // must be neutralised
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -334,6 +343,37 @@ func TestAuditPersonalKey(t *testing.T) {
 	if got := audittest.Attr(col.Events("setu.client.connect")[0], "setu.actor.name"); got != "alice" {
 		t.Errorf("connect record actor %q", got)
 	}
+	// Where from, and on what device.
+	if audittest.Attr(rec, "client.port") == "" || audittest.Attr(rec, "network.transport") == "" || audittest.Attr(rec, "setu.client.candidate_type") == "" {
+		t.Errorf("network attributes missing: %v", rec.Attributes)
+	}
+	if !hasAttr(rec, "setu.client.local_addresses") {
+		t.Error("client's advertised addresses not recorded")
+	}
+	for k, want := range map[string]string{
+		"setu.client.device.app":           "setu-cli",
+		"setu.client.device.id":            "0123456789abcdef0123456789abcdef",
+		"setu.client.device.os":            "linux",
+		"setu.client.device.user":          "alice",
+		"setu.client.device.hostname":      "alice-laptop[2J[setu] forged line",
+		"setu.client.device.self_reported": "true",
+	} {
+		if got := audittest.Attr(rec, k); got != want {
+			t.Errorf("%s = %q, want %q", k, got, want)
+		}
+	}
+	if a := audittest.Attr(rec, "setu.actor"); !strings.Contains(a, "device alice-laptop") || strings.ContainsAny(a, "\x1b\n") {
+		t.Errorf("setu.actor = %q", a)
+	}
+}
+
+func hasAttr(r *logspb.LogRecord, key string) bool {
+	for _, kv := range r.Attributes {
+		if kv.Key == key {
+			return true
+		}
+	}
+	return false
 }
 
 // TestAuditEchoOff checks that a line typed at a password prompt (canonical

@@ -2,7 +2,14 @@
 // the WebRTC data channel. The JavaScript client in web/app.js mirrors these.
 package proto
 
-// Version of the data channel protocol.
+import (
+	"strings"
+	"unicode"
+	"unicode/utf8"
+)
+
+// Version of the data channel protocol. Adding optional fields (such as
+// Control.Client) does not change it: both sides ignore unknown fields.
 const Version = 1
 
 // DataChannelLabel is the label of the single reliable, ordered channel.
@@ -75,4 +82,101 @@ type Control struct {
 	Host  string `json:"host,omitempty"`
 	Msg   string `json:"msg,omitempty"`
 	Code  *int   `json:"code,omitempty"`
+
+	// Client describes the joining device (sent with "auth"). It is
+	// self-reported: the host records it for auditing but never uses it
+	// for access decisions.
+	Client *ClientInfo `json:"client,omitempty"`
+}
+
+const maxInfoField = 256
+
+// Sanitized returns a copy safe to log and print: control characters
+// (terminal escape sequences, newlines that could forge log lines) are
+// removed, fields are length capped, and the device id is restricted to
+// [A-Za-z0-9_-]. A nil or empty info returns nil.
+func (c *ClientInfo) Sanitized() *ClientInfo {
+	if c == nil {
+		return nil
+	}
+	clean := func(s string, max int) string {
+		var b strings.Builder
+		n := 0
+		for _, r := range strings.TrimSpace(s) {
+			if n >= max {
+				break
+			}
+			if unicode.IsControl(r) || r == utf8.RuneError || unicode.Is(unicode.Bidi_Control, r) {
+				continue
+			}
+			b.WriteRune(r)
+			n++
+		}
+		return b.String()
+	}
+	id := clean(c.DeviceID, 64)
+	for _, r := range id {
+		if !(r == '-' || r == '_' || unicode.IsDigit(r) || (r < 128 && unicode.IsLetter(r))) {
+			id = ""
+			break
+		}
+	}
+	out := &ClientInfo{
+		App: clean(c.App, 32), Version: clean(c.Version, 128), DeviceID: id,
+		OS: clean(c.OS, 64), OSVersion: clean(c.OSVersion, 64), Arch: clean(c.Arch, 32),
+		Model: clean(c.Model, 128), Hostname: clean(c.Hostname, 255), User: clean(c.User, 128),
+		UserAgent: clean(c.UserAgent, maxInfoField), Mobile: c.Mobile,
+		Language: clean(c.Language, 35), Timezone: clean(c.Timezone, 64), Screen: clean(c.Screen, 32),
+	}
+	if *out == (ClientInfo{}) {
+		return nil
+	}
+	return out
+}
+
+// Summary is a short human description, e.g. "laptop (linux/amd64, setu-cli)".
+func (c *ClientInfo) Summary() string {
+	if c == nil {
+		return ""
+	}
+	name := c.Hostname
+	if name == "" {
+		name = c.Model
+	}
+	var parts []string
+	if os := strings.TrimSpace(c.OS + " " + c.OSVersion); os != "" {
+		if c.Arch != "" {
+			os += "/" + c.Arch
+		}
+		parts = append(parts, os)
+	}
+	if c.App != "" {
+		parts = append(parts, c.App)
+	}
+	switch {
+	case name != "" && len(parts) > 0:
+		return name + " (" + strings.Join(parts, ", ") + ")"
+	case name != "":
+		return name
+	}
+	return strings.Join(parts, ", ")
+}
+
+// ClientInfo is what a client reports about its device. Every field is
+// optional; hosts ignore fields they do not know.
+type ClientInfo struct {
+	App       string `json:"app,omitempty"`       // "setu-cli" or "setu-web"
+	Version   string `json:"version,omitempty"`   // client version
+	DeviceID  string `json:"device_id,omitempty"` // random id persisted on the device / browser
+	OS        string `json:"os,omitempty"`        // e.g. linux, windows, Android
+	OSVersion string `json:"os_version,omitempty"`
+	Arch      string `json:"arch,omitempty"`
+	Model     string `json:"model,omitempty"` // device model (UA client hints)
+	Hostname  string `json:"hostname,omitempty"`
+	User      string `json:"user,omitempty"` // OS account on the client device
+	UserAgent string `json:"user_agent,omitempty"`
+	Mobile    bool   `json:"mobile,omitempty"`
+	Language  string `json:"language,omitempty"`
+	Timezone  string `json:"timezone,omitempty"`
+	Screen    string `json:"screen,omitempty"` // WxH@ratio
 }

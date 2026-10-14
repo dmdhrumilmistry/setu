@@ -29,6 +29,9 @@ type Options struct {
 	Logf       func(format string, args ...any)
 	Verbose    bool
 	Timeout    time.Duration // signaling + connect timeout
+	// Info describes this device to the host's audit log (see LocalInfo);
+	// nil sends nothing.
+	Info *proto.ClientInfo
 }
 
 // ErrDetached is returned when the user typed the ~. escape.
@@ -352,6 +355,7 @@ func handshake(ctx context.Context, p *peerConn, opt Options) (*Conn, error) {
 				}
 				opt.Logf("connected peer-to-peer. Verification code: %s (should match the host)", sas)
 				auth := proto.Control{T: proto.CtlAuth}
+				auth.Client = opt.Info
 				if c.Auth == proto.AuthPassword {
 					if opt.Password == nil {
 						return nil, errors.New("host requires a password")

@@ -45,16 +45,19 @@ type peer struct {
 	pc *webrtc.PeerConnection
 	dc *webrtc.DataChannel
 
-	mu       sync.Mutex
-	state    peerState
-	nonce    []byte
-	localFP  string
-	remoteFP string
-	sas      string
-	onClose  []func()
-	deadline *time.Timer
-	input    *audit.Input  // keystroke audit (control clients, once ready)
-	client   *audit.Client // audit identity, fixed once ready
+	mu          sync.Mutex
+	state       peerState
+	nonce       []byte
+	localFP     string
+	remoteFP    string
+	sas         string
+	onClose     []func()
+	deadline    *time.Timer
+	publicAddrs []string          // from the client's SDP answer
+	localAddrs  []string          // from the client's SDP answer
+	info        *proto.ClientInfo // self-reported device details (sanitized)
+	input       *audit.Input      // keystroke audit (control clients, once ready)
+	client      *audit.Client     // audit identity, fixed once ready
 }
 
 // newPeer registers a peer after checking admission.
@@ -118,8 +121,10 @@ func (p *peer) acceptAnswer(sdp string) error {
 	if err != nil {
 		return err
 	}
+	public, local := rtc.Addresses(sdp)
 	p.mu.Lock()
 	p.localFP, p.remoteFP = localFP, remoteFP
+	p.publicAddrs, p.localAddrs = public, local
 	p.sas = secure.SAS(localFP, remoteFP)
 	p.mu.Unlock()
 	return p.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: sdp})
@@ -165,6 +170,7 @@ func (p *peer) onMessage(msg webrtc.DataChannelMessage) {
 		}
 		p.mu.Lock()
 		p.state = stateApproving
+		p.info = c.Client.Sanitized() // before the password check, so failures are attributed too
 		p.mu.Unlock()
 		if p.s.pwKey != nil {
 			want := secure.AuthProof(p.s.pwKey, p.nonce, p.localFP, p.remoteFP)
@@ -217,7 +223,7 @@ func (p *peer) activate() {
 	s.mu.Unlock()
 	p.deadline.Stop()
 	s.audit.ClientConnected(c)
-	s.logf("client #%d (%s) connected via %s, role=%s, verification code %s", p.id, c.ActorName(), p.label, p.role, p.sas)
+	s.logf("client #%d connected via %s, role=%s: %s", p.id, p.label, p.role, c.Actor())
 	if s.cfg.Once {
 		s.stopAccepting("--once: first client connected")
 	}
@@ -282,11 +288,13 @@ func (p *peer) addCloseHook(f func()) {
 // address of the selected ICE candidate once connected.
 func (p *peer) auditClient() audit.Client {
 	p.mu.Lock()
-	c := audit.Client{ID: p.id, Role: p.role, Via: p.label, KeyName: p.keyName, SAS: p.sas, Fingerprint: p.remoteFP}
+	c := audit.Client{ID: p.id, Role: p.role, Via: p.label, KeyName: p.keyName, SAS: p.sas, Fingerprint: p.remoteFP,
+		PublicAddresses: p.publicAddrs, LocalAddresses: p.localAddrs, Device: p.info}
 	p.mu.Unlock()
 	if sctp := p.pc.SCTP(); sctp != nil {
 		if pair, err := sctp.Transport().ICETransport().GetSelectedCandidatePair(); err == nil && pair != nil && pair.Remote != nil {
 			c.Address, c.Port, c.CandidateType = pair.Remote.Address, int(pair.Remote.Port), pair.Remote.Typ.String()
+			c.Transport = pair.Remote.Protocol.String()
 		}
 	}
 	return c
