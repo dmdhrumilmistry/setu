@@ -141,7 +141,7 @@ func runShare(args []string) (int, error) {
 	auditOn := fs.Bool("audit", false, "send an audit log (connections and typed commands) to an OpenTelemetry collector; see -audit-* flags")
 	auditOpts := addAuditFlags(fs, "audit-", false)
 	var background bool
-	fs.BoolVar(&background, "background", false, "run the share in the background and return to the shell (see `setu ps`)")
+	fs.BoolVar(&background, "background", false, "run the share in the background and return to the shell (see 'setu ps')")
 	fs.BoolVar(&background, "d", false, "shorthand for --background")
 	// Internal: set by --background on the detached child process.
 	sessionDir := fs.String("session-dir", "", "internal: background session directory")

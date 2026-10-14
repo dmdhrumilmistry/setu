@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Claude Code from your phone - setu docs</title>
+<meta name="description" content="setu was built for this: start Claude Code (or another agent) on your workstation, then follow along and answer its questions from your phone.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/theme.js"></script>
+<script src="assets/docs.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button class="icon-btn nav-toggle" id="nav-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" width="26" height="26"><span>setu</span><small>docs</small></a>
+  <div class="search" role="search">
+    <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input id="search" type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false">
+    <kbd class="search-key" aria-hidden="true">/</kbd>
+    <ul id="search-results" class="search-results" role="listbox" aria-label="Search results" hidden></ul>
+  </div>
+  <nav class="toplinks" aria-label="Site">
+    <a href="../">Web client</a>
+    <a href="https://github.com/dmdhrumilmistry/setu">GitHub</a>
+  </nav>
+  <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <svg class="sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+</header>
+<div class="layout">
+  <nav id="sidebar" class="sidebar" aria-label="Documentation">
+    <div class="nav-section">
+      <p class="nav-title">Get started</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="quickstart.html">Quick start</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Guides</p>
+      <ul>
+        <li><a href="sharing.html">Sharing a terminal</a></li>
+        <li><a href="joining.html">Joining a session</a></li>
+        <li><a href="claude-code.html" aria-current="page">Claude Code from your phone</a></li>
+        <li><a href="service.html">Always-on service</a></li>
+        <li><a href="audit.html">Audit logging</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Administration</p>
+      <ul>
+        <li><a href="mdm.html">MDM and managed policy</a></li>
+        <li><a href="security.html">Security model</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Reference</p>
+      <ul>
+        <li><a href="cli.html">CLI reference</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting and FAQ</a></li>
+        <li><a href="design.html">Design and protocol</a></li>
+      </ul>
+    </div>
+    
+  </nav>
+  <div class="scrim" id="scrim" hidden></div>
+  <main id="main" tabindex="-1">
+    <article class="content">
+<h1 id="claude-code-from-your-phone">Claude Code from your phone</h1>
+<p>setu was built for this: start Claude Code (or another agent) on your
+workstation, then follow along and answer its questions from your phone.</p>
+<h2 id="the-quick-way">The quick way</h2>
+<pre><code class="language-sh">cd ~/projects/my-app
+setu share --password -- claude
+</code></pre>
+<p>Scan the QR code, enter the password, check the verification code, and you see
+Claude Code exactly as it looks on your computer. Use the compose box (pencil
+key) to write prompts: multi-line text arrives as one paste, so Claude Code
+treats it as a single message.</p>
+<h2 id="keep-it-running-while-you-are-away">Keep it running while you are away</h2>
+<p>Run the share in the background so you can close the terminal:</p>
+<pre><code class="language-sh">setu share -d --password --expire 8h -- claude
+setu ps          # later: is it still running?
+setu stop &lt;id&gt;   # done for the day
+</code></pre>
+<p>Or make it permanent with the <a href="service.html">Always-on service</a>, which restarts
+Claude Code if it exits and keeps the same link across reboots:</p>
+<pre><code class="language-sh">setu service add --person me --dir ~/projects/my-app claude -- claude
+setu service install
+</code></pre>
+<h2 id="a-safer-setup">A safer setup</h2>
+<p>An agent with a shell on your machine is powerful, and a setu link gives that
+power to whoever holds it.</p>
+<ul>
+<li><strong>Always set a password</strong> for anything that lives longer than a few minutes.</li>
+<li><strong>Prefer short lifetimes</strong>: <code>--expire 8h</code> for ad-hoc shares,
+<code>--valid-for 168h</code> for service profiles.</li>
+<li><strong>Use <code>--max-clients 1</code></strong> so a second device cannot join unnoticed.</li>
+<li><strong>Check the verification code</strong> every time you connect.</li>
+<li><strong>Run the agent with the permissions you would grant it locally</strong>, for
+example in a container, a separate user account, or with Claude Code's own
+permission settings.</li>
+<li><strong>Turn on <a href="audit.html">audit logging</a></strong> to keep a record of what was typed and
+from where. setu records the prompts and commands people type; Claude Code's
+own OpenTelemetry export records what the agent then ran.</li>
+</ul>
+<h2 id="tips">Tips</h2>
+<ul>
+<li>Lost the link? <code>setu link &lt;id&gt;</code> for background shares, or
+<code>setu service link &lt;profile&gt;</code> for the service.</li>
+<li>The web client keeps the terminal size of your phone; the latest control
+client to resize wins.</li>
+<li>If your phone sleeps, reopen the link: the replay buffer shows you the last
+256 KiB of output.</li>
+</ul>
+
+    </article>
+    <nav class="pager" aria-label="Previous and next page">
+      <a class="prev" href="joining.html"><span>Previous</span>Joining a session</a>
+      <a class="next" href="service.html"><span>Next</span>Always-on service</a>
+    </nav>
+    <footer class="footer">
+      <a href="https://github.com/dmdhrumilmistry/setu/edit/main/docs/src/claude-code.md">Edit this page on GitHub</a>
+      <span>setu is open source. Peer-to-peer terminal sharing with no server of your own.</span>
+    </footer>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    <p class="toc-title">On this page</p>
+    <ul>
+      <li class="l2"><a href="#the-quick-way">The quick way</a></li>
+      <li class="l2"><a href="#keep-it-running-while-you-are-away">Keep it running while you are away</a></li>
+      <li class="l2"><a href="#a-safer-setup">A safer setup</a></li>
+      <li class="l2"><a href="#tips">Tips</a></li>
+    </ul>
+  </aside>
+</div>
+</body>
+</html>

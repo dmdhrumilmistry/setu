@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Security model - setu docs</title>
+<meta name="description" content="setu gives another device a live shell on your machine, often one running an AI agent with access to your files and credentials. Treat every invite link like ...">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/theme.js"></script>
+<script src="assets/docs.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button class="icon-btn nav-toggle" id="nav-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" width="26" height="26"><span>setu</span><small>docs</small></a>
+  <div class="search" role="search">
+    <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input id="search" type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false">
+    <kbd class="search-key" aria-hidden="true">/</kbd>
+    <ul id="search-results" class="search-results" role="listbox" aria-label="Search results" hidden></ul>
+  </div>
+  <nav class="toplinks" aria-label="Site">
+    <a href="../">Web client</a>
+    <a href="https://github.com/dmdhrumilmistry/setu">GitHub</a>
+  </nav>
+  <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <svg class="sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+</header>
+<div class="layout">
+  <nav id="sidebar" class="sidebar" aria-label="Documentation">
+    <div class="nav-section">
+      <p class="nav-title">Get started</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="quickstart.html">Quick start</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Guides</p>
+      <ul>
+        <li><a href="sharing.html">Sharing a terminal</a></li>
+        <li><a href="joining.html">Joining a session</a></li>
+        <li><a href="claude-code.html">Claude Code from your phone</a></li>
+        <li><a href="service.html">Always-on service</a></li>
+        <li><a href="audit.html">Audit logging</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Administration</p>
+      <ul>
+        <li><a href="mdm.html">MDM and managed policy</a></li>
+        <li><a href="security.html" aria-current="page">Security model</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Reference</p>
+      <ul>
+        <li><a href="cli.html">CLI reference</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting and FAQ</a></li>
+        <li><a href="design.html">Design and protocol</a></li>
+      </ul>
+    </div>
+    
+  </nav>
+  <div class="scrim" id="scrim" hidden></div>
+  <main id="main" tabindex="-1">
+    <article class="content">
+<h1 id="security-model">Security model</h1>
+<p>setu gives another device <strong>a live shell on your machine</strong>, often one running an
+AI agent with access to your files and credentials. Treat every invite link like
+an SSH private key.</p>
+<h2 id="what-protects-you">What protects you</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>How</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Invite secret</td>
+<td>256 random bits per share, carried only in the URL fragment (<code>#k=...</code>), which browsers never send to the page's web server. The web page removes it from the address bar and history as soon as it loads.</td>
+</tr>
+<tr>
+<td>Signaling privacy</td>
+<td>Every relay message is AES-256-GCM encrypted with a key derived (HKDF-SHA256) from the secret. Relays see a random room id, throwaway public keys, message sizes and timing, nothing else.</td>
+</tr>
+<tr>
+<td>Signaling integrity</td>
+<td>Each message is bound to its room, sender and recipient; nostr events are signed. The host drops stale (more than 2 minutes), replayed and rate-limited messages, and answers from any key other than the one that asked to join.</td>
+</tr>
+<tr>
+<td>Transport</td>
+<td>WebRTC DTLS 1.2+ end to end between the two peers. Nothing else carries terminal bytes. STUN only learns your public address.</td>
+</tr>
+<tr>
+<td>Verification code</td>
+<td>Both sides show a 6-digit code derived from both DTLS certificates. Different codes mean someone is in the middle.</td>
+</tr>
+<tr>
+<td>Password</td>
+<td>A second factor. The host sends a salt, a PBKDF2-SHA256 work factor (200,000 iterations; clients refuse less than 100,000) and a fresh nonce; the client answers with an HMAC bound to both certificates. The password never crosses the wire and a proof cannot be replayed. 5 failures lock the share for 10 minutes; 20 disable the invite.</td>
+</tr>
+<tr>
+<td>Roles</td>
+<td>View-only links are separate secrets. The host decides each client's role from which secret decrypted the request, never from what the client claims.</td>
+</tr>
+<tr>
+<td>Admission</td>
+<td><code>--max-clients</code>, <code>--once</code>, <code>--expire</code>, <code>--approve</code>. Handshakes must finish within 2 minutes, and at most 3 can be pending.</td>
+</tr>
+<tr>
+<td>Hygiene</td>
+<td><code>SETU_PASSWORD</code>, <code>SETU_TURN_PASSWORD</code> and audit collector headers are removed from the environment before the shared command starts. Link files and session directories are owner-only. Slow clients are disconnected after 8 MiB of backlog.</td>
+</tr>
+<tr>
+<td>Web client</td>
+<td>No third-party code at runtime: libraries are vendored and checksum-pinned, a strict Content Security Policy allows only same-origin scripts, and the page refuses to run in a frame.</td>
+</tr>
+<tr>
+<td>Personal keys</td>
+<td>With the <a href="service.html">service</a>, each person can have their own key; identity comes from which key decrypted the request.</td>
+</tr>
+<tr>
+<td>Audit log</td>
+<td>Connections, admission decisions and submitted commands go to your collector over TLS, off the machine within about a second. See <a href="audit.html">Audit logging</a>.</td>
+</tr>
+<tr>
+<td>Managed policy</td>
+<td>Administrators can enforce requirements on every device; a broken or tampered policy fails closed. See <a href="mdm.html">MDM and managed policy</a>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="what-does-not-protect-you">What does not protect you</h2>
+<ul>
+<li><strong>Anyone with a control link (and the password, if set) gets a shell.</strong> Do
+not paste links into chats, issue trackers or AI prompts. Use a password for
+anything long-lived, and <code>--once</code> or <code>--expire</code> for one-off sharing.</li>
+<li><strong>The hosted web page is code you trust.</strong> Whoever controls the GitHub Pages
+site could ship JavaScript that leaks secrets. If that matters, self-host
+<code>web/</code>, pin a fork, or use <code>setu join</code> from a terminal.</li>
+<li><strong>A malicious host can send terminal escape sequences</strong> to a <code>setu join</code>
+client, as with ssh. Join only hosts you trust.</li>
+<li><strong>Metadata.</strong> Relays and STUN servers learn your IP address and when you
+connect. The host learns your network address and, unless you use
+<code>--anonymous</code>, your device details.</li>
+<li><strong>Availability.</strong> Relays can drop messages. That causes a failed connection,
+never a compromise. Use <code>--relay</code> to pick relays, or <code>--manual</code> to use none.</li>
+<li><strong>The audit log is evidence, not prevention.</strong> Commands are rebuilt from
+keystrokes; the agent's own actions are not keystrokes; redaction is pattern
+based; and on Windows password prompts rely on redaction alone.</li>
+<li><strong>The agent itself.</strong> setu shares the terminal exactly as it is. Run agents
+with the permissions you would grant them locally.</li>
+</ul>
+<h2 id="reporting-a-vulnerability">Reporting a vulnerability</h2>
+<p>Please open a private security advisory on GitHub (<strong>Security &gt; Report a
+vulnerability</strong>) rather than a public issue.</p>
+
+    </article>
+    <nav class="pager" aria-label="Previous and next page">
+      <a class="prev" href="mdm.html"><span>Previous</span>MDM and managed policy</a>
+      <a class="next" href="cli.html"><span>Next</span>CLI reference</a>
+    </nav>
+    <footer class="footer">
+      <a href="https://github.com/dmdhrumilmistry/setu/edit/main/docs/src/security.md">Edit this page on GitHub</a>
+      <span>setu is open source. Peer-to-peer terminal sharing with no server of your own.</span>
+    </footer>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    <p class="toc-title">On this page</p>
+    <ul>
+      <li class="l2"><a href="#what-protects-you">What protects you</a></li>
+      <li class="l2"><a href="#what-does-not-protect-you">What does not protect you</a></li>
+      <li class="l2"><a href="#reporting-a-vulnerability">Reporting a vulnerability</a></li>
+    </ul>
+  </aside>
+</div>
+</body>
+</html>

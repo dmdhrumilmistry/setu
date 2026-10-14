@@ -194,9 +194,9 @@ func serviceAdd(args []string) (int, error) {
 	viewLink := fs.Bool("view-link", false, "also create a shared read-only link")
 	var people listFlag
 	fs.Var(&people, "person", "give this person their own control link, so the audit log names them (repeatable / comma separated)")
-	noShared := fs.Bool("no-shared-key", false, "no shared control link: only people added with --person (or `setu service key add`) can type")
+	noShared := fs.Bool("no-shared-key", false, "no shared control link: only people added with --person (or 'setu service key add') can type")
 	maxClients := fs.Int("max-clients", 1, "maximum concurrent clients")
-	validFor := fs.Duration("valid-for", 90*24*time.Hour, "keys stop working after this long; `setu service rotate` renews them (0 = never)")
+	validFor := fs.Duration("valid-for", 90*24*time.Hour, "keys stop working after this long; 'setu service rotate' renews them (0 = never)")
 	dir := fs.String("dir", "", "working directory for the command (default: the service's, usually your home)")
 	noPassword := fs.Bool("no-password", false, "allow joining with the link alone (not recommended for an always-on share)")
 	passwordStdin := fs.Bool("password-stdin", false, "read the password from the first line of stdin")

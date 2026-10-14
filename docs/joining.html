@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Joining a session - setu docs</title>
+<meta name="description" content="You can join a share from any modern browser, including phones, or from a terminal with setu join.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/theme.js"></script>
+<script src="assets/docs.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button class="icon-btn nav-toggle" id="nav-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" width="26" height="26"><span>setu</span><small>docs</small></a>
+  <div class="search" role="search">
+    <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input id="search" type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false">
+    <kbd class="search-key" aria-hidden="true">/</kbd>
+    <ul id="search-results" class="search-results" role="listbox" aria-label="Search results" hidden></ul>
+  </div>
+  <nav class="toplinks" aria-label="Site">
+    <a href="../">Web client</a>
+    <a href="https://github.com/dmdhrumilmistry/setu">GitHub</a>
+  </nav>
+  <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <svg class="sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+</header>
+<div class="layout">
+  <nav id="sidebar" class="sidebar" aria-label="Documentation">
+    <div class="nav-section">
+      <p class="nav-title">Get started</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="quickstart.html">Quick start</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Guides</p>
+      <ul>
+        <li><a href="sharing.html">Sharing a terminal</a></li>
+        <li><a href="joining.html" aria-current="page">Joining a session</a></li>
+        <li><a href="claude-code.html">Claude Code from your phone</a></li>
+        <li><a href="service.html">Always-on service</a></li>
+        <li><a href="audit.html">Audit logging</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Administration</p>
+      <ul>
+        <li><a href="mdm.html">MDM and managed policy</a></li>
+        <li><a href="security.html">Security model</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Reference</p>
+      <ul>
+        <li><a href="cli.html">CLI reference</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting and FAQ</a></li>
+        <li><a href="design.html">Design and protocol</a></li>
+      </ul>
+    </div>
+    
+  </nav>
+  <div class="scrim" id="scrim" hidden></div>
+  <main id="main" tabindex="-1">
+    <article class="content">
+<h1 id="joining-a-session">Joining a session</h1>
+<p>You can join a share from any modern browser, including phones, or from a
+terminal with <code>setu join</code>.</p>
+<h2 id="from-a-browser">From a browser</h2>
+<p>Open the invite link (or scan the QR code). The page:</p>
+<ol>
+<li>connects to the host through the relays named in the link,</li>
+<li>asks for the session password if the host set one,</li>
+<li>shows the <strong>verification code</strong>: compare it with the code the host
+terminal prints for your connection,</li>
+<li>opens the terminal.</li>
+</ol>
+<p>The secret in the link sits after <code>#</code>, which browsers never send to the web
+server. The page removes it from the address bar and history as soon as it
+loads, and it loads no third-party code.</p>
+<h3 id="on-a-phone">On a phone</h3>
+<p>Below the terminal there is a key bar:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Sends</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Esc, Tab, Shift+Tab</td>
+<td>the key</td>
+</tr>
+<tr>
+<td>Ctrl</td>
+<td>makes the next key a control key (Ctrl, then <code>r</code> sends Ctrl+R)</td>
+</tr>
+<tr>
+<td>^C, ^D</td>
+<td>interrupt, end of input</td>
+</tr>
+<tr>
+<td>arrows</td>
+<td>cursor keys</td>
+</tr>
+<tr>
+<td>Enter</td>
+<td>Enter</td>
+</tr>
+<tr>
+<td>pencil</td>
+<td>opens a compose box</td>
+</tr>
+</tbody>
+</table>
+<p>The <strong>compose box</strong> is for longer text such as prompts. Multi-line text is sent
+as a single bracketed paste, so programs like Claude Code treat it as one
+message. &quot;press Enter after&quot; submits it right away; Ctrl+Enter (Cmd+Enter on a
+Mac) sends from the keyboard.</p>
+<h3 id="pasting-an-invite">Pasting an invite</h3>
+<p>You can also open the web client directly and paste an invite link, a bare
+<code>k=...</code> fragment, or a manual-mode offer code into the box on its home screen.</p>
+<h2 id="from-a-terminal">From a terminal</h2>
+<pre><code class="language-sh">setu join 'https://dmdhrumilmistry.github.io/setu/#k=...'
+setu join 'k=...'
+</code></pre>
+<p>Always quote the link. If the host set a password, setu prompts for it (or reads
+<code>SETU_PASSWORD</code>). Type <code>&lt;Enter&gt; ~ .</code> to detach; <code>~~</code> sends a literal tilde at
+the start of a line.</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--timeout 3m</code></td>
+<td>Give up connecting after this long.</td>
+</tr>
+<tr>
+<td><code>--relay URL</code></td>
+<td>Override the relays in the link.</td>
+</tr>
+<tr>
+<td><code>--anonymous</code></td>
+<td>Do not send device details (see below).</td>
+</tr>
+<tr>
+<td><code>--verbose</code></td>
+<td>Log signaling and connection details.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="manual-mode">Manual mode</h2>
+<p>If the host used <code>--manual</code>, they send you an offer code or link instead:</p>
+<ol>
+<li>open the offer link, or run <code>setu join &lt;offer-code&gt;</code>;</li>
+<li>send the <strong>answer code</strong> it prints back to the host over any channel;</li>
+<li>the host pastes it, and the connection opens.</li>
+</ol>
+<h2 id="what-the-host-learns-about-you">What the host learns about you</h2>
+<p>Like any peer-to-peer connection, the host sees your network address. If the
+host keeps an <a href="audit.html">audit log</a>, it records:</p>
+<ul>
+<li>your network origin: the address of the connection, your public address as
+your router presents it, and (terminal clients only) your local addresses;</li>
+<li>the verification code and the encryption fingerprint of your connection;</li>
+<li>device details your client reports: app and version, operating system,
+hostname and OS user (terminal), user agent, model, language, timezone and
+screen size (browser), and a random device id kept by your setu installation
+or browser so the host can recognise a returning device;</li>
+<li>the commands you type, unless the host turned command recording off.</li>
+</ul>
+<p><code>setu join --anonymous</code> sends no device details. Device details are
+self-reported, so hosts never use them for access decisions.</p>
+<h2 id="common-problems">Common problems</h2>
+<p>See <a href="troubleshooting.html">Troubleshooting</a> for connections that never open,
+wrong passwords and mismatched verification codes.</p>
+
+    </article>
+    <nav class="pager" aria-label="Previous and next page">
+      <a class="prev" href="sharing.html"><span>Previous</span>Sharing a terminal</a>
+      <a class="next" href="claude-code.html"><span>Next</span>Claude Code from your phone</a>
+    </nav>
+    <footer class="footer">
+      <a href="https://github.com/dmdhrumilmistry/setu/edit/main/docs/src/joining.md">Edit this page on GitHub</a>
+      <span>setu is open source. Peer-to-peer terminal sharing with no server of your own.</span>
+    </footer>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    <p class="toc-title">On this page</p>
+    <ul>
+      <li class="l2"><a href="#from-a-browser">From a browser</a></li>
+      <li class="l3"><a href="#on-a-phone">On a phone</a></li>
+      <li class="l3"><a href="#pasting-an-invite">Pasting an invite</a></li>
+      <li class="l2"><a href="#from-a-terminal">From a terminal</a></li>
+      <li class="l2"><a href="#manual-mode">Manual mode</a></li>
+      <li class="l2"><a href="#what-the-host-learns-about-you">What the host learns about you</a></li>
+      <li class="l2"><a href="#common-problems">Common problems</a></li>
+    </ul>
+  </aside>
+</div>
+</body>
+</html>

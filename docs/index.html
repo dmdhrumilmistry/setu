@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Overview - setu docs</title>
+<meta name="description" content="setu prints a link and a QR code. Open it on your phone (or any browser), enter the password, check that the verification code matches, and you are in the same ...">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/theme.js"></script>
+<script src="assets/docs.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button class="icon-btn nav-toggle" id="nav-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" width="26" height="26"><span>setu</span><small>docs</small></a>
+  <div class="search" role="search">
+    <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input id="search" type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false">
+    <kbd class="search-key" aria-hidden="true">/</kbd>
+    <ul id="search-results" class="search-results" role="listbox" aria-label="Search results" hidden></ul>
+  </div>
+  <nav class="toplinks" aria-label="Site">
+    <a href="../">Web client</a>
+    <a href="https://github.com/dmdhrumilmistry/setu">GitHub</a>
+  </nav>
+  <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <svg class="sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+</header>
+<div class="layout">
+  <nav id="sidebar" class="sidebar" aria-label="Documentation">
+    <div class="nav-section">
+      <p class="nav-title">Get started</p>
+      <ul>
+        <li><a href="index.html" aria-current="page">Overview</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="quickstart.html">Quick start</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Guides</p>
+      <ul>
+        <li><a href="sharing.html">Sharing a terminal</a></li>
+        <li><a href="joining.html">Joining a session</a></li>
+        <li><a href="claude-code.html">Claude Code from your phone</a></li>
+        <li><a href="service.html">Always-on service</a></li>
+        <li><a href="audit.html">Audit logging</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Administration</p>
+      <ul>
+        <li><a href="mdm.html">MDM and managed policy</a></li>
+        <li><a href="security.html">Security model</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Reference</p>
+      <ul>
+        <li><a href="cli.html">CLI reference</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting and FAQ</a></li>
+        <li><a href="design.html">Design and protocol</a></li>
+      </ul>
+    </div>
+    
+  </nav>
+  <div class="scrim" id="scrim" hidden></div>
+  <main id="main" tabindex="-1">
+    <article class="content">
+<div class="hero">
+<h1 id="your-terminal-anywhere">Your terminal, anywhere</h1>
+<p class="lead">setu shares a terminal on your machine with a browser or another terminal, peer-to-peer and end-to-end encrypted, with no server of your own. Built for driving Claude Code and other AI agents from your phone.</p>
+</div>
+<div class="actions">
+<a class="button primary" href="quickstart.html">Quick start</a>
+<a class="button" href="install.html">Install</a>
+<a class="button" href="https://github.com/dmdhrumilmistry/setu">View on GitHub</a>
+</div>
+<pre><code class="language-sh">go install github.com/dmdhrumilmistry/setu/cmd/setu@latest
+setu share --password -- claude
+</code></pre>
+<p>setu prints a link and a QR code. Open it on your phone (or any browser), enter
+the password, check that the verification code matches, and you are in the same
+terminal session as your computer.</p>
+<p><em>setu</em> means &quot;bridge&quot; in Sanskrit.</p>
+<h2 id="what-you-can-do">What you can do</h2>
+<div class="cards">
+<a class="card" href="sharing.html"><h3>Share a terminal</h3><p>Any command or your shell, with passwords, view-only links, single-use links, expiry and approval prompts.</p></a>
+<a class="card" href="joining.html"><h3>Join from anywhere</h3><p>A mobile-friendly web client with a key bar and a compose box, or <code>setu join</code> from another terminal.</p></a>
+<a class="card" href="claude-code.html"><h3>Drive Claude Code</h3><p>Start an agent on your workstation and steer it from your phone, safely.</p></a>
+<a class="card" href="service.html"><h3>Always-on service</h3><p>Persistent links that survive reboots, a personal key per person, autostart on Linux, macOS and Windows.</p></a>
+<a class="card" href="audit.html"><h3>Audit logging</h3><p>Who ran which command, when, from where and on what device, exported over OpenTelemetry.</p></a>
+<a class="card" href="mdm.html"><h3>Managed devices</h3><p>Org policy through Intune, Jamf, Kandji, VaanarSena or Group Policy, enforced on every device.</p></a>
+</div>
+<h2 id="how-it-works">How it works</h2>
+<pre><code> setu share --(encrypted hello / offer / answer over nostr relays)-- browser / setu join
+      |                                                                   |
+      +------------- WebRTC data channel (DTLS, peer-to-peer) -------------+
+</code></pre>
+<ol>
+<li><code>setu share</code> starts your command in a pseudo terminal and creates a random
+256-bit secret. The secret lives only in the link's <code>#fragment</code>, which
+browsers never send to any server.</li>
+<li>The joiner and the host exchange a few small, encrypted messages through
+public <a href="https://nostr.com">nostr</a> relays to set up a WebRTC connection.
+Relays only ever see ciphertext. With <code>--manual</code> you copy and paste these
+messages instead and no relay is involved.</li>
+<li>The peers connect directly. Terminal bytes travel only over that DTLS
+encrypted channel. Both sides show a 6-digit verification code; if they
+match, nobody is in the middle.</li>
+</ol>
+<p>The full protocol is in <a href="design.html">Design and protocol</a>.</p>
+<h2 id="platforms">Platforms</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Share (host)</th>
+<th>Join</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Linux</td>
+<td>yes</td>
+<td>terminal or browser</td>
+</tr>
+<tr>
+<td>macOS</td>
+<td>yes</td>
+<td>terminal or browser</td>
+</tr>
+<tr>
+<td>Windows 10 1809+ / Server 2019+</td>
+<td>yes (ConPTY; default shell PowerShell)</td>
+<td>terminal or browser</td>
+</tr>
+<tr>
+<td>Phones and tablets</td>
+<td>no</td>
+<td>browser</td>
+</tr>
+</tbody>
+</table>
+<h2 id="where-to-next">Where to next</h2>
+<ul>
+<li>New here? Follow the <a href="quickstart.html">Quick start</a>.</li>
+<li>Setting setu up for a team? Read <a href="service.html">Always-on service</a>,
+<a href="audit.html">Audit logging</a> and <a href="mdm.html">MDM and managed policy</a>.</li>
+<li>Want to know what protects you? See the <a href="security.html">Security model</a>.</li>
+</ul>
+
+    </article>
+    <nav class="pager" aria-label="Previous and next page">
+      <span></span>
+      <a class="next" href="install.html"><span>Next</span>Install</a>
+    </nav>
+    <footer class="footer">
+      <a href="https://github.com/dmdhrumilmistry/setu/edit/main/docs/src/index.md">Edit this page on GitHub</a>
+      <span>setu is open source. Peer-to-peer terminal sharing with no server of your own.</span>
+    </footer>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    <p class="toc-title">On this page</p>
+    <ul>
+      <li class="l2"><a href="#what-you-can-do">What you can do</a></li>
+      <li class="l2"><a href="#how-it-works">How it works</a></li>
+      <li class="l2"><a href="#platforms">Platforms</a></li>
+      <li class="l2"><a href="#where-to-next">Where to next</a></li>
+    </ul>
+  </aside>
+</div>
+</body>
+</html>
