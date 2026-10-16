@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"io"
+	"log"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -69,6 +71,7 @@ func open() (Screen, error) {
 	if os.Getenv("DISPLAY") == "" {
 		return nil, errors.New("no X11 display: DISPLAY is not set (run setu desktop inside your graphical session)")
 	}
+	xgb.Logger = log.New(io.Discard, "", 0) // xgb logs X errors to stderr; setu reports them itself
 	c, err := xgb.NewConn()
 	if err != nil {
 		return nil, fmt.Errorf("connect to X11 display %s: %w", os.Getenv("DISPLAY"), err)

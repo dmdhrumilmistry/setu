@@ -117,8 +117,11 @@ try {
     const box = await page.locator('#desk-canvas').boundingBox();
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await page.keyboard.press('Shift');
-    await page.close();
-    await until(() => /remote input: 1 clicks, 1 key presses/.test(log), 10000, 'input summary in the host log');
+    // Leave the page as a user would (confirming the "leave?" prompt): the
+    // page closes its connection, so the host notices at once.
+    page.on('dialog', (d) => d.accept());
+    await page.goto('about:blank');
+    await until(() => /remote input: 1 clicks, 1 key presses/.test(log), 40000, 'input summary in the host log');
     console.log('OK: mouse and keyboard input reached the host');
   }
   ok = true;

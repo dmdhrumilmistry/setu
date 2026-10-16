@@ -266,6 +266,9 @@ function onReady(m) {
   if (state.pool) setTimeout(() => state.pool.close(), 3000); // signaling done
   if (navigator.wakeLock) navigator.wakeLock.request('screen').then((l) => (state.wakeLock = l)).catch(() => {});
   window.addEventListener('beforeunload', beforeUnload);
+  // Close the connection when the tab goes away, so the host sees the
+  // disconnect (and releases any held keys) at once, not after ICE times out.
+  window.addEventListener('pagehide', () => { if (state.pc) state.pc.close(); });
 }
 
 function beforeUnload(e) {
