@@ -94,5 +94,6 @@ jobs:
         run: SETU_LOCAL_RELAY=1 node web/test/browser-e2e.mjs
       - name: browser -> web client -> local relay -> setu desktop (Xvfb)
         run: |
-          sudo apt-get install -y xvfb
-          xvfb-run -a -s "-screen 0 1280x800x24" env SETU_LOCAL_RELAY=1 SETU_DESKTOP_INPUT_TEST=1 node web/test/desktop-e2e.mjs
+          sudo apt-get install -y xvfb x11-xserver-utils
+          # Paint a grid on the root window: Xvfb starts solid black, which the test treats as a blank picture.
+          xvfb-run -a -s "-screen 0 1280x800x24" sh -c 'xsetroot -mod 16 16 -fg white -bg black && SETU_LOCAL_RELAY=1 SETU_DESKTOP_INPUT_TEST=1 node web/test/desktop-e2e.mjs'
