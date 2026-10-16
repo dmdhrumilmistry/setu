@@ -75,12 +75,8 @@ func open(opt OpenOptions) (Screen, error) {
 	if display == "" {
 		return nil, errors.New("no X11 display: DISPLAY is not set (run setu desktop inside your graphical session)")
 	}
-	if opt.XAuthority != "" {
-		// xgb reads the cookie file from the environment only.
-		os.Setenv("XAUTHORITY", opt.XAuthority)
-	}
 	xgb.Logger = log.New(io.Discard, "", 0) // xgb logs X errors to stderr; setu reports them itself
-	c, err := xgb.NewConnDisplay(display)
+	c, err := connect(display, opt.XAuthority)
 	if err != nil {
 		return nil, fmt.Errorf("connect to X11 display %s: %w", display, err)
 	}
@@ -90,6 +86,38 @@ func open(opt OpenOptions) (Screen, error) {
 		return nil, err
 	}
 	return s, nil
+}
+
+// xauthMu serializes connections that need a particular cookie file.
+var xauthMu sync.Mutex
+
+// connect opens display with the cookie in xauthority (empty = the
+// environment's). xgb only reads XAUTHORITY from the environment, so it is
+// set for the connection and restored right after, under a lock, rather
+// than changed for the whole process (and every shell it starts later).
+// A recorded file that no longer exists (some display managers create a
+// new one at each login) is ignored in favour of the defaults.
+func connect(display, xauthority string) (*xgb.Conn, error) {
+	if xauthority != "" {
+		if _, err := os.Stat(xauthority); err != nil {
+			xauthority = ""
+		}
+	}
+	if xauthority == "" {
+		return xgb.NewConnDisplay(display)
+	}
+	xauthMu.Lock()
+	defer xauthMu.Unlock()
+	prev, had := os.LookupEnv("XAUTHORITY")
+	os.Setenv("XAUTHORITY", xauthority)
+	defer func() {
+		if had {
+			os.Setenv("XAUTHORITY", prev)
+		} else {
+			os.Unsetenv("XAUTHORITY")
+		}
+	}()
+	return xgb.NewConnDisplay(display)
 }
 
 func newX11(c *xgb.Conn) (*x11Screen, error) {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 )
@@ -29,6 +30,10 @@ type recorder struct {
 	closed bool
 	carry  []byte // an incomplete UTF-8 sequence at the end of the last chunk
 	drops  int    // events dropped since the last marker
+
+	queued atomic.Int64 // bytes waiting in ch
+	failed atomic.Bool  // a write failed: the recording stopped
+	logf   func(format string, args ...any)
 }
 
 type recEvent struct {
@@ -37,11 +42,14 @@ type recEvent struct {
 	data string
 }
 
-const recQueue = 4096
+const (
+	recQueue      = 4096
+	recQueueBytes = 8 << 20 // bytes waiting to be written, at most
+)
 
 // newRecorder creates path (mode 0600, never replacing a file) and writes
 // the asciicast header.
-func newRecorder(path string, cols, rows int, title string) (*recorder, error) {
+func newRecorder(path string, cols, rows int, title string, logf func(string, ...any)) (*recorder, error) {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("recording: %w", err)
@@ -56,7 +64,7 @@ func newRecorder(path string, cols, rows int, title string) (*recorder, error) {
 		os.Remove(path)
 		return nil, fmt.Errorf("recording: %w", err)
 	}
-	r := &recorder{f: f, start: now, ch: make(chan recEvent, recQueue), done: make(chan struct{})}
+	r := &recorder{f: f, start: now, ch: make(chan recEvent, recQueue), done: make(chan struct{}), logf: logf}
 	go r.write()
 	return r, nil
 }
@@ -75,33 +83,53 @@ func (r *recorder) write() {
 		select {
 		case ev, ok := <-r.ch:
 			if !ok {
-				w.Flush()
+				r.check(w.Flush())
 				r.f.Close()
 				return
 			}
+			r.queued.Add(-int64(len(ev.data)))
+			if r.failed.Load() {
+				continue
+			}
 			data, _ := json.Marshal(ev.data)
-			fmt.Fprintf(w, "[%.6f, %q, %s]\n", ev.at.Seconds(), ev.kind, data)
+			_, err := fmt.Fprintf(w, "[%.6f, %q, %s]\n", ev.at.Seconds(), ev.kind, data)
+			r.check(err)
 		case <-flush.C:
-			w.Flush() // keep the file useful while the session runs
+			r.check(w.Flush()) // keep the file useful while the session runs
 		}
+	}
+}
+
+// check stops the recording at the first write error (a full disk, say),
+// saying so once, rather than leaving a file that silently ends mid-line.
+func (r *recorder) check(err error) {
+	if err != nil && r.failed.CompareAndSwap(false, true) && r.logf != nil {
+		r.logf("WARNING: recording stopped: %v", err)
 	}
 }
 
 // emit queues an event; r.mu must be held.
 func (r *recorder) emit(kind, data string) {
-	if r.closed {
+	if r.closed || r.failed.Load() {
 		return
 	}
 	ev := recEvent{at: time.Since(r.start), kind: kind, data: data}
 	if r.drops > 0 {
+		marker := fmt.Sprintf("setu: %d output chunks left out (disk too slow)", r.drops)
 		select {
-		case r.ch <- recEvent{at: ev.at, kind: "m", data: fmt.Sprintf("setu: %d output chunks left out (disk too slow)", r.drops)}:
+		case r.ch <- recEvent{at: ev.at, kind: "m", data: marker}:
+			r.queued.Add(int64(len(marker)))
 			r.drops = 0
 		default:
 		}
 	}
+	if r.queued.Load()+int64(len(data)) > recQueueBytes {
+		r.drops++
+		return
+	}
 	select {
 	case r.ch <- ev:
+		r.queued.Add(int64(len(data)))
 	default:
 		r.drops++
 	}

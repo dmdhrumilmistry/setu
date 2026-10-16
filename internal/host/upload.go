@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"unicode"
@@ -165,21 +164,27 @@ func (u *upload) start(name string, size int64) error {
 }
 
 func (u *upload) complete() error {
+	// Claim the file first: a disconnect during the (slow) sync must not
+	// delete a file this upload then reports as saved.
 	u.mu.Lock()
 	f := u.f
-	u.mu.Unlock()
-	if err := f.Sync(); err != nil {
-		return err
+	if f == nil || u.done {
+		u.mu.Unlock()
+		return nil
 	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	u.mu.Lock()
 	u.f, u.done = nil, true
 	sum := hex.EncodeToString(u.hash.Sum(nil))
 	name, path, size := u.name, u.path, u.size
 	u.mu.Unlock()
 	u.p.endUpload()
+	err := f.Sync()
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		os.Remove(path)
+		return fmt.Errorf("could not save the file on the remote computer: %w", err)
+	}
 	s := u.p.s
 	s.audit.FileUpload(u.p.auditClient(), name, path, size, sum)
 	s.logf("client #%d uploaded %s (%d bytes, sha256 %s)", u.p.id, path, size, sum)
@@ -246,16 +251,20 @@ func createUnique(dir, name string) (*os.File, string, error) {
 	return nil, "", errors.New("too many files with that name")
 }
 
+// windowsReserved are device names Windows maps any file name to, whatever
+// its extension: "NUL.tar.gz" and "nul " are the null device too.
 var windowsReserved = map[string]bool{
-	"CON": true, "PRN": true, "AUX": true, "NUL": true,
+	"CON": true, "PRN": true, "AUX": true, "NUL": true, "CONIN$": true, "CONOUT$": true,
 	"COM1": true, "COM2": true, "COM3": true, "COM4": true, "COM5": true, "COM6": true, "COM7": true, "COM8": true, "COM9": true,
 	"LPT1": true, "LPT2": true, "LPT3": true, "LPT4": true, "LPT5": true, "LPT6": true, "LPT7": true, "LPT8": true, "LPT9": true,
+	"COM\u00b9": true, "COM\u00b2": true, "COM\u00b3": true, "LPT\u00b9": true, "LPT\u00b2": true, "LPT\u00b3": true,
 }
 
 // SanitizeFileName turns a name the client chose into a safe base name:
 // no directories, no control or bidi characters, no characters Windows
-// forbids, no reserved device names, no leading dots, at most
-// maxUploadName bytes (keeping the extension).
+// forbids, no leading or trailing dots and spaces, no reserved device
+// names, at most maxUploadName bytes (keeping the extension). The result
+// is the same on every system.
 func SanitizeFileName(name string) string {
 	if i := strings.LastIndexAny(name, `/\`); i >= 0 {
 		name = name[i+1:]
@@ -270,14 +279,9 @@ func SanitizeFileName(name string) string {
 			b.WriteRune(r)
 		}
 	}
-	name = strings.Trim(strings.TrimSpace(b.String()), ".")
-	if name == "" {
-		name = "upload"
-	}
-	stem := strings.TrimSuffix(name, filepath.Ext(name))
-	if windowsReserved[strings.ToUpper(stem)] {
-		name = "_" + name
-	}
+	// Windows drops trailing dots and spaces when it opens a file, so they
+	// go first: what is checked below is the name the file really gets.
+	name = strings.Trim(b.String(), " .")
 	if len(name) > maxUploadName {
 		ext := filepath.Ext(name)
 		if len(ext) > 20 {
@@ -287,10 +291,15 @@ func SanitizeFileName(name string) string {
 		for cut > 0 && !utf8.RuneStart(name[cut]) {
 			cut--
 		}
-		name = name[:cut] + ext
+		name = strings.Trim(name[:cut], " .") + ext
 	}
-	if runtime.GOOS == "windows" {
-		name = strings.TrimRight(name, " .")
+	if name == "" {
+		return "upload"
+	}
+	// Last, so no later step can turn the name back into a device.
+	stem, _, _ := strings.Cut(name, ".")
+	if windowsReserved[strings.ToUpper(strings.TrimRight(stem, " "))] {
+		name = "_" + name
 	}
 	return name
 }

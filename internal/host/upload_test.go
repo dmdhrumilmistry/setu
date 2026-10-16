@@ -19,6 +19,14 @@ func TestSanitizeFileName(t *testing.T) {
 		".bashrc":               "bashrc",
 		"CON.txt":               "_CON.txt",
 		"nul":                   "_nul",
+		"NUL .":                 "_NUL", // Windows drops the trailing " ." when opening
+		"nul.tar.gz":            "_nul.tar.gz",
+		"con .txt":              "_con .txt",
+		"LPT1 ":                 "_LPT1",
+		"CONOUT$":               "_CONOUT$",
+		"COM¹.log":              "_COM¹.log",
+		"report.txt. . ":        "report.txt",
+		"NULL.txt":              "NULL.txt", // not a device name
 		"a<b>c:d\"e|f?g*h.txt":  "a_b_c_d_e_f_g_h.txt",
 		"bell\x07\nname.txt":    "bellname.txt",
 		"evil" + string(rune(0x202e)) + "gnp.exe": "evilgnp.exe", // right-to-left override

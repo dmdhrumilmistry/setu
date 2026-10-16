@@ -311,6 +311,9 @@ func serviceAdd(args []string) (int, error) {
 		if runtime.GOOS != "windows" && runtime.GOOS != "darwin" {
 			// The service starts without the graphical session's environment.
 			p.Desktop.X11Display, p.Desktop.XAuthority = os.Getenv("DISPLAY"), os.Getenv("XAUTHORITY")
+			if os.Getenv("XDG_SESSION_TYPE") == "wayland" {
+				return 1, errors.New("--desktop: Wayland sessions are not supported yet; log in with an X11 session (for example \"Ubuntu on Xorg\") and add the profile from there")
+			}
 			if p.Desktop.X11Display == "" {
 				return 1, errors.New("--desktop: DISPLAY is not set; run this in a terminal inside your graphical (X11) session, so the service knows which display to share")
 			}
