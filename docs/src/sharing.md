@@ -223,6 +223,26 @@ setu share --web-url https://setu.example.com/ -- claude
 setu share --web-url= -- claude      # terminal-only links, no browser URL
 ```
 
+## Record a session
+
+`--record FILE` records everything the shared terminal shows, as an
+[asciicast v2](https://docs.asciinema.org/manual/asciicast/v2/) file you can
+replay later, for example to see exactly what an agent did:
+
+```sh
+setu share --record ~/agent-run.cast -- claude
+asciinema play ~/agent-run.cast      # or drop it on the asciinema web player
+```
+
+* The file is new (setu never replaces one) and readable only by you. Keep it
+  safe: it holds whatever appeared on screen, which can include secrets.
+* Output and window size changes are recorded, keystrokes are not (commands
+  are in the [audit log](audit.md)).
+* Recording never slows the terminal: if the disk cannot keep up, output is
+  left out of the recording and a marker in the file says so.
+* For always-on profiles, `setu service add --record-dir DIR` writes a new
+  file per session run, named after the profile, the time and the session id.
+
 ## Audit what happens
 
 Add `--audit-endpoint https://collector.example.com:4318` to send an audit log

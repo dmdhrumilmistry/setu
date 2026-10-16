@@ -78,7 +78,7 @@ same.
 | `setu.audit.start` | The startup probe sent by `--audit-required`. |
 
 Every record carries `setu.session.id`, and `setu.session.start` records
-whether the session shares a `terminal` or a `desktop` (`setu.session.kind`);
+whether the session shares a `terminal` or a `desktop` (`setu.session.kind`)
 service records also carry
 `setu.profile`. The resource identifies the host (`service.name=setu`,
 `service.version`, `host.name`, `host.id`, `user.name`) and, on managed devices,

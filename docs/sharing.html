@@ -287,6 +287,23 @@ HTTPS and point links at it:</p>
 <pre><code class="language-sh">setu share --web-url https://setu.example.com/ -- claude
 setu share --web-url= -- claude      # terminal-only links, no browser URL
 </code></pre>
+<h2 id="record-a-session">Record a session</h2>
+<p><code>--record FILE</code> records everything the shared terminal shows, as an
+<a href="https://docs.asciinema.org/manual/asciicast/v2/">asciicast v2</a> file you can
+replay later, for example to see exactly what an agent did:</p>
+<pre><code class="language-sh">setu share --record ~/agent-run.cast -- claude
+asciinema play ~/agent-run.cast      # or drop it on the asciinema web player
+</code></pre>
+<ul>
+<li>The file is new (setu never replaces one) and readable only by you. Keep it
+safe: it holds whatever appeared on screen, which can include secrets.</li>
+<li>Output and window size changes are recorded, keystrokes are not (commands
+are in the <a href="audit.html">audit log</a>).</li>
+<li>Recording never slows the terminal: if the disk cannot keep up, output is
+left out of the recording and a marker in the file says so.</li>
+<li>For always-on profiles, <code>setu service add --record-dir DIR</code> writes a new
+file per session run, named after the profile, the time and the session id.</li>
+</ul>
 <h2 id="audit-what-happens">Audit what happens</h2>
 <p>Add <code>--audit-endpoint https://collector.example.com:4318</code> to send an audit log
 of connections and typed commands to your OpenTelemetry collector. See
@@ -323,6 +340,7 @@ of connections and typed commands to your OpenTelemetry collector. See
       <li class="l2"><a href="#strict-networks-stun-and-turn">Strict networks: STUN and TURN</a></li>
       <li class="l2"><a href="#choose-relays">Choose relays</a></li>
       <li class="l2"><a href="#self-host-the-web-client">Self-host the web client</a></li>
+      <li class="l2"><a href="#record-a-session">Record a session</a></li>
       <li class="l2"><a href="#audit-what-happens">Audit what happens</a></li>
       <li class="l2"><a href="#all-flags">All flags</a></li>
     </ul>
