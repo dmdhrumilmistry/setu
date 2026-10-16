@@ -21,6 +21,18 @@ type DesktopConfig struct {
 
 type desktopShare struct {
 	hub *desktop.Hub
+	scr desktop.Screen
+}
+
+// inputProblem says why remote control would not work right now, if the
+// backend can tell (macOS: missing permission), or "".
+func (d *desktopShare) inputProblem() string {
+	if c, ok := d.scr.(desktop.InputChecker); ok {
+		if err := c.InputStatus(); err != nil {
+			return err.Error()
+		}
+	}
+	return ""
 }
 
 const (
@@ -50,9 +62,12 @@ func (s *Session) startDesktop(ctx context.Context) (func(), error) {
 		}
 		return nil, err
 	}
-	s.desk = &desktopShare{hub: hub}
+	s.desk = &desktopShare{hub: hub, scr: scr}
 	ds, cur := hub.Displays()
 	s.logf("sharing display %s (%dx%d; %d display(s) attached)", ds[cur].Name, ds[cur].W, ds[cur].H, len(ds))
+	if p := s.desk.inputProblem(); p != "" {
+		s.logf("WARNING: viewers can see the screen but not control it yet: %s", p)
+	}
 	hctx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	go func() {
@@ -165,6 +180,11 @@ func (p *peer) joinDesktop() {
 	p.mu.Unlock()
 	ds, cur := hub.Displays()
 	p.sendControl(screenControl(ds, cur))
+	if p.role == proto.RoleControl {
+		if problem := p.s.desk.inputProblem(); problem != "" {
+			p.sendControl(proto.Control{T: proto.CtlInfo, Msg: "Remote control is not available yet: " + problem})
+		}
+	}
 }
 
 // leaveDesktop stops streaming and records what the client did.

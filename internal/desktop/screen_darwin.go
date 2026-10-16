@@ -27,14 +27,22 @@ import (
 type macScreen struct {
 	mu       sync.Mutex
 	displays []macDisplay
-	buttons  int    // pressed mouse buttons (ButtonLeft...)
-	flags    uint64 // held modifier flags (kCGEventFlagMask*)
+	buttons  int         // pressed mouse buttons (ButtonLeft...)
+	pos      image.Point // where setu last moved the pointer (virtual pixels)
+	moved    bool
+	onPost   func(ev uintptr) // tests: sees every event before it is posted
+	flags    uint64           // held modifier flags (kCGEventFlagMask*)
 	last     struct {
 		at     time.Time
 		button int
 		x, y   int
 		clicks int64
 	}
+
+	permMu sync.Mutex
+	permAt time.Time // when permOK was last asked
+	permOK bool
+	asked  bool // the system prompt was shown this run
 }
 
 type macDisplay struct {
@@ -52,28 +60,32 @@ type cgRect struct {
 }
 
 const (
-	cgEventLeftMouseDown     = 1
-	cgEventLeftMouseUp       = 2
-	cgEventRightMouseDown    = 3
-	cgEventRightMouseUp      = 4
-	cgEventMouseMoved        = 5
-	cgEventLeftMouseDragged  = 6
-	cgEventRightMouseDragged = 7
-	cgEventOtherMouseDown    = 25
-	cgEventOtherMouseUp      = 26
-	cgEventOtherMouseDragged = 27
-	cgHIDEventTap            = 0
-	cgScrollEventUnitLine    = 1
-	cgMouseEventClickState   = 1
-	cgMouseEventButtonNumber = 3
-	cgBitmapByteOrderMask    = 0x7000
-	cgBitmapByteOrder32Big   = 0x4000
-	flagShift                = 0x20000
-	flagControl              = 0x40000
-	flagAlternate            = 0x80000
-	flagCommand              = 0x100000
-	doubleClickTime          = 500 * time.Millisecond
-	pasteboardString         = "public.utf8-plain-text"
+	cgEventLeftMouseDown         = 1
+	cgEventLeftMouseUp           = 2
+	cgEventRightMouseDown        = 3
+	cgEventRightMouseUp          = 4
+	cgEventMouseMoved            = 5
+	cgEventLeftMouseDragged      = 6
+	cgEventRightMouseDragged     = 7
+	cgEventOtherMouseDown        = 25
+	cgEventOtherMouseUp          = 26
+	cgEventOtherMouseDragged     = 27
+	cgHIDEventTap                = 0
+	cgScrollEventUnitLine        = 1
+	cgEventScrollWheel           = 22
+	cgScrollWheelEventDeltaAxis1 = 11
+	cgScrollWheelEventDeltaAxis2 = 12
+	cgEventSourceStateHID        = 1 // kCGEventSourceStateHIDSystemState
+	cgMouseEventClickState       = 1
+	cgMouseEventButtonNumber     = 3
+	cgBitmapByteOrderMask        = 0x7000
+	cgBitmapByteOrder32Big       = 0x4000
+	flagShift                    = 0x20000
+	flagControl                  = 0x40000
+	flagAlternate                = 0x80000
+	flagCommand                  = 0x100000
+	doubleClickTime              = 500 * time.Millisecond
+	pasteboardString             = "public.utf8-plain-text"
 )
 
 var modifierFlags = map[string]uint64{
@@ -106,14 +118,22 @@ var (
 	cgEventGetLocation              func(event uintptr) cgPoint
 	cgEventCreateMouseEvent         func(source uintptr, typ uint32, pos cgPoint, button uint32) uintptr
 	cgEventCreateKeyboardEvent      func(source uintptr, key uint16, down bool) uintptr
-	cgEventCreateScrollWheelEvent2  func(source uintptr, units uint32, count uint32, w1, w2, w3 int32) uintptr
 	cgEventKeyboardSetUnicodeString func(event uintptr, n uintptr, s *uint16)
+	cgEventSetType                  func(event uintptr, typ uint32)
 	cgEventSetFlags                 func(event uintptr, flags uint64)
 	cgEventSetIntegerValueField     func(event uintptr, field uint32, value int64)
 	cgEventPost                     func(tap uint32, event uintptr)
-	cgPreflightScreenCaptureAccess  func() bool
-	cgRequestScreenCaptureAccess    func() bool
+	cgEventSourceKeyState           func(state int32, key uint16) bool
+	cgEventSourceButtonState        func(state int32, button uint32) bool
 	axIsProcessTrusted              func() bool
+
+	// Optional: missing on older macOS versions (nil when absent).
+	cgEventCreateScrollWheelEvent2 func(source uintptr, units uint32, count uint32, w1, w2, w3 int32) uintptr // macOS 13
+	cgPreflightScreenCaptureAccess func() bool                                                                // macOS 10.15
+	cgRequestScreenCaptureAccess   func() bool
+	cgPreflightPostEventAccess     func() bool // macOS 10.15
+	cgRequestPostEventAccess       func() bool
+	isSecureEventInputEnabled      func() bool // Carbon
 )
 
 func load() error {
@@ -128,47 +148,58 @@ func load() error {
 		cg := lib("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
 		cf := lib("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
 		as := lib("/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices")
+		carbon := lib("/System/Library/Frameworks/Carbon.framework/Carbon")
 		lib("/System/Library/Frameworks/AppKit.framework/AppKit") // NSPasteboard
 		if loadErr != nil {
 			return
 		}
 		for _, f := range []struct {
-			fn   any
-			lib  uintptr
-			name string
+			fn       any
+			lib      uintptr
+			name     string
+			optional bool
 		}{
-			{&cgGetActiveDisplayList, cg, "CGGetActiveDisplayList"},
-			{&cgMainDisplayID, cg, "CGMainDisplayID"},
-			{&cgDisplayBounds, cg, "CGDisplayBounds"},
-			{&cgDisplayCopyDisplayMode, cg, "CGDisplayCopyDisplayMode"},
-			{&cgDisplayModeGetPixelWidth, cg, "CGDisplayModeGetPixelWidth"},
-			{&cgDisplayModeGetPixelHeight, cg, "CGDisplayModeGetPixelHeight"},
-			{&cgDisplayCreateImage, cg, "CGDisplayCreateImage"},
-			{&cgImageGetWidth, cg, "CGImageGetWidth"},
-			{&cgImageGetHeight, cg, "CGImageGetHeight"},
-			{&cgImageGetBytesPerRow, cg, "CGImageGetBytesPerRow"},
-			{&cgImageGetBitsPerPixel, cg, "CGImageGetBitsPerPixel"},
-			{&cgImageGetBitmapInfo, cg, "CGImageGetBitmapInfo"},
-			{&cgImageGetDataProvider, cg, "CGImageGetDataProvider"},
-			{&cgDataProviderCopyData, cg, "CGDataProviderCopyData"},
-			{&cfDataGetBytePtr, cf, "CFDataGetBytePtr"},
-			{&cfDataGetLength, cf, "CFDataGetLength"},
-			{&cfRelease, cf, "CFRelease"},
-			{&cgEventCreate, cg, "CGEventCreate"},
-			{&cgEventGetLocation, cg, "CGEventGetLocation"},
-			{&cgEventCreateMouseEvent, cg, "CGEventCreateMouseEvent"},
-			{&cgEventCreateKeyboardEvent, cg, "CGEventCreateKeyboardEvent"},
-			{&cgEventCreateScrollWheelEvent2, cg, "CGEventCreateScrollWheelEvent2"},
-			{&cgEventKeyboardSetUnicodeString, cg, "CGEventKeyboardSetUnicodeString"},
-			{&cgEventSetFlags, cg, "CGEventSetFlags"},
-			{&cgEventSetIntegerValueField, cg, "CGEventSetIntegerValueField"},
-			{&cgEventPost, cg, "CGEventPost"},
-			{&cgPreflightScreenCaptureAccess, cg, "CGPreflightScreenCaptureAccess"},
-			{&cgRequestScreenCaptureAccess, cg, "CGRequestScreenCaptureAccess"},
-			{&axIsProcessTrusted, as, "AXIsProcessTrusted"},
+			{&cgGetActiveDisplayList, cg, "CGGetActiveDisplayList", false},
+			{&cgMainDisplayID, cg, "CGMainDisplayID", false},
+			{&cgDisplayBounds, cg, "CGDisplayBounds", false},
+			{&cgDisplayCopyDisplayMode, cg, "CGDisplayCopyDisplayMode", false},
+			{&cgDisplayModeGetPixelWidth, cg, "CGDisplayModeGetPixelWidth", false},
+			{&cgDisplayModeGetPixelHeight, cg, "CGDisplayModeGetPixelHeight", false},
+			{&cgDisplayCreateImage, cg, "CGDisplayCreateImage", false},
+			{&cgImageGetWidth, cg, "CGImageGetWidth", false},
+			{&cgImageGetHeight, cg, "CGImageGetHeight", false},
+			{&cgImageGetBytesPerRow, cg, "CGImageGetBytesPerRow", false},
+			{&cgImageGetBitsPerPixel, cg, "CGImageGetBitsPerPixel", false},
+			{&cgImageGetBitmapInfo, cg, "CGImageGetBitmapInfo", false},
+			{&cgImageGetDataProvider, cg, "CGImageGetDataProvider", false},
+			{&cgDataProviderCopyData, cg, "CGDataProviderCopyData", false},
+			{&cfDataGetBytePtr, cf, "CFDataGetBytePtr", false},
+			{&cfDataGetLength, cf, "CFDataGetLength", false},
+			{&cfRelease, cf, "CFRelease", false},
+			{&cgEventCreate, cg, "CGEventCreate", false},
+			{&cgEventGetLocation, cg, "CGEventGetLocation", false},
+			{&cgEventCreateMouseEvent, cg, "CGEventCreateMouseEvent", false},
+			{&cgEventCreateKeyboardEvent, cg, "CGEventCreateKeyboardEvent", false},
+			{&cgEventKeyboardSetUnicodeString, cg, "CGEventKeyboardSetUnicodeString", false},
+			{&cgEventSetType, cg, "CGEventSetType", false},
+			{&cgEventSetFlags, cg, "CGEventSetFlags", false},
+			{&cgEventSetIntegerValueField, cg, "CGEventSetIntegerValueField", false},
+			{&cgEventPost, cg, "CGEventPost", false},
+			{&cgEventSourceKeyState, cg, "CGEventSourceKeyState", false},
+			{&cgEventSourceButtonState, cg, "CGEventSourceButtonState", false},
+			{&axIsProcessTrusted, as, "AXIsProcessTrusted", false},
+			{&cgEventCreateScrollWheelEvent2, cg, "CGEventCreateScrollWheelEvent2", true},
+			{&cgPreflightScreenCaptureAccess, cg, "CGPreflightScreenCaptureAccess", true},
+			{&cgRequestScreenCaptureAccess, cg, "CGRequestScreenCaptureAccess", true},
+			{&cgPreflightPostEventAccess, cg, "CGPreflightPostEventAccess", true},
+			{&cgRequestPostEventAccess, cg, "CGRequestPostEventAccess", true},
+			{&isSecureEventInputEnabled, carbon, "IsSecureEventInputEnabled", true},
 		} {
 			if _, err := purego.Dlsym(f.lib, f.name); err != nil {
-				loadErr = fmt.Errorf("this macOS version lacks %s (setu desktop needs macOS 13 or newer)", f.name)
+				if f.optional {
+					continue
+				}
+				loadErr = fmt.Errorf("this macOS version lacks %s", f.name)
 				return
 			}
 			purego.RegisterLibFunc(f.fn, f.lib, f.name)
@@ -177,15 +208,19 @@ func load() error {
 	return loadErr
 }
 
-var errScreenPermission = errors.New("macOS has not given setu permission to record the screen: allow your terminal app in System Settings > Privacy & Security > Screen & System Audio Recording, then restart the terminal")
-
-var errInputPermission = errors.New("macOS has not given setu permission to control the computer: allow your terminal app in System Settings > Privacy & Security > Accessibility, then restart the terminal")
+// The app macOS asks about is the one that started setu: Terminal, iTerm2,
+// VS Code... (its "responsible process"), not setu itself.
+var (
+	errScreenPermission = errors.New("macOS has not given setu permission to record the screen: allow the app you started setu from (Terminal, iTerm2, ...) in System Settings > Privacy & Security > Screen & System Audio Recording (Screen Recording before macOS 15), then quit and reopen that app")
+	errInputPermission  = errors.New("macOS has not given setu permission to control this Mac: allow the app you started setu from (Terminal, iTerm2, ...) in System Settings > Privacy & Security > Accessibility, then quit and reopen that app")
+	errSecureInput      = errors.New("macOS is blocking typed input: a password field or Secure Keyboard Entry (in Terminal or iTerm2) is active on the Mac")
+)
 
 func open() (Screen, error) {
 	if err := load(); err != nil {
 		return nil, err
 	}
-	if !cgPreflightScreenCaptureAccess() {
+	if cgPreflightScreenCaptureAccess != nil && !cgPreflightScreenCaptureAccess() {
 		cgRequestScreenCaptureAccess() // shows the system prompt the first time
 		return nil, errScreenPermission
 	}
@@ -193,9 +228,41 @@ func open() (Screen, error) {
 	if _, err := s.Displays(); err != nil {
 		return nil, err
 	}
+	s.InputStatus() // asks for the control permission now, so the prompt shows at start
 	return s, nil
 }
 
+// postAllowed reports whether macOS lets this process post input events:
+// the "post event" permission (listed under Accessibility) since macOS
+// 10.15, the Accessibility permission before.
+func postAllowed() bool {
+	if cgPreflightPostEventAccess != nil {
+		return cgPreflightPostEventAccess()
+	}
+	return axIsProcessTrusted()
+}
+
+// InputStatus reports whether remote control works, asking macOS for the
+// permission (once per run) when it does not. The answer is cached for two
+// seconds, so a permission granted while setu runs is noticed quickly
+// without asking macOS on every mouse move.
+func (s *macScreen) InputStatus() error {
+	s.permMu.Lock()
+	defer s.permMu.Unlock()
+	if time.Since(s.permAt) > 2*time.Second {
+		s.permOK, s.permAt = postAllowed(), time.Now()
+		if !s.permOK && !s.asked {
+			s.asked = true
+			if cgRequestPostEventAccess != nil {
+				cgRequestPostEventAccess() // adds the app to the Accessibility list and shows the prompt
+			}
+		}
+	}
+	if !s.permOK {
+		return errInputPermission
+	}
+	return nil
+}
 func (s *macScreen) Displays() ([]Display, error) {
 	var ids [16]uint32
 	var n uint32
@@ -320,10 +387,16 @@ func (s *macScreen) post(ev uintptr) error {
 		return errors.New("could not create the input event")
 	}
 	defer cfRelease(ev)
-	if !axIsProcessTrusted() {
-		return errInputPermission
+	if err := s.InputStatus(); err != nil {
+		return err // macOS would drop the event silently
 	}
-	cgEventSetFlags(ev, s.flags)
+	s.mu.Lock()
+	flags, hook := s.flags, s.onPost
+	s.mu.Unlock()
+	cgEventSetFlags(ev, flags)
+	if hook != nil {
+		hook(ev)
+	}
 	cgEventPost(cgHIDEventTap, ev)
 	return nil
 }
@@ -332,6 +405,7 @@ func (s *macScreen) MoveMouse(x, y int) error {
 	p := s.toPoint(x, y)
 	s.mu.Lock()
 	b := s.buttons
+	s.pos, s.moved = image.Pt(x, y), true
 	s.mu.Unlock()
 	// With a button held, macOS expects "dragged" events, or drags do nothing.
 	typ, button := uint32(cgEventMouseMoved), uint32(0)
@@ -359,7 +433,15 @@ func (s *macScreen) Button(button int, down bool) error {
 	default:
 		return fmt.Errorf("unknown button %d", button)
 	}
-	x, y, _ := s.Cursor()
+	// Click where setu last moved the pointer: macOS applies posted events
+	// asynchronously, so asking it for the cursor right after a move can
+	// still return the old position, and the click would land there.
+	s.mu.Lock()
+	x, y, moved := s.pos.X, s.pos.Y, s.moved
+	s.mu.Unlock()
+	if !moved {
+		x, y, _ = s.Cursor()
+	}
 	p := s.toPoint(x, y)
 	s.mu.Lock()
 	if down {
@@ -402,7 +484,18 @@ func abs(n int) int {
 
 func (s *macScreen) Scroll(dx, dy int) error {
 	// CoreGraphics: positive wheel 1 scrolls up, positive wheel 2 scrolls left.
-	return s.post(cgEventCreateScrollWheelEvent2(0, cgScrollEventUnitLine, 2, int32(-dy), int32(-dx), 0))
+	if cgEventCreateScrollWheelEvent2 != nil {
+		return s.post(cgEventCreateScrollWheelEvent2(0, cgScrollEventUnitLine, 2, int32(-dy), int32(-dx), 0))
+	}
+	// Before macOS 13 only the variadic CGEventCreateScrollWheelEvent exists,
+	// which cannot be called without cgo: build the same event by hand.
+	ev := cgEventCreate(0)
+	if ev != 0 {
+		cgEventSetType(ev, cgEventScrollWheel)
+		cgEventSetIntegerValueField(ev, cgScrollWheelEventDeltaAxis1, int64(-dy))
+		cgEventSetIntegerValueField(ev, cgScrollWheelEventDeltaAxis2, int64(-dx))
+	}
+	return s.post(ev)
 }
 
 func (s *macScreen) Key(code string, down bool) error {
@@ -419,7 +512,19 @@ func (s *macScreen) Key(code string, down bool) error {
 		}
 		s.mu.Unlock()
 	}
-	return s.post(cgEventCreateKeyboardEvent(0, k.mac, down))
+	if err := s.post(cgEventCreateKeyboardEvent(0, k.mac, down)); err != nil {
+		return err
+	}
+	if down && secureInput() {
+		return errSecureInput
+	}
+	return nil
+}
+
+// secureInput reports whether macOS is withholding keystrokes from every
+// program but the focused one (a password field, or Secure Keyboard Entry).
+func secureInput() bool {
+	return isSecureEventInputEnabled != nil && isSecureEventInputEnabled()
 }
 
 func (s *macScreen) Type(text string) error {
@@ -447,6 +552,9 @@ func (s *macScreen) Type(text string) error {
 		if err != nil {
 			return err
 		}
+	}
+	if secureInput() {
+		return errSecureInput
 	}
 	return nil
 }

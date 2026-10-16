@@ -19,7 +19,7 @@ password, and compare the verification code with the one the host prints.
 | Host | Capture | Input | Clipboard |
 | --- | --- | --- | --- |
 | Windows 10 / 11, Server 2016+ | GDI, every monitor | `SendInput` (layout independent) | text |
-| macOS 13+ | CoreGraphics, every display, full Retina resolution | CoreGraphics events | text |
+| macOS 12+ | CoreGraphics, every display, full Retina resolution | CoreGraphics events | text |
 | Linux and the BSDs, X11 session | MIT-SHM (falls back to `GetImage`), RandR monitors | XTEST | text, `CLIPBOARD` selection |
 | Linux, Wayland session | not supported yet: log in with an X11 session ("on Xorg") | | |
 
@@ -27,12 +27,46 @@ Run `setu desktop` inside your graphical session: as yourself, on the desktop
 you want to share (on Linux, `DISPLAY` must be set). It needs no extra
 packages, drivers or administrator rights. Any modern browser can join.
 
-**macOS permissions.** The first time, macOS asks whether your terminal app
-(Terminal, iTerm2, ...) may record the screen. Allow it in **System Settings >
-Privacy & Security > Screen & System Audio Recording**, and allow it under
-**Accessibility** too so remote mouse and keyboard input works, then restart
-the terminal. Without Accessibility the screen is still shared, and the
-browser shows why input does nothing.
+### macOS permissions
+
+macOS grants two permissions, and it grants them to the app you start setu
+from (Terminal, iTerm2, VS Code, ...), not to setu itself:
+
+| Permission | Needed for | Where (System Settings > Privacy & Security) |
+| --- | --- | --- |
+| Screen Recording | seeing the screen | **Screen & System Audio Recording** on macOS 15 and later, **Screen Recording** on macOS 12 to 14 |
+| Accessibility | controlling the mouse and keyboard | **Accessibility** (on every version) |
+
+Input Monitoring is not needed: it is for reading other apps' keystrokes,
+not for sending them.
+
+What happens the first time:
+
+1. `setu desktop` asks macOS for both. macOS shows its prompts and adds your
+   terminal app to both lists (switched off).
+2. Switch your terminal app on in both lists. macOS may ask you to quit and
+   reopen the app; do so, and start `setu desktop` again.
+3. Until Screen Recording is allowed, `setu desktop` stops with a message
+   saying where to allow it. Until Accessibility is allowed, the screen is
+   shared but the host prints a warning, and the browser says remote control
+   is not available yet, with the same instructions. setu checks again every
+   few seconds, so control can start working without a restart.
+
+Good to know:
+
+* On macOS 15 and later, macOS asks again from time to time (about monthly)
+  whether the app may keep recording the screen. Answer **Allow**.
+* If you start setu from a different app later (say iTerm2 instead of
+  Terminal), that app needs the permissions too.
+* Over plain SSH there is no app macOS can ask, so capture fails. Start
+  `setu desktop` from a terminal on the Mac itself (`-d` keeps it running in
+  the background after you close the window).
+* While a password field has focus, or **Secure Keyboard Entry** is on in
+  Terminal or iTerm2, macOS withholds typed keys from every other program.
+  The browser says so; click elsewhere on the Mac, or turn Secure Keyboard
+  Entry off in the terminal's menu.
+* macOS never lets any app see or control the login window or the lock
+  screen.
 
 ## Using it
 
@@ -126,8 +160,9 @@ ones, and nothing is captured while nobody is watching. See
 
 | Symptom | Fix |
 | --- | --- |
-| `macOS has not given setu permission to record the screen` | Allow your terminal app under Screen & System Audio Recording (see macOS permissions above), then restart the terminal. |
-| "Remote input failed: macOS has not given setu permission to control the computer" | Allow your terminal app under Accessibility, then restart the terminal. |
+| `macOS has not given setu permission to record the screen` | Allow your terminal app under Screen & System Audio Recording (see [macOS permissions](#macos-permissions)), then quit and reopen it. |
+| On a Mac: the screen shows, but clicks and keys do nothing ("Remote control is not available yet") | Allow your terminal app under Accessibility, then quit and reopen it. If it is already on, switch it off and on again: macOS keeps the permission per app build, and an updated terminal app can lose it. |
+| On a Mac: clicks work, typing does not ("macOS is blocking typed input") | A password field or Secure Keyboard Entry is active on the Mac. |
 | `Wayland sessions are not supported yet` | Log out and pick an X11 session ("Ubuntu on Xorg", "Plasma (X11)") on the login screen. |
 | `no X11 display: DISPLAY is not set` | Run `setu desktop` from a terminal inside your desktop session, not over plain SSH. |
 | "The remote screen cannot be captured right now" | Windows is showing the lock screen or a UAC prompt (the secure desktop). Sharing resumes when it goes away. |

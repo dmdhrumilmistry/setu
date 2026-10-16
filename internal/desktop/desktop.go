@@ -60,6 +60,12 @@ type Screen interface {
 	Close() error
 }
 
+// InputChecker is implemented by backends that can tell, before any input
+// is sent, why remote control would not work (macOS permissions).
+type InputChecker interface {
+	InputStatus() error
+}
+
 // ErrUnsupported is returned by Open on platforms without a backend.
 var ErrUnsupported = errors.New("remote desktop is not supported on this platform")
 
