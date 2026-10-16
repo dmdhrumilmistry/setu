@@ -250,7 +250,7 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 		defer p.Close()
 		if path, err := s.recordingFile(); err != nil || path != "" {
 			if err == nil {
-				s.rec, err = newRecorder(path, cols, rows, s.commandLine())
+				s.rec, err = newRecorder(path, cols, rows, s.commandLine(), s.logf)
 			}
 			if err != nil {
 				_ = p.Kill()

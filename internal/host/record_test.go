@@ -3,10 +3,12 @@ package host
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -40,7 +42,7 @@ func readCast(t *testing.T, path string) (map[string]any, [][]any) {
 
 func TestRecorder(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.cast")
-	r, err := newRecorder(path, 100, 30, "bash")
+	r, err := newRecorder(path, 100, 30, "bash", t.Logf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,12 +86,37 @@ func TestRecorder(t *testing.T) {
 			t.Errorf("mode %v", st.Mode().Perm())
 		}
 	}
-	if _, err := newRecorder(path, 80, 24, "again"); err == nil {
+	if _, err := newRecorder(path, 80, 24, "again", nil); err == nil {
 		t.Error("an existing recording was replaced")
 	}
 	// Writing after close is ignored, not a panic.
 	r.output([]byte("late"))
 	r.resize(1, 1)
+}
+
+// TestRecorderStopsOnWriteError: a failing disk stops the recording with
+// one warning instead of a silently truncated file.
+func TestRecorderStopsOnWriteError(t *testing.T) {
+	var warnings []string
+	var mu sync.Mutex
+	r, err := newRecorder(filepath.Join(t.TempDir(), "s.cast"), 80, 24, "sh", func(f string, a ...any) {
+		mu.Lock()
+		warnings = append(warnings, fmt.Sprintf(f, a...))
+		mu.Unlock()
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.f.Close() // every later write fails
+	for range 3000 {
+		r.output([]byte(strings.Repeat("x", 100)))
+	}
+	r.close()
+	mu.Lock()
+	defer mu.Unlock()
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "recording stopped") {
+		t.Fatalf("warnings %q", warnings)
+	}
 }
 
 func TestRecordingPath(t *testing.T) {

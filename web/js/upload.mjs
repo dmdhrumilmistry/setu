@@ -34,8 +34,10 @@ export function uploadFile(pc, file, onProgress) {
         const { done, value } = await reader.read();
         if (done) return;
         for (let i = 0; i < value.length; i += CHUNK) {
-          if (settled) return;
-          if (dc.bufferedAmount > HIGH_WATER) await new Promise((r) => { dc.onbufferedamountlow = r; });
+          if (dc.bufferedAmount > HIGH_WATER) {
+            await new Promise((r) => { dc.onbufferedamountlow = r; dc.addEventListener('close', r, { once: true }); });
+          }
+          if (settled) { reader.cancel().catch(() => {}); return; }
           const part = value.subarray(i, i + CHUNK);
           dc.send(part);
           sent += part.length;
