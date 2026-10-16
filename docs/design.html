@@ -277,6 +277,21 @@ Windows backend converts to and from CRLF. A copy shortcut in the browser
 starts a clipboard write at once with a promise for the text, resolved when
 the host clipboard changes (or with <code>clipboard-get</code> if it does not), because
 browsers only allow clipboard writes during a user action.</p>
+<h2 id="file-upload">File upload</h2>
+<p>A control client opens a data channel labelled <code>&quot;setu-upload&quot;</code> for each file
+(no renegotiation is needed once the SCTP association exists), so a large
+file never delays the other channels:</p>
+<pre><code>client -&gt; {t:&quot;upload&quot;, name, size}
+host   -&gt; {t:&quot;upload-ready&quot;} | {t:&quot;error&quot;, msg}
+client -&gt; binary chunks, size bytes in all (32 KiB each, with backpressure)
+host   -&gt; {t:&quot;upload-done&quot;, name: saved path, text: sha256} | {t:&quot;error&quot;, msg}
+</code></pre>
+<p>The host refuses before any data flows if the client is not a ready control
+client, uploads are off, the size is over 2 GiB or two uploads are already
+running. The destination is created with <code>O_EXCL</code> under a sanitized name in
+the upload folder (mode 0600, folder 0700); more data than announced, a write
+error or an early close deletes it. <code>ready</code> carries <code>upload: true</code> when the
+client may upload.</p>
 <h2 id="audit-log">Audit log</h2>
 <p>The host hands every keystroke it writes to the PTY to a per-client
 <code>audit.Input</code>. That input is attached in the same critical section that
@@ -356,6 +371,7 @@ key bar and a compose box.</li>
       <li class="l3"><a href="#manual-signaling---manual">Manual signaling (--manual)</a></li>
       <li class="l3"><a href="#data-channel-setu-reliable-and-ordered">Data channel (&#34;setu&#34;, reliable and ordered)</a></li>
       <li class="l2"><a href="#remote-desktop">Remote desktop</a></li>
+      <li class="l2"><a href="#file-upload">File upload</a></li>
       <li class="l2"><a href="#audit-log">Audit log</a></li>
       <li class="l2"><a href="#service">Service</a></li>
       <li class="l2"><a href="#implementation-steps">Implementation steps</a></li>

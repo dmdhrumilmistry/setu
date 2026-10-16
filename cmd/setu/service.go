@@ -206,6 +206,7 @@ func serviceAdd(args []string) (int, error) {
 	turn := fs.String("turn", "", "TURN server URL for strict NATs (credential from SETU_TURN_PASSWORD)")
 	turnUser := fs.String("turn-user", "", "TURN username")
 	webURL := fs.String("web-url", link.DefaultWebURL, "base URL of the web client")
+	noUpload := fs.Bool("no-upload", false, "do not accept file uploads from clients (they go to ~/Downloads/setu otherwise)")
 	desktopMode := fs.Bool("desktop", false, "share this computer's desktop (screen, mouse, keyboard, clipboard) instead of a command")
 	display := fs.Int("display", -1, "with --desktop: display to share, by number (0 = first); -1 = the primary display")
 	fps := fs.Int("fps", 0, "with --desktop: maximum frames per second (1-60; 0 = default)")
@@ -289,6 +290,7 @@ func serviceAdd(args []string) (int, error) {
 		TURNUser:     *turnUser,
 		TURNPassword: os.Getenv("SETU_TURN_PASSWORD"),
 		WebURL:       *webURL,
+		NoUpload:     *noUpload,
 		Created:      now.UTC(),
 	}
 	if *desktopMode {

@@ -43,6 +43,7 @@ Every setting is optional; without a policy setu behaves as unmanaged.
 | `DisableService` | bool | `setu service` cannot add profiles, and a running service stops serving. |
 | `DisableManual` | bool | `setu share --manual` is refused, so all signaling uses the allowed relays. |
 | `DisableDesktop` | bool | `setu desktop` (remote desktop) is refused. |
+| `DisableFileTransfer` | bool | Clients cannot upload files to this device (shares, remote desktop and service profiles). |
 | `RequirePassword` | bool | Every share and profile needs a password; `setu share` prompts even without `--password`. |
 | `MinPasswordLength` | int | Minimum password length (setu's own floors of 8 and 12 still apply). |
 | `RequirePersonalKeys` | bool | Service profiles cannot have a shared control link, so every audited command names a person. |

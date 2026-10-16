@@ -163,7 +163,8 @@ The same links, passwords, approval, audit log and background mode as
 quality presets, special key combinations, touch gestures on phones,
 fullscreen with keyboard capture, and text clipboard sync both ways (Ctrl+V
 on the remote screen pastes your local clipboard there; copies on the remote
-computer arrive in your clipboard). Only the tiles that changed are sent, and
+computer arrive in your clipboard), and file upload (drop files on the screen or
+the terminal; they land in `~/Downloads/setu` on the host). Only the tiles that changed are sent, and
 each browser acknowledges frames, so slow links get fewer frames instead of
 lag. Hosts: Windows, macOS 12+, and Linux or BSD with an X11 session (Wayland is
 not supported yet). Shortcuts follow your own keyboard: between a Mac and a PC,

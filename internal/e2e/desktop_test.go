@@ -27,6 +27,7 @@ import (
 // client uses.
 type deskClient struct {
 	t      *testing.T
+	pc     *webrtc.PeerConnection
 	dc     chan *webrtc.DataChannel
 	ctl    chan proto.Control
 	frames chan []byte
@@ -44,7 +45,7 @@ func newDeskClient(t *testing.T, ctx context.Context, offerCode string) (*deskCl
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { pc.Close() })
-	c := &deskClient{t: t, dc: make(chan *webrtc.DataChannel, 1), ctl: make(chan proto.Control, 64), frames: make(chan []byte, 1024)}
+	c := &deskClient{t: t, pc: pc, dc: make(chan *webrtc.DataChannel, 1), ctl: make(chan proto.Control, 64), frames: make(chan []byte, 1024)}
 	pc.OnDataChannel(func(d *webrtc.DataChannel) {
 		switch d.Label() {
 		case proto.DataChannelLabel:

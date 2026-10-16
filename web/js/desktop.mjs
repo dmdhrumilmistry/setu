@@ -3,6 +3,7 @@
 // host. Wire format: internal/desktop (binary tiles + frame end on the
 // "setu-screen" channel) and internal/proto (JSON control messages).
 import { MODIFIERS, chunks, combos, crossPlatform, hostCode, isMacPlatform, isShortcut } from './keymap.mjs';
+import { uploadAll, dropTarget } from './upload.mjs';
 
 const $ = (id) => document.getElementById(id);
 
@@ -23,7 +24,7 @@ const CODE_FOR_KEY = {
 
 const isMac = isMacPlatform(navigator.userAgentData?.platform || navigator.platform);
 
-export function createDesktop({ send, control, hostOS }) {
+export function createDesktop({ send, control, hostOS, upload }) {
   const canvas = $('desk-canvas');
   const ctx = canvas.getContext('2d', { alpha: false });
   const view = $('desk-view');
@@ -444,6 +445,12 @@ export function createDesktop({ send, control, hostOS }) {
   });
 
   for (const id of ['desk-keys', 'desk-kbd', 'desk-clip-btn']) $(id).hidden = !control;
+  // Files dropped on the screen (or picked with Upload) go to the remote computer.
+  $('desk-upload').hidden = !upload;
+  if (upload) {
+    $('desk-upload').addEventListener('click', () => $('upload-input').click());
+    dropTarget(view, (files) => uploadAll(files, upload, toast));
+  }
   canvas.style.cursor = control ? 'default' : 'not-allowed';
   // Keep keystrokes and pastes going to the remote computer: clicking
   // anywhere on the screen area, or typing after focus was lost, refocuses

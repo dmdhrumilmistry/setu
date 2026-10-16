@@ -47,6 +47,8 @@ type Policy struct {
 	DisableService bool `json:"DisableService,omitempty"` // forbid `setu service`
 	DisableManual  bool `json:"DisableManual,omitempty"`  // forbid --manual (copy/paste signaling)
 	DisableDesktop bool `json:"DisableDesktop,omitempty"` // forbid `setu desktop` (remote desktop)
+	// DisableFileTransfer turns off uploads from clients to this device.
+	DisableFileTransfer bool `json:"DisableFileTransfer,omitempty"`
 
 	// Access requirements.
 	RequirePassword     bool     `json:"RequirePassword,omitempty"`
@@ -250,6 +252,9 @@ func (p *Policy) CheckDesktop(manual bool) error {
 	}
 	return p.CheckCommand([]string{DesktopCommand})
 }
+
+// FileTransferAllowed reports whether clients may upload files.
+func (p *Policy) FileTransferAllowed() bool { return p == nil || !p.DisableFileTransfer }
 
 // CheckService reports whether the background service is allowed.
 func (p *Policy) CheckService() error {

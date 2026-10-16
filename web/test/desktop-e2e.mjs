@@ -6,7 +6,8 @@
 // the clipboard, so CI sets it and local runs leave it off by default.
 import { spawn, execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { extname, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -50,7 +51,8 @@ const server = createServer(async (req, res) => {
 }).listen(0);
 const port = server.address().port;
 
-const host = spawn(bin, ['desktop', '--qr=false', '--view-link', '--fps', '10', '--relay', relays, '--web-url', `http://127.0.0.1:${port}/`],
+const uploadDir = await mkdtemp(join(tmpdir(), 'setu-uploads-'));
+const host = spawn(bin, ['desktop', '--qr=false', '--view-link', '--fps', '10', '--upload-dir', uploadDir, '--relay', relays, '--web-url', `http://127.0.0.1:${port}/`],
   { env: hostEnv, stdio: ['ignore', 'ignore', 'pipe'] });
 let log = '';
 host.stderr.on('data', (d) => { log += d; process.stderr.write('host| ' + d); });
@@ -137,6 +139,15 @@ try {
     }
 
     await page.click('#clip-close');
+
+    // Upload a file through the toolbar's file picker.
+    const content = 'uploaded from the browser ' + Date.now();
+    await page.setInputFiles('#upload-input', { name: '../sneaky name.txt', mimeType: 'text/plain', buffer: Buffer.from(content) });
+    await until(async () => /Saved on the remote computer/.test((await page.textContent('#toast-msg')) || ''), 15000, 'upload saved');
+    const saved = await readFile(join(uploadDir, 'sneaky name.txt'), 'utf8');
+    if (saved !== content) throw new Error('uploaded file differs');
+    console.log('OK: file upload saved inside the upload directory with a safe name');
+
     const box = await page.locator('#desk-canvas').boundingBox();
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await page.keyboard.press('Shift');
