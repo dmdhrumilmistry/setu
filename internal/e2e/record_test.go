@@ -17,6 +17,7 @@ import (
 // TestRecord records a real shared session and checks the asciicast file
 // holds what the client saw.
 func TestRecord(t *testing.T) {
+	t.Parallel()
 	r := relaytest.New()
 	defer r.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

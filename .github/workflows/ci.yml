@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request supersedes the run for the previous one.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   go:
     runs-on: ubuntu-latest
@@ -19,20 +24,31 @@ jobs:
       - name: gofmt
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
       - run: go vet ./...
+      - run: go test -race -count=1 ./...
+
+  # Checks that do not need the tests, in parallel with them.
+  go-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
-      - run: go test -race -count=1 ./...
+      - name: cross-compile
+        run: |
+          pids=()
+          for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 freebsd/amd64; do
+            GOOS=${t%/*} GOARCH=${t#*/} CGO_ENABLED=0 go build -o /dev/null ./cmd/setu & pids+=($!)
+          done
+          for p in "${pids[@]}"; do wait "$p"; done
+      - name: CLI smoke test (background share + join over public relays)
+        run: go build -o bin/ ./cmd/setu && scripts/smoke.sh ./bin/setu
       - name: desktop backend on a real X11 server (Xvfb)
         run: |
           sudo apt-get install -y xvfb
           xvfb-run -a -s "-screen 0 1280x800x24" env SETU_DESKTOP_INPUT_TEST=1 go test -count=1 -run TestRealScreen -v ./internal/desktop/
-      - name: CLI smoke test (background share + join over public relays)
-        run: go build -o bin/ ./cmd/setu && scripts/smoke.sh ./bin/setu
-      - name: cross-compile
-        run: |
-          for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 freebsd/amd64; do
-            GOOS=${t%/*} GOARCH=${t#*/} CGO_ENABLED=0 go build -o /dev/null ./cmd/setu
-          done
 
   # Real PTY/ConPTY + WebRTC e2e tests on the other host platforms, and the
   # remote desktop backend on several macOS versions (input is injected on
@@ -83,9 +99,10 @@ jobs:
       - name: vendored files untouched
         run: cd web/vendor && sha256sum -c SHA256SUMS
 
+  # The browser jobs start at once instead of waiting for the Go jobs: they
+  # are the longest, and a Go failure fails the run anyway.
   browser-e2e:
     runs-on: ubuntu-latest
-    needs: [go, go-os, web]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -94,6 +111,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.63.0-${{ runner.os }}-chromium
       - run: npm i --no-save playwright@1.63.0 && npx playwright install --with-deps chromium
       - run: go build -o setu ./cmd/setu
       - name: browser -> web client -> local relay -> setu share
@@ -109,7 +130,6 @@ jobs:
   # self-signed certificate cannot be trusted there).
   desktop-e2e-macos:
     runs-on: macos-26
-    needs: [go-os, web]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -118,6 +138,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+      - uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: playwright-1.63.0-${{ runner.os }}-chromium
       - run: npm i --no-save playwright@1.63.0 && npx playwright install chromium
       - run: go build -o setu ./cmd/setu
       - name: browser -> web client -> public relays -> setu desktop on macOS

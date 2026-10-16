@@ -134,6 +134,7 @@ func waitEvents(t *testing.T, scr *desktoptest.Screen, want []string) {
 }
 
 func TestDesktop(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	col := audittest.New(t)
@@ -249,6 +250,7 @@ func TestDesktop(t *testing.T) {
 // TestDesktopRefusesTerminalClient checks that `setu join` explains that a
 // desktop invite needs the browser.
 func TestDesktopRefusesTerminalClient(t *testing.T) {
+	t.Parallel()
 	r := relaytest.New()
 	defer r.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
