@@ -55,6 +55,9 @@ type Profile struct {
 	// (screen, mouse, keyboard, clipboard) instead of running Command.
 	Desktop *DesktopProfile `json:"desktop,omitempty"`
 	// NoUpload refuses file uploads from clients.
+	// RecordDir receives an asciicast recording of each session (terminal
+	// profiles only).
+	RecordDir string `json:"record_dir,omitempty"`
 	// IdleTimeout disconnects control clients after this long without input.
 	IdleTimeout Duration `json:"idle_timeout,omitempty"`
 	NoUpload    bool     `json:"no_upload,omitempty"`
@@ -334,6 +337,10 @@ func (p *Profile) Validate() error {
 	switch {
 	case p.Desktop != nil && len(p.Command) > 0:
 		return errors.New("a desktop profile has no command")
+	case p.Desktop != nil && p.RecordDir != "":
+		return errors.New("recording is for terminal profiles, not the desktop")
+	case p.RecordDir != "" && !filepath.IsAbs(p.RecordDir):
+		return errors.New("the recording folder must be an absolute path")
 	case p.Desktop != nil && (p.Desktop.FPS < 0 || p.Desktop.FPS > 60):
 		return errors.New("desktop frame rate must be 1..60 (0 = default)")
 	case p.Desktop != nil && p.Desktop.Display < -1:

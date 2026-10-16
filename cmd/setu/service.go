@@ -206,6 +206,7 @@ func serviceAdd(args []string) (int, error) {
 	turn := fs.String("turn", "", "TURN server URL for strict NATs (credential from SETU_TURN_PASSWORD)")
 	turnUser := fs.String("turn-user", "", "TURN username")
 	webURL := fs.String("web-url", link.DefaultWebURL, "base URL of the web client")
+	recordDir := fs.String("record-dir", "", "record each session's terminal output to a new file in this folder (asciicast v2)")
 	idleTimeout := fs.Duration("idle-timeout", 0, "disconnect control clients after this long without input (e.g. 15m); 0 = never")
 	noUpload := fs.Bool("no-upload", false, "do not accept file uploads from clients (they go to ~/Downloads/setu otherwise)")
 	desktopMode := fs.Bool("desktop", false, "share this computer's desktop (screen, mouse, keyboard, clipboard) instead of a command")
@@ -280,6 +281,11 @@ func serviceAdd(args []string) (int, error) {
 			return 1, err
 		}
 	}
+	if *recordDir != "" {
+		if *recordDir, err = filepath.Abs(*recordDir); err != nil {
+			return 1, err
+		}
+	}
 
 	now := time.Now()
 	p := &service.Profile{
@@ -296,6 +302,7 @@ func serviceAdd(args []string) (int, error) {
 		WebURL:       *webURL,
 		NoUpload:     *noUpload,
 		IdleTimeout:  service.Duration(*idleTimeout),
+		RecordDir:    *recordDir,
 		Created:      now.UTC(),
 	}
 	if *desktopMode {

@@ -182,6 +182,11 @@ can be turned off explicitly, for example <code>--qr=false</code>.</p>
 <td>Also write the invite link(s) to PATH (mode 0600).</td>
 </tr>
 <tr>
+<td><code>--record FILE</code></td>
+<td>none</td>
+<td>Record the terminal's output to this new file (asciicast v2, mode 0600). <code>setu share</code> only. See <a href="sharing.html#record-a-session">Record a session</a>.</td>
+</tr>
+<tr>
 <td><code>--upload-dir PATH</code></td>
 <td><code>~/Downloads/setu</code></td>
 <td>Where files that control clients upload are saved (see <a href="joining.html#uploading-files">Uploading files</a>).</td>
@@ -547,6 +552,11 @@ the terminal), plus:</p>
 <td><code>--idle-timeout DURATION</code></td>
 <td><code>0</code> (never)</td>
 <td>Disconnect control clients after this long without input.</td>
+</tr>
+<tr>
+<td><code>--record-dir DIR</code></td>
+<td>none</td>
+<td>Record each session's terminal output to a new file in DIR (terminal profiles only).</td>
 </tr>
 <tr>
 <td><code>--desktop</code></td>

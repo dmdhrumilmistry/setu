@@ -153,12 +153,13 @@ func serve(sub string, args []string) (int, error) {
 	turn := fs.String("turn", "", "TURN server URL for strict NATs, e.g. turn:turn.example.com:3478")
 	turnUser := fs.String("turn-user", "", "TURN username")
 	webURL := fs.String("web-url", link.DefaultWebURL, "base URL of the web client (empty = print terminal join command only)")
-	headless, display, fps := new(bool), new(int), new(int)
+	headless, display, fps, record := new(bool), new(int), new(int), new(string)
 	if desktopMode {
 		display = fs.Int("display", -1, "display to share, by number (0 = first); -1 = the primary display. Clients can switch displays")
 		fps = fs.Int("fps", 20, "maximum frames per second (1-60)")
 	} else {
 		headless = fs.Bool("headless", false, "do not attach this terminal; just serve clients")
+		record = fs.String("record", "", "record the terminal's output to this new file (asciicast v2, mode 0600)")
 	}
 	qr := fs.Bool("qr", true, "print a QR code of the invite link")
 	linkFile := fs.String("link-file", "", "also write the invite link(s) to this file (mode 0600)")
@@ -375,6 +376,11 @@ func serve(sub string, args []string) (int, error) {
 	if cfg.UploadDir, err = uploadDirFor(*uploadDir, *noUpload, pol); err != nil {
 		return 1, err
 	}
+	if *record != "" {
+		if cfg.RecordFile, err = filepath.Abs(*record); err != nil {
+			return 1, err
+		}
+	}
 
 	customRelays := relays
 	if strings.Join(relays, ",") == strings.Join(nostr.DefaultRelays, ",") {
@@ -466,6 +472,9 @@ func serve(sub string, args []string) (int, error) {
 		notes = append(notes, fmt.Sprintf("max %d client(s)", *maxClients))
 		if cfg.UploadDir != "" {
 			notes = append(notes, "uploads saved to "+cfg.UploadDir)
+		}
+		if cfg.RecordFile != "" {
+			notes = append(notes, "output recorded to "+cfg.RecordFile)
 		}
 		if auditCfg.Enabled() {
 			notes = append(notes, "audited to "+collectorHost(auditCfg.Endpoint))

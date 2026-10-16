@@ -45,6 +45,7 @@ setu share [flags] [--] [command [args...]]
 | `--headless` | off | Do not attach this terminal; just serve clients. |
 | `--qr` | on | Print a QR code of the browser link. |
 | `--link-file PATH` | none | Also write the invite link(s) to PATH (mode 0600). |
+| `--record FILE` | none | Record the terminal's output to this new file (asciicast v2, mode 0600). `setu share` only. See [Record a session](sharing.md#record-a-session). |
 | `--upload-dir PATH` | `~/Downloads/setu` | Where files that control clients upload are saved (see [Uploading files](joining.md#uploading-files)). |
 | `--no-upload` | off | Do not accept file uploads. |
 | `--verbose` | off | Verbose logging. |
@@ -160,6 +161,7 @@ Ids can be abbreviated to any unique prefix.
 | `--web-url URL` | GitHub Pages | Base URL of the web client. |
 | `--no-upload` | off | Do not accept file uploads from clients (they are saved to `~/Downloads/setu` otherwise). |
 | `--idle-timeout DURATION` | `0` (never) | Disconnect control clients after this long without input. |
+| `--record-dir DIR` | none | Record each session's terminal output to a new file in DIR (terminal profiles only). |
 | `--desktop` | off | Share this computer's desktop instead of a command (no command is given). See [always-on remote desktop](service.md#always-on-remote-desktop). |
 | `--display N` | `-1` (primary) | With `--desktop`: display to share, by number. |
 | `--fps N` | 20 | With `--desktop`: maximum frames per second, 1 to 60. |

@@ -425,6 +425,7 @@ type SessionInfo struct {
 	Password   bool
 	ViewLink   bool
 	MaxClients int
+	Recording  string // where the terminal is recorded, if anywhere
 }
 
 // Session records events for one shared session. A nil *Session is valid.
@@ -451,6 +452,7 @@ func (l *Logger) Session(info SessionInfo) *Session {
 		attribute.Bool("setu.session.password", info.Password),
 		attribute.Bool("setu.session.view_link", info.ViewLink),
 		attribute.Int("setu.session.max_clients", info.MaxClients),
+		attribute.String("setu.session.recording", info.Recording),
 	)
 	return s
 }

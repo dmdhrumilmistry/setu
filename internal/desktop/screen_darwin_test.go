@@ -59,6 +59,18 @@ func TestMacBindings(t *testing.T) {
 	}
 }
 
+// eventually polls state for up to a second until it reports want: macOS
+// applies posted events asynchronously, and a busy machine can take a while.
+func eventually(state func() bool, want bool) bool {
+	for range 50 {
+		if got := state(); got == want {
+			return got
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return state()
+}
+
 // TestMacInput reports what macOS allows here and, where it allows posting
 // events, checks that injected input really reaches the system: the
 // cursor moves, and the HID state shows keys and buttons going down and up.
@@ -101,8 +113,7 @@ func TestMacInput(t *testing.T) {
 		if err := s.Key("ShiftLeft", down); err != nil {
 			t.Fatalf("shift %v: %v", down, err)
 		}
-		time.Sleep(50 * time.Millisecond)
-		if got := cgEventSourceKeyState(cgEventSourceStateHID, shift); got != down {
+		if got := eventually(func() bool { return cgEventSourceKeyState(cgEventSourceStateHID, shift) }, down); got != down {
 			t.Fatalf("after shift %v the system sees it %v", down, got)
 		}
 	}
@@ -111,8 +122,7 @@ func TestMacInput(t *testing.T) {
 		if err := s.Button(ButtonRight, down); err != nil {
 			t.Fatalf("button %v: %v", down, err)
 		}
-		time.Sleep(50 * time.Millisecond)
-		if got := cgEventSourceButtonState(cgEventSourceStateHID, 1); got != down {
+		if got := eventually(func() bool { return cgEventSourceButtonState(cgEventSourceStateHID, 1) }, down); got != down {
 			t.Fatalf("after right button %v the system sees it %v", down, got)
 		}
 	}
