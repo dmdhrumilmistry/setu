@@ -76,6 +76,7 @@ type peer struct {
 	ticket     *ticket      // resume ticket, once ready (guarded by s.mu)
 	lastRx     atomic.Int64 // unix nanos of the last message received
 	pinger     atomic.Bool  // the client sends liveness pings
+	hidden     atomic.Bool  // the client's page is in the background
 }
 
 // newPeer registers a peer after checking admission. resumeID is the
@@ -232,6 +233,10 @@ func (p *peer) onMessage(msg webrtc.DataChannelMessage) {
 		if st != stateClosed {
 			p.pinger.Store(true)
 			p.sendControl(proto.Control{T: proto.CtlPong})
+		}
+	case proto.CtlVisibility:
+		if st == stateReady && p.hidden.Swap(c.Hidden) != c.Hidden {
+			p.s.debugf("client #%d is now in the %s", p.id, map[bool]string{true: "background", false: "foreground"}[c.Hidden])
 		}
 	case proto.CtlResize:
 		if st == stateReady && p.role == proto.RoleControl && p.s.desk == nil {

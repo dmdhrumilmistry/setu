@@ -40,6 +40,18 @@ A connection that only stalls is noticed within about 15 seconds while the
 page is visible. When you come back to a backgrounded tab it is checked within
 5 seconds.
 
+### Switching tabs or apps
+
+Moving to another tab or app does not end the session. The page tells the host
+that it is in the background, so the host stops expecting its pings: browsers
+slow down or freeze background tabs. If the browser does drop the connection
+meanwhile, the page waits until you return and then reconnects. The host keeps
+the session resumable for an hour in that case, not 10 minutes. On phones,
+browsers often discard background tabs and reload them when you come back.
+With **Keep a session going** on (the home page, on by default), the reloaded
+tab resumes the same session. Press **Leave** to end a session and make the
+tab forget it.
+
 ### "session full" or "invite no longer valid"
 
 The share reached `--max-clients`, was `--once` and someone already joined, or

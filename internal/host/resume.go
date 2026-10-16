@@ -17,10 +17,14 @@ import (
 // sent only over the authenticated data channel and is replaced on every
 // resume, and the host keeps only a hash of it. A ticket is bound to the
 // invite (role and personal key) and, if the client proved a device key, to
-// that key. It outlives its connection by resumeGrace.
+// that key. It outlives its connection by resumeGrace, or by
+// backgroundGrace when the client said its page was in the background (a
+// browser tab the user switched away from, which the browser may freeze or
+// discard, so it only comes back when the user does).
 const (
-	resumeGrace = 10 * time.Minute
-	maxTickets  = 64
+	resumeGrace     = 10 * time.Minute
+	backgroundGrace = time.Hour
+	maxTickets      = 64
 	// A client that sends pings but goes silent for this long is dropped,
 	// so a hung connection does not hold its slot until ICE gives up. It is
 	// long because browsers slow timers down in background tabs.
@@ -114,7 +118,11 @@ func (s *Session) releaseTicket(p *peer) {
 	if t == nil || t.peer != p {
 		return
 	}
-	t.peer, t.expires = nil, time.Now().Add(resumeGrace)
+	grace := resumeGrace
+	if p.hidden.Load() {
+		grace = backgroundGrace
+	}
+	t.peer, t.expires = nil, time.Now().Add(grace)
 }
 
 // liveTicketsLocked reports whether any client could still resume.
@@ -149,12 +157,22 @@ func (s *Session) gcTicketsLocked(now time.Time) {
 	}
 }
 
-// dropIdle closes clients that send pings but stopped answering.
+// dropIdle closes clients that send pings but stopped answering. A client
+// in the background is exempt: its browser may pause its timers, and ICE
+// consent checks (which browsers run outside the page) still catch a dead
+// connection.
 func (s *Session) dropIdle() {
-	now := time.Now()
+	for _, p := range s.idlePeers(time.Now()) {
+		p.close("client unresponsive")
+	}
+}
+
+func (s *Session) idlePeers(now time.Time) []*peer {
+	var out []*peer
 	for _, p := range s.readyPeers(false) {
-		if at := p.lastRx.Load(); p.pinger.Load() && at > 0 && now.Sub(time.Unix(0, at)) > idleTimeout {
-			p.close("client unresponsive")
+		if at := p.lastRx.Load(); p.pinger.Load() && !p.hidden.Load() && at > 0 && now.Sub(time.Unix(0, at)) > idleTimeout {
+			out = append(out, p)
 		}
 	}
+	return out
 }

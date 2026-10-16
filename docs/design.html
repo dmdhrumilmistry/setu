@@ -258,6 +258,17 @@ client clears its screen before the full replay. An invalid token gets
 client retries with full-jitter exponential backoff (1 s doubling to 30 s) and
 gives up when the grace period ends. Clients ping every 5 s (<code>{t:&quot;ping&quot;}</code> →
 <code>{t:&quot;pong&quot;}</code>), and the host drops a pinging client that stays silent for 90 s.</p>
+<p>The web client sends <code>{t:&quot;visibility&quot;, hidden}</code> whenever its page moves to or
+from the background. A hidden client is never dropped for silence: browsers
+throttle or freeze background timers, and ICE consent checks still catch a dead
+path. If its connection drops, its ticket lasts <code>backgroundGrace</code> (1 hour). The
+page does not retry while hidden; on return it retries with a fresh window.
+To survive the browser discarding and reloading the tab, the client keeps
+<code>{invite, token, at}</code> in <code>sessionStorage</code> (<code>web/js/keep.mjs</code>). That storage is
+tab-scoped and gone when the tab closes, expires an hour after the page was
+last active, and is cleared on exit, error, give-up and <strong>Leave</strong>. A restored
+page resumes without <code>pos</code>, so the host replays its whole buffer onto the new
+terminal.</p>
 <h2 id="remote-desktop">Remote desktop</h2>
 <p><code>setu desktop</code> reuses signaling, the handshake and admission unchanged. The
 host opens a second reliable, ordered channel, <code>&quot;setu-screen&quot;</code>, used only

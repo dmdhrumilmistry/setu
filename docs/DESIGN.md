@@ -143,6 +143,18 @@ client retries with full-jitter exponential backoff (1 s doubling to 30 s) and
 gives up when the grace period ends. Clients ping every 5 s (`{t:"ping"}` →
 `{t:"pong"}`), and the host drops a pinging client that stays silent for 90 s.
 
+The web client sends `{t:"visibility", hidden}` whenever its page moves to or
+from the background. A hidden client is never dropped for silence: browsers
+throttle or freeze background timers, and ICE consent checks still catch a dead
+path. If its connection drops, its ticket lasts `backgroundGrace` (1 hour). The
+page does not retry while hidden; on return it retries with a fresh window.
+To survive the browser discarding and reloading the tab, the client keeps
+`{invite, token, at}` in `sessionStorage` (`web/js/keep.mjs`). That storage is
+tab-scoped and gone when the tab closes, expires an hour after the page was
+last active, and is cleared on exit, error, give-up and **Leave**. A restored
+page resumes without `pos`, so the host replays its whole buffer onto the new
+terminal.
+
 ## Remote desktop
 
 `setu desktop` reuses signaling, the handshake and admission unchanged. The

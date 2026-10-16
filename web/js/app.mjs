@@ -8,6 +8,7 @@ import * as C from './crypto.mjs';
 import * as N from './nostr.mjs';
 import { deviceKey, forgetDevice, signDevice, deviceFingerprint } from './device.mjs';
 import { createDesktop } from './desktop.mjs';
+import { keepEnabled, setKeepEnabled, keepSession, touchKept, loadKept, clearKept } from './keep.mjs';
 
 const PROTO_VERSION = 1;
 const GATHER_TIMEOUT = 6000;
@@ -53,6 +54,8 @@ const state = {
   attemptTimer: null,
   lastRx: 0,
   pageHidden: false,
+  paused: false, // a reconnect waits for the page to be visible again
+  restoring: false, // resuming a session kept across a reload of this tab
 };
 
 // ---------- UI helpers ----------
@@ -73,6 +76,7 @@ function setStatus(text, kind = 'info') {
 function fail(msg) {
   state.ended = true;
   stopReconnect();
+  clearKept();
   step(msg, 'err');
   setStatus('error', 'err');
   if (state.desk) state.desk.notice(msg);
@@ -173,6 +177,7 @@ async function onMessage(e) {
     case 'exit':
       state.ended = true;
       stopReconnect();
+      clearKept();
       if (state.desk) state.desk.ended('The host ended the remote desktop session.');
       else termNotice(`\r\n\x1b[33m[setu] remote command exited (code ${m.code ?? 0})\x1b[0m\r\n`);
       setStatus('ended', 'warn');
@@ -296,7 +301,11 @@ function onReady(m) {
   state.resume = m.resume ? C.b64Decode(m.resume) : null;
   state.pos = typeof m.pos === 'number' ? m.pos : null;
   state.lastRx = Date.now();
+  state.paused = false;
   $('reconnect').hidden = true;
+  $('leave').hidden = !state.invite;
+  keepSession(state.invite, state.resume);
+  sendVisibility();
   const trusted = m.approval === 'trusted' ? ' · trusted device' : '';
   setStatus((m.role === 'control' ? 'connected · control' : 'connected · view only') + trusted, 'ok');
   if (trusted) $('status').title = 'The host recognised this device and approved it automatically';
@@ -312,13 +321,15 @@ function onReady(m) {
     show('screen-term');
     if (!state.term) setupTerminal();
     else if (!m.resumed) state.term.reset(); // the host replays its whole buffer
-    if (reconnected) termNotice(m.resumed ? '\x1b[32m[setu] reconnected\x1b[0m\r\n' : '\x1b[33m[setu] reconnected; some output was lost while disconnected\x1b[0m\r\n');
+    if (state.restoring) termNotice('\x1b[32m[setu] session restored after this tab reloaded\x1b[0m\r\n');
+    else if (reconnected) termNotice(m.resumed ? '\x1b[32m[setu] reconnected\x1b[0m\r\n' : '\x1b[33m[setu] reconnected; some output was lost while disconnected\x1b[0m\r\n');
     for (const b of state.pending) state.term.write(b);
     state.pending = [];
     if (state.role === 'control') sendCtl({ t: 'resize', cols: state.term.cols, rows: state.term.rows });
     else { $('keys').hidden = true; $('compose').hidden = true; state.term.options.disableStdin = true; }
     state.term.focus();
   }
+  state.restoring = false;
   const pool = state.pool;
   if (pool) setTimeout(() => pool.close(), 3000); // signaling done
   wakeLock();
@@ -360,6 +371,13 @@ function lost(reason) {
 function scheduleReconnect() {
   clearTimeout(state.retryTimer);
   if (state.ended) return;
+  if (document.visibilityState === 'hidden') {
+    // Nobody is looking, and background timers are throttled anyway: wait
+    // for the user to come back. The host keeps the session for an hour.
+    state.paused = true;
+    setStatus('disconnected · reconnects when you return', 'warn');
+    return;
+  }
   if (Date.now() - state.lostAt > RESUME_WINDOW) return giveUp('Could not reconnect: the host has not answered for 10 minutes.');
   // Full jitter, so the clients of one host do not retry in step.
   const base = Math.min(MAX_BACKOFF, 1000 * 2 ** state.attempt);
@@ -391,6 +409,8 @@ async function reconnect() {
 // The host no longer knows our session (it expired, or the share restarted):
 // join afresh, which may ask for the password again.
 function resumeRejected() {
+  clearKept();
+  state.restoring = false;
   state.resume = null;
   state.pos = null;
   state.gen++;
@@ -403,6 +423,8 @@ function resumeRejected() {
 function giveUp(msg) {
   state.ended = true;
   stopReconnect();
+  clearKept();
+  step(msg, 'err');
   notice(msg, 'err');
   setStatus('disconnected', 'err');
   release();
@@ -415,13 +437,53 @@ function stopReconnect() {
   state.retryTimer = state.attemptTimer = null;
 }
 
-// Retry at once instead of waiting out the backoff (the network is back).
+// Retry at once instead of waiting out the backoff (the network is back, or
+// the user returned to the tab).
 function kick() {
-  if (state.lostAt && !state.ended && !state.pageHidden && state.retryTimer) {
-    clearTimeout(state.retryTimer);
-    state.retryTimer = null;
-    reconnect();
+  if (!state.lostAt || state.ended || state.pageHidden || document.visibilityState === 'hidden') return;
+  if (!state.retryTimer && !state.paused) return; // an attempt is running
+  if (state.paused) {
+    // Count the retry window from now: the time spent away does not count.
+    state.paused = false;
+    state.lostAt = Date.now();
+    state.attempt = 0;
   }
+  clearTimeout(state.retryTimer);
+  state.retryTimer = null;
+  reconnect();
+}
+
+// Tell the host whether this page is in the background, so it does not
+// expect pings that a throttled or frozen tab cannot send, and keeps the
+// session resumable for longer if the browser drops the connection.
+function sendVisibility() {
+  if (state.ready && state.resume) sendCtl({ t: 'visibility', hidden: document.visibilityState === 'hidden' });
+}
+
+// Restore a session kept across a reload of this tab (see keep.mjs).
+function restoreKept(k) {
+  state.invite = k.inv;
+  state.resume = k.token;
+  state.pos = null; // the screen is gone: replay everything the host has
+  state.connected = true;
+  state.restoring = true;
+  state.lostAt = Date.now();
+  show('screen-connect');
+  step('Restoring the session this tab was in…');
+  $('leave').hidden = false;
+  reconnect();
+}
+
+// Leave the session for good: forget the invite and token kept for this
+// tab and start over from a clean page.
+function leave() {
+  state.ended = true;
+  stopReconnect();
+  clearKept();
+  release();
+  try { state.pc?.close(); } catch { /* ignore */ }
+  if (state.pool) state.pool.close();
+  location.replace(location.pathname + location.search);
 }
 
 // Check a connection that may have died silently (after a network change,
@@ -452,7 +514,8 @@ setInterval(() => {
   }
 }, 1000);
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible') return;
+  sendVisibility();
+  if (document.visibilityState !== 'visible') return touchKept();
   // Browsers drop wake locks in the background.
   if (state.ready) wakeLock();
   probe();
@@ -463,7 +526,10 @@ navigator.connection?.addEventListener?.('change', () => probe());
 // Close the connection when the tab goes away, so the host sees the
 // disconnect (and releases any held keys) at once, not after ICE times out.
 // A page restored from the back/forward cache resumes.
+// The browser may freeze or discard a background tab without another event.
+document.addEventListener('freeze', () => touchKept());
 window.addEventListener('pagehide', () => {
+  touchKept();
   state.pageHidden = true;
   stopReconnect();
   if (state.pc) state.pc.close();
@@ -696,6 +762,9 @@ function boot() {
     try { await navigator.clipboard.writeText($('answer').value); $('copy-answer').textContent = 'Copied'; }
     catch { $('answer').select(); }
   });
+  $('keep-session').checked = keepEnabled();
+  $('keep-session').addEventListener('change', (e) => setKeepEnabled(e.target.checked));
+  $('leave').addEventListener('click', leave);
   $('reconnect').addEventListener('click', () => {
     $('reconnect').hidden = true;
     state.resume = null;
@@ -714,6 +783,8 @@ function boot() {
     history.replaceState(null, '', location.pathname + location.search);
     start(frag);
   } else {
+    const kept = loadKept();
+    if (kept) return restoreKept(kept);
     show('screen-home');
     showDevice();
   }

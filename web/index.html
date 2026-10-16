@@ -18,6 +18,7 @@
     <span id="title" class="title"></span>
     <span id="status" class="status" data-kind="info" role="status">idle</span>
     <button id="reconnect" type="button" class="reconnect" hidden>Reconnect</button>
+    <button id="leave" type="button" class="reconnect ghost" title="Disconnect and forget this session in this tab" hidden>Leave</button>
   </header>
 
   <main id="screen-home" data-screen>
@@ -45,6 +46,9 @@ setu desktop --password</code></pre>
       <label class="check"><input id="remember-device" type="checkbox"><span>Remember this device, so hosts that trust it (<code>--trust-device</code>, or "always" at their prompt) let it in without asking</span></label>
       <p class="hint">The private key never leaves this browser and cannot be exported, even by this page. Unticking the box deletes it; each join then uses a one-time key.</p>
       <button id="forget-device" type="button" class="ghost">Forget this device</button>
+      <h2>Background tabs</h2>
+      <label class="check"><input id="keep-session" type="checkbox"><span>Keep a session going when this tab is reloaded or the browser discards it in the background (the link and a one-time resume key stay in this tab only, for at most an hour)</span></label>
+      <p class="hint">Switching tabs or apps never ends a session: setu reconnects when you come back, for up to an hour. This option also covers a reload of the tab. Press <strong>Leave</strong> to end a session and forget it.</p>
       <h2>Security model</h2>
       <ul class="list">
         <li>The invite link <em>is</em> the key. Its secret lives after <code>#</code>, which browsers never send to this website.</li>

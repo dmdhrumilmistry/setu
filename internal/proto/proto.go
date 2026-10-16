@@ -76,6 +76,11 @@ const (
 	CtlInfo   = "info"   // host -> client: informational notice
 	CtlPing   = "ping"   // client -> host: liveness probe (hosts that issue resume tokens answer)
 	CtlPong   = "pong"   // host -> client: answer to ping
+	// CtlVisibility (client -> host) says whether the client's page is in
+	// the background (Hidden). Browsers slow or freeze background pages,
+	// so the host stops expecting pings and keeps the session resumable
+	// for longer once such a client's connection drops.
+	CtlVisibility = "visibility"
 )
 
 // ErrResume is the "error" message a host sends when a resume token is not
@@ -153,6 +158,8 @@ type Control struct {
 	// the client's position; otherwise the client should clear its screen
 	// before the replay.
 	Resumed bool `json:"resumed,omitempty"`
+	// Hidden (sent with "visibility"): the client is in the background.
+	Hidden bool `json:"hidden,omitempty"`
 
 	// Approval tells the client how it was admitted (sent with "ready"):
 	// ApprovalTrusted, ApprovalPrompt, or empty when no approval applied.
