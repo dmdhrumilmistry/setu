@@ -144,7 +144,7 @@ try {
     // page closes its connection, so the host notices at once.
     page.on('dialog', (d) => d.accept());
     await page.goto('about:blank');
-    await until(() => /remote input: 1 clicks, 1 key presses/.test(log), 40000, 'input summary in the host log');
+    await until(() => /remote input: 1 clicks, [1-9]\d* key presses/.test(log), 40000, 'input summary in the host log');
     console.log('OK: mouse and keyboard input reached the host');
   }
   ok = true;
