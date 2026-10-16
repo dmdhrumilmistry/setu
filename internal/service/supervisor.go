@@ -301,6 +301,7 @@ func hostConfig(name string, p *Profile, pol *policy.Policy) (host.Config, error
 		PasswordVerifier: p.Password,
 		MaxClients:       p.MaxClients,
 	}
+	cfg.RecordDir = p.RecordDir
 	if cfg.IdleTimeout, err = pol.IdleTimeout(time.Duration(p.IdleTimeout), false); err != nil {
 		return host.Config{}, err
 	}

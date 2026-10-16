@@ -118,6 +118,10 @@ an SSH private key.</p>
 <td>View-only links are separate secrets. The host decides each client's role from which secret decrypted the request, never from what the client claims.</td>
 </tr>
 <tr>
+<td>Recordings</td>
+<td><code>--record</code> and <code>--record-dir</code> write asciicast files that never replace a file and are readable only by you. They hold what the terminal showed (not keystrokes), which can include secrets, so treat them like the terminal itself.</td>
+</tr>
+<tr>
 <td>Idle timeout</td>
 <td><code>--idle-timeout 15m</code> disconnects a control client that sent no input (typing, mouse, clipboard, uploads) for that long, after a warning a minute before, so a forgotten tab does not stay an open door. Watching is not input; view-only clients are not affected. The <code>MaxIdleTime</code> policy sets a maximum.</td>
 </tr>

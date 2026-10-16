@@ -83,6 +83,11 @@ type Config struct {
 	// (0 = never). Watching is not input, so view-only clients stay.
 	IdleTimeout time.Duration
 
+	// RecordFile, or a new file in RecordDir, receives an asciicast
+	// recording of the terminal's output (terminal shares only).
+	RecordFile string
+	RecordDir  string
+
 	// UploadDir is where control clients' uploads are saved; empty turns
 	// uploads off.
 	UploadDir string
@@ -125,6 +130,8 @@ type Session struct {
 	host   string
 
 	id         string
+	rec        *recorder // terminal recording, or nil
+	recording  string
 	desk       *desktopShare // nil for a terminal share
 	audit      *audit.Session
 	localInput *audit.Input
@@ -139,6 +146,9 @@ type Session struct {
 
 // New validates cfg and prepares a session.
 func New(cfg Config) (*Session, error) {
+	if cfg.Desktop != nil && (cfg.RecordFile != "" || cfg.RecordDir != "") {
+		return nil, errors.New("recording is for terminal shares, not the desktop")
+	}
 	if len(cfg.Command) == 0 && cfg.Desktop == nil {
 		return nil, errors.New("no command to run")
 	}
@@ -238,6 +248,18 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 		}
 		s.pty, s.cols, s.rows = p, cols, rows
 		defer p.Close()
+		if path, err := s.recordingFile(); err != nil || path != "" {
+			if err == nil {
+				s.rec, err = newRecorder(path, cols, rows, s.commandLine())
+			}
+			if err != nil {
+				_ = p.Kill()
+				return 1, err
+			}
+			defer s.rec.close()
+			s.recording = path
+			s.logf("recording the terminal's output to %s", path)
+		}
 		go func() { exited <- p.Wait() }()
 		go s.pumpOutput(readDone)
 		kill = func() { _ = p.Kill() }
@@ -256,6 +278,7 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 		Password:   s.pwKey != nil,
 		ViewLink:   s.cfg.ViewSecret != nil,
 		MaxClients: s.cfg.MaxClients,
+		Recording:  s.recording,
 	})
 
 	sigCtx, stopSignal := context.WithCancel(ctx)
@@ -399,6 +422,7 @@ func (s *Session) pumpOutput(done chan<- struct{}) {
 			chunk := append([]byte(nil), buf[:n]...)
 			s.mu.Lock()
 			s.ring = append(s.ring, chunk...)
+			s.rec.output(chunk)
 			if len(s.ring) > replayBytes {
 				s.ring = append([]byte(nil), s.ring[len(s.ring)-replayBytes:]...)
 			}
@@ -435,7 +459,24 @@ func (s *Session) resize(cols, rows int) {
 	s.mu.Unlock()
 	if !same {
 		_ = s.pty.Resize(cols, rows)
+		s.rec.resize(cols, rows)
 	}
+}
+
+// recordingFile is where to record this run ("" = not recording): the
+// configured file, or a new file in the configured directory.
+func (s *Session) recordingFile() (string, error) {
+	if s.cfg.RecordFile != "" || s.cfg.RecordDir == "" {
+		return s.cfg.RecordFile, nil
+	}
+	if err := os.MkdirAll(s.cfg.RecordDir, 0o700); err != nil {
+		return "", fmt.Errorf("recording: %w", err)
+	}
+	prefix := s.cfg.Profile
+	if prefix == "" {
+		prefix = "setu"
+	}
+	return recordingPath(s.cfg.RecordDir, prefix, s.id, time.Now()), nil
 }
 
 func (s *Session) commandLine() string {

@@ -57,6 +57,7 @@ setu share --approve -- bash               # confirm each joiner on this termina
 setu share --expire 30m --max-clients 1    # stop accepting new joins after 30 minutes
 setu share --headless --link-file ~/.setu-link -- claude   # no local attach (e.g. under tmux/nohup)
 setu share --manual                        # no relays: copy/paste offer & answer
+setu share --record run.cast -- claude      # record the session (asciicast) to replay later
 setu share -d --password -- claude         # run in the background and get your shell back
 ```
 
