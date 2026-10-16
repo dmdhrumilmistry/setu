@@ -113,6 +113,7 @@ so the profile's link keeps working across reboots.
 
 ```sh
 setu service add claude -- claude      # prompts for a password, prints the links once
+setu service add --desktop office-pc    # an always-on remote desktop of this machine
 setu service install                   # start at login: systemd user unit / launchd agent / Task Scheduler
 setu service list                      # profiles, state, expiry
 setu service link claude               # show the links (+ QR) again

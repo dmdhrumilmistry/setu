@@ -216,7 +216,7 @@ var (
 	errSecureInput      = errors.New("macOS is blocking typed input: a password field or Secure Keyboard Entry (in Terminal or iTerm2) is active on the Mac")
 )
 
-func open() (Screen, error) {
+func open(OpenOptions) (Screen, error) {
 	if err := load(); err != nil {
 		return nil, err
 	}
