@@ -27,13 +27,14 @@ unmanaged.
 | `DisableShare` | bool | `setu share` is refused. |
 | `DisableService` | bool | `setu service` cannot add profiles, and a running service stops serving. |
 | `DisableManual` | bool | `setu share --manual` is refused, so all signaling uses the allowed relays. |
+| `DisableDesktop` | bool | `setu desktop` (remote desktop) is refused. |
 | `RequirePassword` | bool | Every share and profile needs a password. `setu share` prompts even without `--password`. |
 | `MinPasswordLength` | int | Minimum password length. setu's own floors (8 for shares, 12 for profiles) still apply. |
 | `RequirePersonalKeys` | bool | Service profiles cannot have a shared control link: each person gets their own key, so every audited command names a person. |
 | `MaxClients` | int | Cap on concurrent clients. An unset `--max-clients` becomes the cap, and a higher explicit value is refused. |
 | `MaxShareDuration` | duration | `setu share` must expire within this time. Without `--expire`, it gets this value. |
 | `MaxKeyValidity` | duration | Service keys must expire within this time. Profiles that exceed it are not served until their keys are rotated. |
-| `AllowedCommands` | list | Only these programs may be shared. A bare name (`claude`) matches the program name on any OS; an absolute path matches exactly. |
+| `AllowedCommands` | list | Only these programs may be shared. A bare name (`claude`) matches the program name on any OS; an absolute path matches exactly. Remote desktop counts as `@desktop`, so a list without it also refuses `setu desktop`. |
 | `AllowedRelays` | list | Signaling may only use these relays, and they become the default. |
 | `AllowedWebURLs` | list | Invite links may only point at these web client base URLs, for example a self-hosted copy. |
 | `AuditEndpoint` | string | Forces audit logging on, to this OTLP/HTTP collector. Users cannot turn it off, switch it to connections only, or redirect it. |

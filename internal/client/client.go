@@ -386,6 +386,9 @@ func handshake(ctx context.Context, p *peerConn, opt Options) (*Conn, error) {
 					return nil, err
 				}
 			case proto.CtlReady:
+				if c.Kind == proto.KindDesktop {
+					return nil, errors.New("this invite shares a remote desktop: open the browser link instead of using setu join")
+				}
 				conn.Role, conn.Cmd, conn.Host, conn.Approval = c.Role, c.Cmd, c.Host, c.Approval
 			case proto.CtlError:
 				return nil, fmt.Errorf("host: %s", c.Msg)

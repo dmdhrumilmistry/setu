@@ -36,7 +36,8 @@ const usage = `setu — share your terminal peer-to-peer (WebRTC), no server of 
 Usage:
   setu share [flags] [--] [command [args...]]   share a command (default: $SHELL; PowerShell on Windows)
   setu join  [flags] <link | code>              join from another terminal
-  setu ps                                       list background shares
+  setu desktop [flags]                          share this computer's screen, mouse, keyboard and clipboard
+  setu ps                                      list background shares
   setu link <id>                                show a background share's links (+ QR)
   setu logs <id>                                show a background share's log
   setu stop <id> | --all                        stop background share(s)
@@ -54,8 +55,9 @@ Examples:
   setu share --audit-endpoint https://otel.example.com -- claude
                                           send an audit log of connections and commands
   setu join 'https://…/#k=…'              join from a terminal instead of a browser
+  setu desktop --password --view-link     remote desktop in the browser, plus a watch-only link
 
-Run 'setu share -h' or 'setu join -h' for flags.
+Run 'setu share -h', 'setu desktop -h' or 'setu join -h' for flags.
 `
 
 func main() {
@@ -73,6 +75,8 @@ func main() {
 		code, err = runShare(os.Args[2:])
 	case "join":
 		code, err = runJoin(os.Args[2:])
+	case "desktop":
+		code, err = runDesktop(os.Args[2:])
 	case "ps", "list", "ls":
 		code, err = runPS()
 	case "stop":
@@ -122,8 +126,16 @@ func signalContext() (context.Context, context.CancelFunc) {
 	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 }
 
-func runShare(args []string) (int, error) {
-	fs := flag.NewFlagSet("share", flag.ExitOnError)
+func runShare(args []string) (int, error) { return serve("share", args) }
+
+// runDesktop shares this computer's screen, mouse, keyboard and clipboard.
+func runDesktop(args []string) (int, error) { return serve("desktop", args) }
+
+// serve runs `setu share` or `setu desktop`: the same invites, access
+// control, audit and background mode, sharing a command or the desktop.
+func serve(sub string, args []string) (int, error) {
+	desktopMode := sub == "desktop"
+	fs := flag.NewFlagSet(sub, flag.ExitOnError)
 	var relays, stun listFlag
 	manual := fs.Bool("manual", false, "copy/paste signaling: no relays, you paste the answer code back here")
 	viewLink := fs.Bool("view-link", false, "also create a read-only invite link")
@@ -139,7 +151,13 @@ func runShare(args []string) (int, error) {
 	turn := fs.String("turn", "", "TURN server URL for strict NATs, e.g. turn:turn.example.com:3478")
 	turnUser := fs.String("turn-user", "", "TURN username")
 	webURL := fs.String("web-url", link.DefaultWebURL, "base URL of the web client (empty = print terminal join command only)")
-	headless := fs.Bool("headless", false, "do not attach this terminal; just serve clients")
+	headless, display, fps := new(bool), new(int), new(int)
+	if desktopMode {
+		display = fs.Int("display", -1, "display to share, by number (0 = first); -1 = the primary display. Clients can switch displays")
+		fps = fs.Int("fps", 20, "maximum frames per second (1-60)")
+	} else {
+		headless = fs.Bool("headless", false, "do not attach this terminal; just serve clients")
+	}
 	qr := fs.Bool("qr", true, "print a QR code of the invite link")
 	linkFile := fs.String("link-file", "", "also write the invite link(s) to this file (mode 0600)")
 	verbose := fs.Bool("verbose", false, "verbose logging")
@@ -152,7 +170,11 @@ func runShare(args []string) (int, error) {
 	sessionDir := fs.String("session-dir", "", "internal: background session directory")
 	passwordStdin := fs.Bool("password-stdin", false, "read the session password from the first line of stdin")
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "Usage: setu share [flags] [--] [command [args...]]\n\n")
+		if desktopMode {
+			fmt.Fprint(os.Stderr, "Usage: setu desktop [flags]\n\nShare this computer's screen, mouse, keyboard and clipboard with a browser.\n\n")
+		} else {
+			fmt.Fprint(os.Stderr, "Usage: setu share [flags] [--] [command [args...]]\n\n")
+		}
 		fs.PrintDefaults()
 		fmt.Fprint(os.Stderr, "\nEnvironment: SETU_PASSWORD (password), SETU_TURN_PASSWORD (TURN credential),\n"+
 			"  OTEL_EXPORTER_OTLP_[LOGS_]ENDPOINT / OTEL_EXPORTER_OTLP_[LOGS_]HEADERS (audit collector and its credentials)\n")
@@ -160,8 +182,22 @@ func runShare(args []string) (int, error) {
 	_ = fs.Parse(args)
 
 	command := fs.Args()
-	if len(command) == 0 {
-		command = host.DefaultShell()
+	label := "remote desktop"
+	switch {
+	case desktopMode && len(command) > 0:
+		return 2, errors.New("setu desktop takes no command (did you mean setu share?)")
+	case desktopMode:
+		if *fps < 1 || *fps > 60 {
+			return 2, errors.New("--fps must be between 1 and 60")
+		}
+		if *webURL == "" {
+			return 2, errors.New("setu desktop is viewed in the browser, so --web-url cannot be empty")
+		}
+	default:
+		if len(command) == 0 {
+			command = host.DefaultShell()
+		}
+		label = strings.Join(command, " ")
 	}
 
 	// Managed (MDM) policy: checked here and again by a background child.
@@ -169,11 +205,17 @@ func runShare(args []string) (int, error) {
 	if err != nil {
 		return 1, err
 	}
-	if err := pol.CheckShare(*manual); err != nil {
-		return 1, err
-	}
-	if err := pol.CheckCommand(resolveCommand(command)); err != nil {
-		return 1, err
+	if desktopMode {
+		if err := pol.CheckDesktop(*manual); err != nil {
+			return 1, err
+		}
+	} else {
+		if err := pol.CheckShare(*manual); err != nil {
+			return 1, err
+		}
+		if err := pol.CheckCommand(resolveCommand(command)); err != nil {
+			return 1, err
+		}
 	}
 	if err := pol.CheckWebURL(*webURL); err != nil {
 		return 1, err
@@ -210,7 +252,7 @@ func runShare(args []string) (int, error) {
 	}
 
 	stdinTTY := tty.IsTerminal(os.Stdin) && tty.IsTerminal(os.Stdout)
-	mirror := !*headless && stdinTTY
+	mirror := !desktopMode && !*headless && stdinTTY
 	for i, fp := range trustDevices {
 		n, err := secure.NormalizeDeviceFingerprint(fp)
 		if err != nil {
@@ -277,10 +319,10 @@ func runShare(args []string) (int, error) {
 	}
 
 	if background {
-		return startBackground(fs, command, pw)
+		return startBackground(fs, sub, label, command, pw)
 	}
 	if *sessionDir != "" {
-		cleanup, err := daemon.Register(*sessionDir, strings.Join(command, " "))
+		cleanup, err := daemon.Register(*sessionDir, label)
 		if err != nil {
 			return 1, err
 		}
@@ -318,6 +360,10 @@ func runShare(args []string) (int, error) {
 		Verbose:        *verbose,
 		Audit:          auditLog,
 	}
+	if desktopMode {
+		cfg.Command = nil
+		cfg.Desktop = &host.DesktopConfig{FPS: *fps, Display: *display}
+	}
 
 	customRelays := relays
 	if strings.Join(relays, ",") == strings.Join(nostr.DefaultRelays, ",") {
@@ -339,12 +385,21 @@ func runShare(args []string) (int, error) {
 		}
 	}
 
-	cmdLine := strings.Join(command, " ")
+	controlTitle := "\x1b[1;31mCONTROL link\x1b[0m — anyone holding it can type into this terminal. Keep it secret:"
+	viewTitle := "\x1b[1;33mVIEW-ONLY link\x1b[0m — can watch, cannot type:"
+	if desktopMode {
+		controlTitle = "\x1b[1;31mCONTROL link\x1b[0m - anyone holding it can see and control this computer (screen, mouse, keyboard, clipboard). Keep it secret:"
+		viewTitle = "\x1b[1;33mVIEW-ONLY link\x1b[0m - can watch the screen, cannot control it:"
+	}
 	cfg.OnInvite = func(inv host.Invite) {
 		w := os.Stderr
-		fmt.Fprintf(w, "\n\x1b[1msetu %s\x1b[0m — sharing \x1b[1m%s\x1b[0m peer-to-peer\n", version, cmdLine)
+		fmt.Fprintf(w, "\n\x1b[1msetu %s\x1b[0m — sharing \x1b[1m%s\x1b[0m peer-to-peer\n", version, label)
 		if *manual {
-			fmt.Fprintln(w, "\nManual mode: send this offer to the joiner (open the link, or `setu join <code>`):")
+			if desktopMode {
+				fmt.Fprintln(w, "\nManual mode: send this offer link to the joiner (or the code, to paste on the web client's home page):")
+			} else {
+				fmt.Fprintln(w, "\nManual mode: send this offer to the joiner (open the link, or `setu join <code>`):")
+			}
 			if *webURL != "" {
 				fmt.Fprintf(w, "\n  %s\n", link.Build(*webURL, link.Invite{Offer: inv.Code}))
 			}
@@ -363,14 +418,16 @@ func runShare(args []string) (int, error) {
 			} else {
 				links = append(links, frag)
 			}
-			fmt.Fprintf(w, "  terminal: setu join '%s'\n", frag)
+			if !desktopMode {
+				fmt.Fprintf(w, "  terminal: setu join '%s'\n", frag)
+			}
 			if *qr && full != "" && tty.IsTerminal(os.Stderr) {
 				printQR(w, full)
 			}
 		}
-		show("\x1b[1;31mCONTROL link\x1b[0m — anyone holding it can type into this terminal. Keep it secret:", cfg.ControlSecret)
+		show(controlTitle, cfg.ControlSecret)
 		if cfg.ViewSecret != nil {
-			show("\x1b[1;33mVIEW-ONLY link\x1b[0m — can watch, cannot type:", cfg.ViewSecret)
+			show(viewTitle, cfg.ViewSecret)
 		}
 		var notes []string
 		if pw != "" {
@@ -405,6 +462,8 @@ func runShare(args []string) (int, error) {
 		if mirror {
 			fmt.Fprint(w, "\nThis terminal is attached to the session. Type <Enter> ~ . to end sharing.\nPress Enter to start…")
 			_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
+		} else if desktopMode {
+			fmt.Fprintln(w, "\nSharing this computer's desktop; press Ctrl-C to stop.")
 		} else {
 			fmt.Fprintln(w, "\nServing headless; Ctrl-C to stop.")
 		}

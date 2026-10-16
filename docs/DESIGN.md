@@ -52,6 +52,7 @@ HKDF, PBKDF2, AES-GCM and HMAC in its standard library. The Rust options
 | `internal/audit` | OpenTelemetry audit log: rebuilds commands from keystrokes, redacts secrets, exports OTLP/HTTP log records through a bounded batch queue |
 | `internal/service` | The `setu service` supervisor: persistent profiles (keys, password verifiers), hot-reloaded config, restart with backoff, and the systemd / launchd / Task Scheduler autostart entries |
 | `internal/daemon` | Detached `setu share -d` processes and their registry |
+| `internal/desktop` | `setu desktop`: screen capture and input injection (GDI and `SendInput` on Windows, X11 with MIT-SHM and XTEST elsewhere, no cgo), clipboard, and the hub that streams changed tiles to every viewer with per-viewer flow control |
 | `web/` | The static client: `crypto.mjs` mirrors `secure`/`link`, `nostr.mjs` mirrors `nostr`, `app.mjs` handles the UI, WebRTC and xterm.js |
 
 ## Protocol
@@ -111,6 +112,51 @@ host  → {t:"exit", code} | {t:"error", msg}
 
 `fpA` and `fpB` are the DTLS fingerprints from both SDPs. They feed the proof
 and the 6-digit **SAS** that both sides display.
+
+## Remote desktop
+
+`setu desktop` reuses signaling, the handshake and admission unchanged. The
+host opens a second reliable, ordered channel, `"setu-screen"`, used only
+host to client, so a large frame never delays control messages. `ready`
+carries `kind: "desktop"`; `setu join` refuses such shares.
+
+```
+host  → {t:"screen", displays:[{name,w,h,primary}], display}   on join and on every layout change
+host  → binary on "setu-screen": tiles, then a frame end
+client→ {t:"ack", frame}                       after drawing that frame
+client→ {t:"pointer", x, y, buttons}           control only; buttons = PointerEvent.buttons
+client→ {t:"wheel", dx, dy} | {t:"key", key: KeyboardEvent.code, down} | {t:"text", text}
+both  → {t:"clipboard", text, more}            control only; parts of at most 8192 characters, 1 MiB in total
+client→ {t:"clipboard-get"} | {t:"display", display} | {t:"refresh"} | {t:"quality", quality}
+```
+
+Binary messages (little endian) are at most 60 KiB, under every WebRTC
+implementation's message size limit:
+
+```
+tile       [1, enc (1 JPEG, 2 PNG), x u16, y u16, w u16, h u16, image bytes]
+frame end  [2, id u32, cursorX i32, cursorY i32, cursorVisible u8]
+```
+
+The hub captures the shared display at most `--fps` times a second, and only
+while some viewer has fewer than two unacknowledged frames, so idle viewers
+and slow links cost nothing and never build a queue. Each capture is compared
+with the previous one in 64x64 tiles; every viewer accumulates the tiles that
+changed since its last frame, and they are sent as horizontal runs of up to 8
+tiles. A run with at most 256 colours is encoded as a paletted PNG (crisp
+text), anything else as JPEG at the viewer's quality; runs whose encoding
+would exceed the message limit are split. Distinct runs are encoded once per
+capture, in parallel, and shared by every viewer that needs them. Cursor
+position rides in the frame end, so pointer movement alone produces a frame
+without tiles.
+
+Input is applied to the physical key (`KeyboardEvent.code` mapped to PC
+scancodes on Windows and evdev keycodes on X11), so the host's own layout
+decides the character. `text` uses Unicode injection on Windows and a briefly
+remapped spare keycode on X11 for characters the layout lacks. Keys and
+buttons a viewer holds are released when it leaves. The host's clipboard is
+polled for changes (`GetClipboardSequenceNumber`, XFixes selection events)
+and sent to control viewers; text a viewer set is not echoed back.
 
 ## Audit log
 

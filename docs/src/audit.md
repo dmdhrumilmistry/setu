@@ -71,9 +71,14 @@ same.
 | `setu.client.rejected`, `setu.client.auth_failure`, `setu.client.approval` | Admission decisions. |
 | `setu.command` | A submitted command line. |
 | `setu.input.control` | ^C, ^D or ^Z. |
+| `setu.desktop.clipboard` | Clipboard text crossed between a client and the host ([remote desktop](desktop.md)): direction (`setu.clipboard.direction` `to_host` or `to_client`) and size (`setu.clipboard.bytes`), never the text. |
+| `setu.desktop.display` | A client switched the shared display. |
+| `setu.desktop.input` | When a control client leaves: how many clicks, key presses, scrolls and typed characters it sent. Keystrokes themselves are not recorded. |
 | `setu.audit.start` | The startup probe sent by `--audit-required`. |
 
-Every record carries `setu.session.id`; service records also carry
+Every record carries `setu.session.id`, and `setu.session.start` records
+whether the session shares a `terminal` or a `desktop` (`setu.session.kind`);
+service records also carry
 `setu.profile`. The resource identifies the host (`service.name=setu`,
 `service.version`, `host.name`, `host.id`, `user.name`) and, on managed devices,
 `setu.policy.source`, `setu.policy.hash` and any attributes from the policy.

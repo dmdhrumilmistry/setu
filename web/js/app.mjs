@@ -7,6 +7,7 @@ import { FitAddon } from '../vendor/addon-fit.mjs';
 import * as C from './crypto.mjs';
 import * as N from './nostr.mjs';
 import { deviceKey, forgetDevice, signDevice, deviceFingerprint } from './device.mjs';
+import { createDesktop } from './desktop.mjs';
 
 const PROTO_VERSION = 1;
 const GATHER_TIMEOUT = 6000;
@@ -29,6 +30,8 @@ const state = {
   ctrlArmed: false,
   pending: [],
   wakeLock: null,
+  desk: null, // remote desktop viewer, for desktop shares
+  screenEarly: [], // screen updates that arrived before "ready"
 };
 
 // ---------- UI helpers ----------
@@ -49,7 +52,8 @@ function setStatus(text, kind = 'info') {
 function fail(msg) {
   step(msg, 'err');
   setStatus('error', 'err');
-  if (state.ready) termNotice(`\r\n\x1b[31m[setu] ${msg}\x1b[0m\r\n`);
+  if (state.desk) state.desk.notice(msg);
+  else if (state.ready) termNotice(`\r\n\x1b[31m[setu] ${msg}\x1b[0m\r\n`);
 }
 function termNotice(s) {
   if (state.term) state.term.write(s);
@@ -77,12 +81,22 @@ async function answerOffer(offer) {
   const pc = new RTCPeerConnection({ iceServers: validIce(offer.ice) });
   state.pc = pc;
   pc.ondatachannel = (e) => {
+    if (e.channel.label === 'setu-screen') {
+      e.channel.binaryType = 'arraybuffer';
+      e.channel.onmessage = (m) => { if (state.desk) state.desk.frame(m.data); else state.screenEarly.push(m.data); };
+      return;
+    }
     if (e.channel.label !== 'setu') { e.channel.close(); return; }
     const dc = e.channel;
     dc.binaryType = 'arraybuffer';
     state.dc = dc;
     dc.onmessage = onMessage;
-    dc.onclose = () => { if (state.ready) termNotice('\r\n\x1b[33m[setu] connection closed\x1b[0m\r\n'); setStatus('disconnected', 'err'); release(); };
+    dc.onclose = () => {
+      if (state.desk) state.desk.ended('Disconnected from the remote computer.');
+      else if (state.ready) termNotice('\r\n\x1b[33m[setu] connection closed\x1b[0m\r\n');
+      setStatus('disconnected', 'err');
+      release();
+    };
   };
   pc.onconnectionstatechange = () => {
     log('pc ' + pc.connectionState);
@@ -120,10 +134,15 @@ async function onMessage(e) {
     case 'ready': return onReady(m);
     case 'error': return fail('Host: ' + m.msg);
     case 'exit':
-      termNotice(`\r\n\x1b[33m[setu] remote command exited (code ${m.code ?? 0})\x1b[0m\r\n`);
+      if (state.desk) state.desk.ended('The host ended the remote desktop session.');
+      else termNotice(`\r\n\x1b[33m[setu] remote command exited (code ${m.code ?? 0})\x1b[0m\r\n`);
       setStatus('ended', 'warn');
       return;
-    case 'info': return termNotice(`\r\n[setu] ${m.msg}\r\n`);
+    case 'info':
+      if (state.desk) return state.desk.notice(m.msg);
+      return termNotice(`\r\n[setu] ${m.msg}\r\n`);
+    case 'screen': return state.desk?.onScreen(m);
+    case 'clipboard': return state.desk?.onClipboard(m);
   }
 }
 
@@ -230,13 +249,20 @@ function onReady(m) {
   if (trusted) $('status').title = 'The host recognised this device and approved it automatically';
   $('title').textContent = `${m.cmd || 'terminal'} @ ${m.host || 'host'}`;
   document.title = `setu · ${m.cmd || 'terminal'}`;
-  show('screen-term');
-  setupTerminal();
-  for (const b of state.pending) state.term.write(b);
-  state.pending = [];
-  if (state.role === 'control') sendCtl({ t: 'resize', cols: state.term.cols, rows: state.term.rows });
-  else { $('keys').hidden = true; $('compose').hidden = true; state.term.options.disableStdin = true; }
-  state.term.focus();
+  if (m.kind === 'desktop') {
+    show('screen-desk');
+    state.desk = createDesktop({ send: sendCtl, control: state.role === 'control' });
+    for (const b of state.screenEarly) state.desk.frame(b);
+    state.screenEarly = [];
+  } else {
+    show('screen-term');
+    setupTerminal();
+    for (const b of state.pending) state.term.write(b);
+    state.pending = [];
+    if (state.role === 'control') sendCtl({ t: 'resize', cols: state.term.cols, rows: state.term.rows });
+    else { $('keys').hidden = true; $('compose').hidden = true; state.term.options.disableStdin = true; }
+    state.term.focus();
+  }
   if (state.pool) setTimeout(() => state.pool.close(), 3000); // signaling done
   if (navigator.wakeLock) navigator.wakeLock.request('screen').then((l) => (state.wakeLock = l)).catch(() => {});
   window.addEventListener('beforeunload', beforeUnload);

@@ -22,9 +22,9 @@ var notForwarded = map[string]bool{
 	"password": true, "headless": true, "qr": true, "link-file": true,
 }
 
-// startBackground re-runs `setu share` detached from this terminal and
-// prints its invite links once it is serving.
-func startBackground(fs *flag.FlagSet, command []string, password string) (int, error) {
+// startBackground re-runs `setu share` (or `setu desktop`) detached from
+// this terminal and prints its invite links once it is serving.
+func startBackground(fs *flag.FlagSet, sub, label string, command []string, password string) (int, error) {
 	var forwarded []string
 	fs.Visit(func(f *flag.Flag) {
 		if notForwarded[f.Name] {
@@ -39,14 +39,14 @@ func startBackground(fs *flag.FlagSet, command []string, password string) (int, 
 		forwarded = append(forwarded, "-"+f.Name+"="+f.Value.String())
 	})
 	childArgs := func(dir string) []string {
-		args := []string{"share", "-session-dir", dir}
+		args := []string{sub, "-session-dir", dir}
 		if password != "" {
 			args = append(args, "-password-stdin")
 		}
 		args = append(args, forwarded...)
 		return append(append(args, "--"), command...)
 	}
-	fmt.Fprintf(os.Stderr, "starting %q in the background…\n", strings.Join(command, " "))
+	fmt.Fprintf(os.Stderr, "starting %q in the background…\n", label)
 	info, err := daemon.Spawn(childArgs, password, 45*time.Second)
 	if err != nil {
 		return 1, err
@@ -82,8 +82,8 @@ func printLinks(w io.Writer, dir string) error {
 // QR codes when w is a terminal.
 func printLinkList(w io.Writer, links []string) {
 	titles := []string{
-		"\x1b[1;31mCONTROL link\x1b[0m — anyone holding it can type into the shared terminal. Keep it secret:",
-		"\x1b[1;33mVIEW-ONLY link\x1b[0m — can watch, cannot type:",
+		"\x1b[1;31mCONTROL link\x1b[0m - anyone holding it has full control of this share. Keep it secret:",
+		"\x1b[1;33mVIEW-ONLY link\x1b[0m - can watch, cannot type or control:",
 	}
 	for i, l := range links {
 		title := ""

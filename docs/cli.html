@@ -50,6 +50,7 @@
       <ul>
         <li><a href="sharing.html">Sharing a terminal</a></li>
         <li><a href="joining.html">Joining a session</a></li>
+        <li><a href="desktop.html">Remote desktop</a></li>
         <li><a href="claude-code.html">Claude Code from your phone</a></li>
         <li><a href="service.html">Always-on service</a></li>
         <li><a href="audit.html">Audit logging</a></li>
@@ -78,6 +79,7 @@
 <h1 id="cli-reference">CLI reference</h1>
 <pre><code>setu share [flags] [--] [command [args...]]   share a command (default: your shell)
 setu join  [flags] &lt;link | code&gt;              join from another terminal
+setu desktop [flags]                          share this computer's screen, mouse, keyboard and clipboard
 setu ps                                       list background shares
 setu link &lt;id&gt;                                show a background share's links (+ QR)
 setu logs &lt;id&gt;                                show a background share's log
@@ -321,6 +323,36 @@ can be turned off explicitly, for example <code>--qr=false</code>.</p>
 </tbody>
 </table>
 <p>Type <code>&lt;Enter&gt; ~ .</code> to detach.</p>
+<h2 id="setu-desktop">setu desktop</h2>
+<pre><code>setu desktop [flags]
+</code></pre>
+<p>Shares this computer's desktop with a browser (see <a href="desktop.html">Remote desktop</a>).
+It takes the same access, networking, audit and background flags as
+<code>setu share</code> (<code>--password</code>, <code>--view-link</code>, <code>--once</code>, <code>--expire</code>, <code>--approve</code>,
+<code>--manual</code>, <code>-d</code> and so on), no command and no <code>--headless</code> (it never attaches
+the terminal), plus:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--display N</code></td>
+<td><code>-1</code> (primary)</td>
+<td>Display to share, by number (0 = first). Control clients can switch displays from the browser.</td>
+</tr>
+<tr>
+<td><code>--fps N</code></td>
+<td>20</td>
+<td>Maximum frames per second, 1 to 60.</td>
+</tr>
+</tbody>
+</table>
+<p>Press Ctrl-C to end the share.</p>
 <h2 id="background-shares">Background shares</h2>
 <table>
 <thead>
@@ -665,6 +697,7 @@ values hidden), or &quot;no managed policy on this device&quot;. See
     <ul>
       <li class="l2"><a href="#setu-share">setu share</a></li>
       <li class="l2"><a href="#setu-join">setu join</a></li>
+      <li class="l2"><a href="#setu-desktop">setu desktop</a></li>
       <li class="l2"><a href="#background-shares">Background shares</a></li>
       <li class="l2"><a href="#setu-service">setu service</a></li>
       <li class="l3"><a href="#setu-service-add">setu service add</a></li>

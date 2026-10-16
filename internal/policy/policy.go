@@ -46,6 +46,7 @@ type Policy struct {
 	DisableShare   bool `json:"DisableShare,omitempty"`   // forbid ad-hoc `setu share`
 	DisableService bool `json:"DisableService,omitempty"` // forbid `setu service`
 	DisableManual  bool `json:"DisableManual,omitempty"`  // forbid --manual (copy/paste signaling)
+	DisableDesktop bool `json:"DisableDesktop,omitempty"` // forbid `setu desktop` (remote desktop)
 
 	// Access requirements.
 	RequirePassword     bool     `json:"RequirePassword,omitempty"`
@@ -230,6 +231,24 @@ func (p *Policy) CheckShare(manual bool) error {
 		return violation("DisableManual", "--manual is disabled on this device")
 	}
 	return nil
+}
+
+// DesktopCommand is how AllowedCommands names remote desktop sharing, so a
+// policy that restricts what may be shared also restricts the desktop.
+const DesktopCommand = "@desktop"
+
+// CheckDesktop reports whether remote desktop sharing is allowed.
+func (p *Policy) CheckDesktop(manual bool) error {
+	if p == nil {
+		return nil
+	}
+	if err := p.CheckShare(manual); err != nil {
+		return err
+	}
+	if p.DisableDesktop {
+		return violation("DisableDesktop", "`setu desktop` is disabled on this device")
+	}
+	return p.CheckCommand([]string{DesktopCommand})
 }
 
 // CheckService reports whether the background service is allowed.

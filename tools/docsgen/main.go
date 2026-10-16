@@ -54,6 +54,7 @@ var nav = []section{
 	{"Guides", []page{
 		{"src/sharing.md", "sharing.html", "Sharing a terminal"},
 		{"src/joining.md", "joining.html", "Joining a session"},
+		{"src/desktop.md", "desktop.html", "Remote desktop"},
 		{"src/claude-code.md", "claude-code.html", "Claude Code from your phone"},
 		{"src/service.md", "service.html", "Always-on service"},
 		{"src/audit.md", "audit.html", "Audit logging"},
@@ -352,7 +353,7 @@ func undocumentedFlags(root, cliDoc string) ([]string, error) {
 	flagRE := regexp.MustCompile(`(?m)^\s+-([a-z][a-z0-9-]*)`)
 	var missing []string
 	for _, args := range [][]string{
-		{"share"}, {"join"}, {"service", "add"}, {"service", "rotate"},
+		{"share"}, {"desktop"}, {"join"}, {"service", "add"}, {"service", "rotate"},
 		{"service", "audit"}, {"service", "install"}, {"service", "run"},
 	} {
 		cmd := exec.Command("go", append(append([]string{"run", "./cmd/setu"}, args...), "-h")...)

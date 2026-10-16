@@ -50,6 +50,7 @@
       <ul>
         <li><a href="sharing.html">Sharing a terminal</a></li>
         <li><a href="joining.html">Joining a session</a></li>
+        <li><a href="desktop.html">Remote desktop</a></li>
         <li><a href="claude-code.html">Claude Code from your phone</a></li>
         <li><a href="service.html">Always-on service</a></li>
         <li><a href="audit.html" aria-current="page">Audit logging</a></li>
@@ -202,12 +203,26 @@ same.</p>
 <td>^C, ^D or ^Z.</td>
 </tr>
 <tr>
+<td><code>setu.desktop.clipboard</code></td>
+<td>Clipboard text crossed between a client and the host (<a href="desktop.html">remote desktop</a>): direction (<code>setu.clipboard.direction</code> <code>to_host</code> or <code>to_client</code>) and size (<code>setu.clipboard.bytes</code>), never the text.</td>
+</tr>
+<tr>
+<td><code>setu.desktop.display</code></td>
+<td>A client switched the shared display.</td>
+</tr>
+<tr>
+<td><code>setu.desktop.input</code></td>
+<td>When a control client leaves: how many clicks, key presses, scrolls and typed characters it sent. Keystrokes themselves are not recorded.</td>
+</tr>
+<tr>
 <td><code>setu.audit.start</code></td>
 <td>The startup probe sent by <code>--audit-required</code>.</td>
 </tr>
 </tbody>
 </table>
-<p>Every record carries <code>setu.session.id</code>; service records also carry
+<p>Every record carries <code>setu.session.id</code>, and <code>setu.session.start</code> records
+whether the session shares a <code>terminal</code> or a <code>desktop</code> (<code>setu.session.kind</code>);
+service records also carry
 <code>setu.profile</code>. The resource identifies the host (<code>service.name=setu</code>,
 <code>service.version</code>, <code>host.name</code>, <code>host.id</code>, <code>user.name</code>) and, on managed devices,
 <code>setu.policy.source</code>, <code>setu.policy.hash</code> and any attributes from the policy.</p>

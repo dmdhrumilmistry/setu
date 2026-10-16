@@ -34,6 +34,9 @@ type Key struct {
 // Config controls a sharing session.
 type Config struct {
 	Command []string
+	// Desktop, if set, shares this computer's screen, mouse, keyboard and
+	// clipboard instead of running Command.
+	Desktop *DesktopConfig
 	Dir     string // working directory for Command; empty = current
 	Profile string // service profile name, for logs and audit records
 
@@ -114,6 +117,7 @@ type Session struct {
 	host   string
 
 	id         string
+	desk       *desktopShare // nil for a terminal share
 	audit      *audit.Session
 	localInput *audit.Input
 
@@ -127,7 +131,7 @@ type Session struct {
 
 // New validates cfg and prepares a session.
 func New(cfg Config) (*Session, error) {
-	if len(cfg.Command) == 0 {
+	if len(cfg.Command) == 0 && cfg.Desktop == nil {
 		return nil, errors.New("no command to run")
 	}
 	if !cfg.Manual && cfg.ControlSecret == nil && len(cfg.Keys) == 0 {
@@ -200,16 +204,36 @@ func (s *Session) debugf(format string, args ...any) {
 // Run starts the command and serves peers until it exits or ctx ends. It
 // returns the command's exit code.
 func (s *Session) Run(ctx context.Context) (int, error) {
-	cols, rows := 120, 40
-	if s.cfg.Mirror {
-		cols, rows = tty.Size(os.Stdout)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	exited := make(chan int, 1)
+	readDone := make(chan struct{})
+	kill := func() {}
+	if s.cfg.Desktop != nil {
+		stop, err := s.startDesktop(ctx)
+		if err != nil {
+			return 1, err
+		}
+		defer stop()
+		close(readDone)
+		// A desktop share has no command: it lasts until the host ends it.
+		go func() { <-ctx.Done(); exited <- 0 }()
+	} else {
+		cols, rows := 120, 40
+		if s.cfg.Mirror {
+			cols, rows = tty.Size(os.Stdout)
+		}
+		p, err := startPTY(s.cfg.Command, s.cfg.Dir, cols, rows)
+		if err != nil {
+			return 1, err
+		}
+		s.pty, s.cols, s.rows = p, cols, rows
+		defer p.Close()
+		go func() { exited <- p.Wait() }()
+		go s.pumpOutput(readDone)
+		kill = func() { _ = p.Kill() }
 	}
-	p, err := startPTY(s.cfg.Command, s.cfg.Dir, cols, rows)
-	if err != nil {
-		return 1, err
-	}
-	s.pty, s.cols, s.rows = p, cols, rows
-	defer p.Close()
 
 	mode := "nostr"
 	if s.cfg.Manual {
@@ -218,21 +242,13 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 	s.audit = s.cfg.Audit.Session(audit.SessionInfo{
 		ID:         s.id,
 		Command:    s.commandLine(),
+		Kind:       s.kind(),
 		Mode:       mode,
 		Profile:    s.cfg.Profile,
 		Password:   s.pwKey != nil,
 		ViewLink:   s.cfg.ViewSecret != nil,
 		MaxClients: s.cfg.MaxClients,
 	})
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	exited := make(chan int, 1)
-	go func() { exited <- p.Wait() }()
-
-	readDone := make(chan struct{})
-	go s.pumpOutput(readDone)
 
 	sigCtx, stopSignal := context.WithCancel(ctx)
 	s.mu.Lock()
@@ -246,7 +262,7 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 	signalErr := make(chan error, 1)
 	if s.cfg.Manual {
 		if err := s.serveManual(sigCtx); err != nil {
-			_ = p.Kill()
+			kill()
 			return 1, err
 		}
 		defer s.attachLocal(ctx, cancel)()
@@ -264,7 +280,8 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 	case code = <-exited:
 	case err := <-signalErr:
 		if err != nil && ctx.Err() == nil {
-			_ = p.Kill()
+			kill()
+			cancel()
 			<-exited
 			s.closeAll("host error")
 			s.endAudit(1, "host error: "+err.Error())
@@ -273,9 +290,12 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 		code = <-exited
 	case <-ctx.Done():
 		// Host ended the share (~. or a signal): not a command failure.
-		_ = p.Kill()
+		kill()
 		<-exited
 		code = 0
+		reason = "share ended by host"
+	}
+	if s.cfg.Desktop != nil {
 		reason = "share ended by host"
 	}
 	select {
@@ -407,7 +427,19 @@ func (s *Session) resize(cols, rows int) {
 	}
 }
 
-func (s *Session) commandLine() string { return strings.Join(s.cfg.Command, " ") }
+func (s *Session) commandLine() string {
+	if s.cfg.Desktop != nil {
+		return "remote desktop"
+	}
+	return strings.Join(s.cfg.Command, " ")
+}
+
+func (s *Session) kind() string {
+	if s.cfg.Desktop != nil {
+		return proto.KindDesktop
+	}
+	return proto.KindTerminal
+}
 
 // admit decides whether a new handshake may start.
 func (s *Session) admit() error {

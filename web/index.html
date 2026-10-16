@@ -34,7 +34,10 @@
 go install github.com/dmdhrumilmistry/setu/cmd/setu@latest
 
 # share Claude Code (or any command), then open the printed link / scan the QR
-setu share --password -- claude</code></pre>
+setu share --password -- claude
+
+# or share this computer's whole desktop: screen, mouse, keyboard and clipboard
+setu desktop --password</code></pre>
       <p>New to setu? Read the <a href="https://dmdhrumilmistry.github.io/setu/docs/" rel="noopener">documentation</a>.</p>
       <h2>This device</h2>
       <p class="device">Device key <code id="device-fp">...</code></p>
@@ -94,6 +97,57 @@ setu share --password -- claude</code></pre>
       </div>
     </form>
   </main>
+
+  <main id="screen-desk" data-screen hidden>
+    <div id="desk-view" class="desk-view fit">
+      <div class="desk-stage">
+        <canvas id="desk-canvas" aria-label="Remote screen"></canvas>
+        <div id="desk-cursor" class="desk-cursor" hidden></div>
+      </div>
+      <div id="desk-overlay" class="desk-overlay" role="status" hidden></div>
+    </div>
+    <textarea id="desk-input" class="desk-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Keyboard input for the remote computer"></textarea>
+    <section id="desk-clip" class="desk-panel" aria-label="Clipboard" hidden>
+      <div class="desk-panel-head">
+        <strong>Clipboard</strong>
+        <button id="clip-close" type="button" class="ghost" aria-label="Close clipboard">Close</button>
+      </div>
+      <p class="hint">Ctrl+V on the remote screen pastes your local clipboard there. Text copied on the remote computer shows up here.</p>
+      <textarea id="clip-text" rows="5" spellcheck="false" placeholder="Paste or type text here"></textarea>
+      <div class="desk-panel-actions">
+        <button id="clip-send" type="button">Send to remote</button>
+        <button id="clip-type" type="button" class="ghost" title="Types the text as keystrokes, for places where pasting does not work, such as login screens">Type it</button>
+        <button id="clip-get" type="button" class="ghost">Get remote</button>
+        <button id="clip-copy" type="button" class="ghost">Copy here</button>
+      </div>
+    </section>
+    <nav id="desk-bar" class="keys desk-bar" aria-label="Remote desktop controls">
+      <button id="desk-fit" type="button" aria-pressed="true" title="Fit the screen to the window, or show it at actual size">Fit</button>
+      <select id="desk-display" aria-label="Display" hidden></select>
+      <select id="desk-quality" aria-label="Image quality" title="Image quality">
+        <option value="sharp">Sharp</option>
+        <option value="balanced">Balanced</option>
+        <option value="fast">Fast</option>
+      </select>
+      <select id="desk-keys" aria-label="Send a key combination">
+        <option value="">Send keys...</option>
+        <option value="super">Windows / Super</option>
+        <option value="alttab">Alt+Tab</option>
+        <option value="altf4">Alt+F4</option>
+        <option value="taskmgr">Ctrl+Shift+Esc</option>
+        <option value="prtsc">Print Screen</option>
+        <option value="esc">Esc</option>
+      </select>
+      <button id="desk-kbd" type="button" title="Show the on-screen keyboard">Keyboard</button>
+      <button id="desk-clip-btn" type="button">Clipboard</button>
+      <button id="desk-full" type="button">Fullscreen</button>
+    </nav>
+  </main>
+
+  <div id="toast" class="toast" role="status" hidden>
+    <span id="toast-msg"></span>
+    <button id="toast-action" type="button" hidden></button>
+  </div>
 
   <script type="module" src="js/app.mjs"></script>
 </body>

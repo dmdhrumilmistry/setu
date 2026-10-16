@@ -82,6 +82,12 @@ spec:
                   <enabledValue><decimal value="1" /></enabledValue>
                   <disabledValue><decimal value="0" /></disabledValue>
                 </policy>
+                <policy name="DisableDesktop" class="Machine" displayName="$(string.DisableDesktop)" explainText="$(string.DisableDesktop_Help)" key="Software\Policies\setu" valueName="DisableDesktop">
+                  <parentCategory ref="Setu" />
+                  <supportedOn ref="SUPPORTED_Setu" />
+                  <enabledValue><decimal value="1" /></enabledValue>
+                  <disabledValue><decimal value="0" /></disabledValue>
+                </policy>
                 <policy name="RequirePassword" class="Machine" displayName="$(string.RequirePassword)" explainText="$(string.RequirePassword_Help)" presentation="$(presentation.RequirePassword)" key="Software\Policies\setu" valueName="RequirePassword">
                   <parentCategory ref="Setu" />
                   <supportedOn ref="SUPPORTED_Setu" />

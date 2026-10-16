@@ -82,3 +82,42 @@ button:hover { filter: brightness(1.08); }
 .hint { color: var(--muted); font-size: 14px; margin: 6px 0 12px; }
 button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--muted); }
 .check code { white-space: nowrap; }
+
+/* Remote desktop */
+#screen-desk { position: relative; display: flex; flex-direction: column; overflow: hidden; background: #05070b; }
+.desk-view { position: relative; flex: 1; min-height: 0; overflow: auto; display: grid; place-items: center; }
+.desk-view.fit { overflow: hidden; }
+.desk-stage { position: relative; line-height: 0; }
+#desk-canvas { display: block; touch-action: none; background: #000; box-shadow: 0 0 0 1px var(--line); }
+.desk-cursor {
+  position: absolute; width: 14px; height: 21px; pointer-events: none; transform: translate(-1px, -1px);
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 21'%3E%3Cpath d='M1 1v16l4-4 3 7 3-1-3-7h5z' fill='%23fff' stroke='%23000' stroke-width='1.2' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat;
+}
+.desk-overlay {
+  position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center;
+  color: var(--muted); background: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+.desk-input { position: fixed; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; font-size: 16px; border: 0; padding: 0; resize: none; }
+.desk-bar select {
+  flex: 0 0 auto; background: #1c2433; color: var(--fg); border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 10px; font: 500 13px system-ui, sans-serif;
+}
+.desk-bar button { font-family: system-ui, sans-serif; }
+.desk-bar button[aria-pressed=true] { border-color: var(--accent); }
+@media (pointer: fine) { #desk-kbd { display: none; } }
+.desk-panel {
+  position: absolute; right: 12px; bottom: 64px; z-index: 2; width: min(440px, calc(100% - 24px));
+  padding: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+}
+.desk-panel-head { display: flex; justify-content: space-between; align-items: center; }
+.desk-panel-head button { padding: 6px 10px; }
+.desk-panel textarea { font-size: 14px; }
+.desk-panel-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.desk-panel-actions button { padding: 8px 12px; }
+.toast {
+  position: fixed; left: 50%; bottom: 76px; z-index: 3; transform: translateX(-50%); max-width: calc(100% - 32px);
+  display: flex; gap: 12px; align-items: center; padding: 10px 14px; border-radius: 10px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+}
+.toast button { padding: 6px 12px; }

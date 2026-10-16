@@ -13,6 +13,8 @@
       <string id="DisableService_Help">If enabled, users cannot create service profiles and the running service stops serving all of them.</string>
       <string id="DisableManual">Disable manual (copy/paste) signaling</string>
       <string id="DisableManual_Help">If enabled, "setu share --manual" is refused, so every connection goes through the allowed relays.</string>
+      <string id="DisableDesktop">Disable remote desktop (setu desktop)</string>
+      <string id="DisableDesktop_Help">If enabled, "setu desktop" is refused, so nobody can share this computer's screen, mouse, keyboard or clipboard. Remote desktop is also refused when "Allowed commands" is set and does not list @desktop.</string>
       <string id="RequirePassword">Require a session password</string>
       <string id="RequirePassword_Help">If enabled, every share and service profile must have a password. Optionally set a minimum length (0 keeps setu's own minimum: 8 for shares, 12 for service profiles).</string>
       <string id="RequirePersonalKeys">Require personal keys for service profiles</string>

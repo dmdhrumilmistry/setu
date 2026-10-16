@@ -3,6 +3,7 @@
 ```
 setu share [flags] [--] [command [args...]]   share a command (default: your shell)
 setu join  [flags] <link | code>              join from another terminal
+setu desktop [flags]                          share this computer's screen, mouse, keyboard and clipboard
 setu ps                                       list background shares
 setu link <id>                                show a background share's links (+ QR)
 setu logs <id>                                show a background share's log
@@ -87,6 +88,25 @@ setu join [flags] <link | k=... | offer code>
 | `--verbose` | off | Verbose logging. |
 
 Type `<Enter> ~ .` to detach.
+
+## setu desktop
+
+```
+setu desktop [flags]
+```
+
+Shares this computer's desktop with a browser (see [Remote desktop](desktop.md)).
+It takes the same access, networking, audit and background flags as
+`setu share` (`--password`, `--view-link`, `--once`, `--expire`, `--approve`,
+`--manual`, `-d` and so on), no command and no `--headless` (it never attaches
+the terminal), plus:
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--display N` | `-1` (primary) | Display to share, by number (0 = first). Control clients can switch displays from the browser. |
+| `--fps N` | 20 | Maximum frames per second, 1 to 60. |
+
+Press Ctrl-C to end the share.
 
 ## Background shares
 
