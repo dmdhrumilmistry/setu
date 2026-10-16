@@ -14,6 +14,10 @@ setu desktop -d --password           # keep serving in the background
 Open the printed link on another computer, a tablet or a phone, enter the
 password, and compare the verification code with the one the host prints.
 
+For a desktop you can reach at any time, create an
+[always-on remote desktop](service.md#always-on-remote-desktop) profile with
+`setu service add --desktop`.
+
 ## Platforms
 
 | Host | Capture | Input | Clipboard |

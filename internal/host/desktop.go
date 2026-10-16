@@ -17,6 +17,10 @@ type DesktopConfig struct {
 	Screen  desktop.Screen // nil opens this computer's desktop
 	FPS     int            // frame rate cap (0 = default)
 	Display int            // index of the display to share; -1 = primary
+	// X11Display and XAuthority locate an X11 session when the environment
+	// does not (a background service); empty = the environment's.
+	X11Display string
+	XAuthority string
 }
 
 type desktopShare struct {
@@ -50,7 +54,7 @@ func (s *Session) startDesktop(ctx context.Context) (func(), error) {
 	scr := dc.Screen
 	if scr == nil {
 		var err error
-		if scr, err = desktop.Open(); err != nil {
+		if scr, err = desktop.OpenWith(desktop.OpenOptions{X11Display: dc.X11Display, XAuthority: dc.XAuthority}); err != nil {
 			return nil, err
 		}
 	}

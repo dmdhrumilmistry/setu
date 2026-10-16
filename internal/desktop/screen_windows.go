@@ -153,7 +153,7 @@ type winScreen struct {
 	w, h int
 }
 
-func open() (Screen, error) {
+func open(OpenOptions) (Screen, error) {
 	// Without DPI awareness Windows scales coordinates and captures for us,
 	// which blurs the picture and misplaces clicks.
 	if procSetProcessDpiAwarenessContext.Find() == nil {

@@ -155,6 +155,9 @@ Ids can be abbreviated to any unique prefix.
 | `--turn URL` | none | TURN server (credential from `SETU_TURN_PASSWORD`). |
 | `--turn-user NAME` | none | TURN username. |
 | `--web-url URL` | GitHub Pages | Base URL of the web client. |
+| `--desktop` | off | Share this computer's desktop instead of a command (no command is given). See [always-on remote desktop](service.md#always-on-remote-desktop). |
+| `--display N` | `-1` (primary) | With `--desktop`: display to share, by number. |
+| `--fps N` | 20 | With `--desktop`: maximum frames per second, 1 to 60. |
 
 ### setu service rotate
 
