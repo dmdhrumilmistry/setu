@@ -69,8 +69,18 @@ type InputChecker interface {
 // ErrUnsupported is returned by Open on platforms without a backend.
 var ErrUnsupported = errors.New("remote desktop is not supported on this platform")
 
+// OpenOptions locate the desktop when the process environment does not:
+// a background service starts without the graphical session's variables.
+type OpenOptions struct {
+	X11Display string // DISPLAY to use (X11); empty = $DISPLAY
+	XAuthority string // XAUTHORITY file to use (X11); empty = $XAUTHORITY
+}
+
 // Open connects to this machine's desktop.
-func Open() (Screen, error) { return open() }
+func Open() (Screen, error) { return open(OpenOptions{}) }
+
+// OpenWith connects to the desktop that opt describes.
+func OpenWith(opt OpenOptions) (Screen, error) { return open(opt) }
 
 // key is a physical key: its Linux evdev code (X11 keycode = evdev + 8), its
 // PC set-1 scancode (0xE0xx for extended keys; 0 = not available) and its

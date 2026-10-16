@@ -20,6 +20,10 @@ const DataChannelLabel = "setu"
 // frame never delays control messages.
 const ScreenChannelLabel = "setu-screen"
 
+// UploadChannelLabel is the label of the data channel a control client
+// opens for each file it uploads (see internal/host/upload.go).
+const UploadChannelLabel = "setu-upload"
+
 // What a session shares (Control.Kind in "ready").
 const (
 	KindTerminal = "terminal"
@@ -100,6 +104,11 @@ const (
 	CtlClipboard     = "clipboard"     // both ways: clipboard text, in parts (control)
 	CtlClipboardGet  = "clipboard-get" // client -> host: send me the host clipboard (control)
 	CtlSelectDisplay = "display"       // client -> host: share another display (control)
+
+	// On an upload channel.
+	CtlUpload      = "upload"       // client -> host: {name, size}
+	CtlUploadReady = "upload-ready" // host -> client: send the data
+	CtlUploadDone  = "upload-done"  // host -> client: {name: saved path, text: sha256}
 )
 
 // DisplayInfo describes one of the host's displays.
@@ -186,6 +195,12 @@ type Control struct {
 	More     bool          `json:"more,omitempty"` // clipboard: more parts follow
 	Frame    uint32        `json:"frame,omitempty"`
 	Quality  string        `json:"quality,omitempty"`
+
+	// Uploads: Upload (with "ready") says this client may upload files; Name
+	// and Size describe a file on an upload channel.
+	Upload bool   `json:"upload,omitempty"`
+	Name   string `json:"name,omitempty"`
+	Size   int64  `json:"size,omitempty"`
 }
 
 // How a client was admitted when the host requires approval.

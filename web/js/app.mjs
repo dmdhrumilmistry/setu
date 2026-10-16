@@ -7,7 +7,8 @@ import { FitAddon } from '../vendor/addon-fit.mjs';
 import * as C from './crypto.mjs';
 import * as N from './nostr.mjs';
 import { deviceKey, forgetDevice, signDevice, deviceFingerprint } from './device.mjs';
-import { createDesktop } from './desktop.mjs';
+import { createDesktop, toast } from './desktop.mjs';
+import { uploadFile, uploadAll, dropTarget } from './upload.mjs';
 import { keepEnabled, setKeepEnabled, keepSession, touchKept, loadKept, clearKept } from './keep.mjs';
 
 const PROTO_VERSION = 1;
@@ -311,9 +312,12 @@ function onReady(m) {
   if (trusted) $('status').title = 'The host recognised this device and approved it automatically';
   $('title').textContent = `${m.cmd || 'terminal'} @ ${m.host || 'host'}`;
   document.title = `setu · ${m.cmd || 'terminal'}`;
+  // Control clients may upload files when the host allows it.
+  const upload = m.upload ? (file, onProgress) => uploadFile(state.pc, file, onProgress) : null;
+  if (upload) $('upload-input').onchange = (e) => { uploadAll([...e.target.files], upload, toast); e.target.value = ''; };
   if (m.kind === 'desktop') {
     show('screen-desk');
-    if (!state.desk) state.desk = createDesktop({ send: sendCtl, control: state.role === 'control', hostOS: m.os });
+    if (!state.desk) state.desk = createDesktop({ send: sendCtl, control: state.role === 'control', hostOS: m.os, upload });
     else state.desk.notice('Reconnected');
     for (const b of state.screenEarly) state.desk.frame(b);
     state.screenEarly = [];
@@ -327,6 +331,11 @@ function onReady(m) {
     state.pending = [];
     if (state.role === 'control') sendCtl({ t: 'resize', cols: state.term.cols, rows: state.term.rows });
     else { $('keys').hidden = true; $('compose').hidden = true; state.term.options.disableStdin = true; }
+    if (upload && !state.dropBound) { // once: onReady runs again on every reconnect
+      state.dropBound = true;
+      $('key-upload').hidden = false;
+      dropTarget($('term'), (files) => uploadAll(files, upload, toast));
+    }
     state.term.focus();
   }
   state.restoring = false;
@@ -610,6 +619,8 @@ function setupKeys() {
       if (k === 'ctrl') {
         state.ctrlArmed = !state.ctrlArmed;
         b.classList.toggle('armed', state.ctrlArmed);
+      } else if (k === 'upload') {
+        $('upload-input').click();
       } else if (k === 'compose') {
         $('compose').hidden = !$('compose').hidden;
         if (!$('compose').hidden) $('compose-text').focus();

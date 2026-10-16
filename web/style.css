@@ -122,3 +122,5 @@ button.ghost { background: transparent; color: var(--fg); border: 1px solid var(
   background: var(--panel); border: 1px solid var(--line); box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
 }
 .toast button { padding: 6px 12px; }
+/* File upload: drop target */
+.dropping { outline: 2px dashed var(--accent); outline-offset: -6px; }

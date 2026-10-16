@@ -256,7 +256,7 @@ func (sv *Supervisor) serve(ctx context.Context, name string, p *Profile, al *au
 		start := time.Now()
 		s, err := host.New(cfg)
 		if err == nil {
-			sv.Log.Printf("profile %s: serving %q", name, strings.Join(p.Command, " "))
+			sv.Log.Printf("profile %s: serving %q", name, p.Label())
 			var code int
 			code, err = s.Run(ctx)
 			if err == nil {
@@ -300,6 +300,18 @@ func hostConfig(name string, p *Profile, pol *policy.Policy) (host.Config, error
 		ICE:              p.ICE(),
 		PasswordVerifier: p.Password,
 		MaxClients:       p.MaxClients,
+	}
+	if cfg.IdleTimeout, err = pol.IdleTimeout(time.Duration(p.IdleTimeout), false); err != nil {
+		return host.Config{}, err
+	}
+	if !p.NoUpload && pol.FileTransferAllowed() {
+		if cfg.UploadDir, err = host.DefaultUploadDir(); err != nil {
+			return host.Config{}, err
+		}
+	}
+	if d := p.Desktop; d != nil {
+		cfg.Command = nil
+		cfg.Desktop = &host.DesktopConfig{FPS: d.FPS, Display: d.Display, X11Display: d.X11Display, XAuthority: d.XAuthority}
 	}
 	if p.ControlKey != "" {
 		cs, err := secure.ParseSecret(p.ControlKey)

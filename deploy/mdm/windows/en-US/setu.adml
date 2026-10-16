@@ -15,6 +15,8 @@
       <string id="DisableManual_Help">If enabled, "setu share --manual" is refused, so every connection goes through the allowed relays.</string>
       <string id="DisableDesktop">Disable remote desktop (setu desktop)</string>
       <string id="DisableDesktop_Help">If enabled, "setu desktop" is refused, so nobody can share this computer's screen, mouse, keyboard or clipboard. Remote desktop is also refused when "Allowed commands" is set and does not list @desktop.</string>
+      <string id="DisableFileTransfer">Disable file upload to this device</string>
+      <string id="DisableFileTransfer_Help">If enabled, clients cannot upload files to this device during shares and remote desktop sessions.</string>
       <string id="RequirePassword">Require a session password</string>
       <string id="RequirePassword_Help">If enabled, every share and service profile must have a password. Optionally set a minimum length (0 keeps setu's own minimum: 8 for shares, 12 for service profiles).</string>
       <string id="RequirePersonalKeys">Require personal keys for service profiles</string>
@@ -23,6 +25,8 @@
       <string id="MaxClients_Help">The most clients a share or service profile may admit at once.</string>
       <string id="MaxShareDuration">Maximum share duration</string>
       <string id="MaxShareDuration_Help">Ad-hoc shares must stop accepting new clients within this duration, written like 30m or 8h. Shares without --expire get this value.</string>
+      <string id="MaxIdleTime">Maximum idle time</string>
+      <string id="MaxIdleTime_Help">Control clients are disconnected after this long without input (typing, mouse, clipboard, uploads), written like 15m or 1h. Watching does not count as input, and view-only clients are not affected. Shares and service profiles without an idle timeout get this value.</string>
       <string id="MaxKeyValidity">Maximum service key validity</string>
       <string id="MaxKeyValidity_Help">Service profile keys must expire within this duration, written like 168h or 720h. Profiles that exceed it are not served until their keys are rotated.</string>
       <string id="AllowedCommands">Allowed commands</string>
@@ -49,6 +53,9 @@
       </presentation>
       <presentation id="MaxShareDuration">
         <textBox refId="MaxShareDuration"><label>Duration (for example 8h):</label><defaultValue>8h</defaultValue></textBox>
+      </presentation>
+      <presentation id="MaxIdleTime">
+        <textBox refId="MaxIdleTime"><label>Duration (for example 15m):</label><defaultValue>15m</defaultValue></textBox>
       </presentation>
       <presentation id="MaxKeyValidity">
         <textBox refId="MaxKeyValidity"><label>Duration (for example 720h):</label><defaultValue>720h</defaultValue></textBox>

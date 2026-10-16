@@ -155,6 +155,43 @@ person only their own link.</p>
 </table>
 <p>Profile names use 1 to 32 lowercase letters, digits, <code>-</code> or <code>_</code>. The service
 stores only a PBKDF2 verifier of the password, never the password itself.</p>
+<h2 id="always-on-remote-desktop">Always-on remote desktop</h2>
+<p>A profile can share the whole desktop instead of a command, so you can reach
+a machine any time it is logged in:</p>
+<pre><code class="language-sh">setu service add --desktop --person alice office-pc   # prompts for a password, prints Alice's link
+setu service install
+</code></pre>
+<p>It gets everything a terminal profile has (password, personal keys, expiry,
+<code>rotate</code>, audit log) and works like <a href="desktop.html"><code>setu desktop</code></a> in the
+browser. <code>--display N</code> picks a monitor and <code>--fps N</code> caps the frame rate. What
+each system needs:</p>
+<table>
+<thead>
+<tr>
+<th>System</th>
+<th>Before it works</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Windows</td>
+<td>The service runs in your session after you log in. A locked session cannot be seen or controlled (Windows allows no program to), so keep it logged in and unlocked.</td>
+</tr>
+<tr>
+<td>macOS</td>
+<td>The service runs the setu binary itself, not your terminal, so allow <strong>setu</strong> under Screen &amp; System Audio Recording and Accessibility (macOS asks when it starts). The permissions belong to that exact binary: allow them again after updating setu.</td>
+</tr>
+<tr>
+<td>Linux, BSD</td>
+<td>Run <code>service add --desktop</code> in a terminal inside your X11 session: it records that session's <code>DISPLAY</code> and <code>XAUTHORITY</code>, which the service manager does not pass on. Wayland is not supported yet.</td>
+</tr>
+</tbody>
+</table>
+<p>If the desktop is not available yet (just after boot, before you log in), the
+service retries with a growing delay, like a command that exits.</p>
+<p>Long-lived links are a good place for <code>--idle-timeout 30m</code>: a control
+client that sends no input for that long is disconnected (after a warning),
+so a browser tab left open does not stay connected to your machine.</p>
 <h2 id="start-it-at-login">Start it at login</h2>
 <pre><code class="language-sh">setu service install
 </code></pre>
@@ -275,6 +312,7 @@ profile against it before serving.</li>
     <ul>
       <li class="l2"><a href="#concepts">Concepts</a></li>
       <li class="l2"><a href="#create-a-profile">Create a profile</a></li>
+      <li class="l2"><a href="#always-on-remote-desktop">Always-on remote desktop</a></li>
       <li class="l2"><a href="#start-it-at-login">Start it at login</a></li>
       <li class="l2"><a href="#manage-profiles">Manage profiles</a></li>
       <li class="l2"><a href="#audit-the-service">Audit the service</a></li>

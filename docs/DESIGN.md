@@ -208,6 +208,26 @@ starts a clipboard write at once with a promise for the text, resolved when
 the host clipboard changes (or with `clipboard-get` if it does not), because
 browsers only allow clipboard writes during a user action.
 
+## File upload
+
+A control client opens a data channel labelled `"setu-upload"` for each file
+(no renegotiation is needed once the SCTP association exists), so a large
+file never delays the other channels:
+
+```
+client -> {t:"upload", name, size}
+host   -> {t:"upload-ready"} | {t:"error", msg}
+client -> binary chunks, size bytes in all (32 KiB each, with backpressure)
+host   -> {t:"upload-done", name: saved path, text: sha256} | {t:"error", msg}
+```
+
+The host refuses before any data flows if the client is not a ready control
+client, uploads are off, the size is over 2 GiB or two uploads are already
+running. The destination is created with `O_EXCL` under a sanitized name in
+the upload folder (mode 0600, folder 0700); more data than announced, a write
+error or an early close deletes it. `ready` carries `upload: true` when the
+client may upload.
+
 ## Audit log
 
 The host hands every keystroke it writes to the PTY to a per-client

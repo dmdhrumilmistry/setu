@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -145,6 +146,7 @@ func serve(sub string, args []string) (int, error) {
 	approve := fs.Bool("approve", false, "ask on this terminal before admitting each client (answer a to always approve that device)")
 	var trustDevices listFlag
 	fs.Var(&trustDevices, "trust-device", "device key fingerprint to approve without asking (repeatable; see 'setu device'). With --approve and no terminal, only these devices may join")
+	idleTimeout := fs.Duration("idle-timeout", 0, "disconnect control clients after this long without input (e.g. 15m; watching is not input); 0 = never")
 	expire := fs.Duration("expire", 0, "invite stops accepting new clients after this long (e.g. 30m); 0 = never")
 	fs.Var(&relays, "relay", "nostr relay URL (repeatable / comma separated); default: built-in public relays")
 	fs.Var(&stun, "stun", "STUN server URL(s), e.g. stun:stun.l.google.com:19302 (default Google STUN)")
@@ -160,6 +162,8 @@ func serve(sub string, args []string) (int, error) {
 	}
 	qr := fs.Bool("qr", true, "print a QR code of the invite link")
 	linkFile := fs.String("link-file", "", "also write the invite link(s) to this file (mode 0600)")
+	uploadDir := fs.String("upload-dir", "", "where files uploaded by control clients are saved (default ~/Downloads/setu)")
+	noUpload := fs.Bool("no-upload", false, "do not accept file uploads from clients")
 	verbose := fs.Bool("verbose", false, "verbose logging")
 	auditOn := fs.Bool("audit", false, "send an audit log (connections and typed commands) to an OpenTelemetry collector; see -audit-* flags")
 	auditOpts := addAuditFlags(fs, "audit-", false)
@@ -226,6 +230,9 @@ func serve(sub string, args []string) (int, error) {
 		return 1, err
 	}
 	if *expire, err = pol.ShareExpiry(*expire); err != nil {
+		return 1, err
+	}
+	if *idleTimeout, err = pol.IdleTimeout(*idleTimeout, set["idle-timeout"]); err != nil {
 		return 1, err
 	}
 	if !*manual {
@@ -356,6 +363,7 @@ func serve(sub string, args []string) (int, error) {
 		TrustedDevices: trustDevices,
 		NoPrompt:       noPrompt,
 		Expire:         *expire,
+		IdleTimeout:    *idleTimeout,
 		Mirror:         mirror,
 		Verbose:        *verbose,
 		Audit:          auditLog,
@@ -363,6 +371,9 @@ func serve(sub string, args []string) (int, error) {
 	if desktopMode {
 		cfg.Command = nil
 		cfg.Desktop = &host.DesktopConfig{FPS: *fps, Display: *display}
+	}
+	if cfg.UploadDir, err = uploadDirFor(*uploadDir, *noUpload, pol); err != nil {
+		return 1, err
 	}
 
 	customRelays := relays
@@ -439,6 +450,9 @@ func serve(sub string, args []string) (int, error) {
 		if *expire > 0 {
 			notes = append(notes, "expires in "+expire.String())
 		}
+		if *idleTimeout > 0 {
+			notes = append(notes, "idle control clients disconnected after "+idleTimeout.String())
+		}
 		if *approve {
 			switch {
 			case noPrompt:
@@ -450,6 +464,9 @@ func serve(sub string, args []string) (int, error) {
 			}
 		}
 		notes = append(notes, fmt.Sprintf("max %d client(s)", *maxClients))
+		if cfg.UploadDir != "" {
+			notes = append(notes, "uploads saved to "+cfg.UploadDir)
+		}
 		if auditCfg.Enabled() {
 			notes = append(notes, "audited to "+collectorHost(auditCfg.Endpoint))
 		}
@@ -502,6 +519,17 @@ func serve(sub string, args []string) (int, error) {
 	code, err := s.Run(ctx)
 	fmt.Fprintf(os.Stderr, "\r\n[setu] session ended (exit code %d)\n", code)
 	return code, err
+}
+
+// uploadDirFor resolves where uploads go ("" = uploads off).
+func uploadDirFor(dir string, off bool, pol *policy.Policy) (string, error) {
+	if off || !pol.FileTransferAllowed() {
+		return "", nil
+	}
+	if dir == "" {
+		return host.DefaultUploadDir()
+	}
+	return filepath.Abs(dir)
 }
 
 func runJoin(args []string) (int, error) {

@@ -92,6 +92,7 @@ setu desktop --password</code></pre>
       <button data-key="down" aria-label="Down">↓</button>
       <button data-key="right" aria-label="Right">→</button>
       <button data-key="enter">⏎</button>
+      <button data-key="upload" id="key-upload" title="Upload files to the remote computer (or drop them on the terminal)" hidden>Upload</button>
       <button data-key="compose" title="Compose a longer message">✎</button>
     </nav>
     <form id="compose" class="compose" hidden>
@@ -140,9 +141,12 @@ setu desktop --password</code></pre>
       <button id="desk-swap" type="button" aria-pressed="true" hidden>Ctrl as Cmd</button>
       <button id="desk-kbd" type="button" title="Show the on-screen keyboard">Keyboard</button>
       <button id="desk-clip-btn" type="button">Clipboard</button>
+      <button id="desk-upload" type="button" title="Upload files to the remote computer (or drop them on the screen)" hidden>Upload</button>
       <button id="desk-full" type="button">Fullscreen</button>
     </nav>
   </main>
+
+  <input id="upload-input" type="file" multiple hidden>
 
   <div id="toast" class="toast" role="status" hidden>
     <span id="toast-msg"></span>

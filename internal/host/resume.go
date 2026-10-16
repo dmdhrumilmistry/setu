@@ -40,9 +40,12 @@ type ticket struct {
 	keyName  string
 	deviceFP string
 	approval string
-	firstID  int       // the client id the ticket was first issued to
-	peer     *peer     // the connection using it, if any
-	expires  time.Time // when unused; zero while a connection holds it
+	firstID  int // the client id the ticket was first issued to
+	// lastInput is the last input of the connection that held the ticket
+	// (unix nanos), so a reconnect does not reset the idle timeout.
+	lastInput int64
+	peer      *peer     // the connection using it, if any
+	expires   time.Time // when unused; zero while a connection holds it
 }
 
 func (t *ticket) live(now time.Time) bool {
@@ -82,6 +85,9 @@ func (s *Session) claimTicket(p *peer, token []byte) (*ticket, *peer, error) {
 		return nil, nil, errResume
 	}
 	old := t.peer
+	if old != nil {
+		t.lastInput = old.lastInput.Load()
+	}
 	t.peer, t.expires = p, time.Time{}
 	p.ticket = t // so the grace period restarts if this connection fails too
 	return t, old, nil
@@ -118,11 +124,25 @@ func (s *Session) releaseTicket(p *peer) {
 	if t == nil || t.peer != p {
 		return
 	}
+	if at := p.lastInput.Load(); at > 0 {
+		t.lastInput = at
+	}
 	grace := resumeGrace
 	if p.hidden.Load() {
 		grace = backgroundGrace
 	}
 	t.peer, t.expires = nil, time.Now().Add(grace)
+}
+
+// revokeTicket deletes the ticket p holds, so the client cannot resume:
+// for a client the host disconnected on purpose (such as an idle timeout).
+func (s *Session) revokeTicket(p *peer) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if t := p.ticket; t != nil && t.peer == p {
+		delete(s.tickets, t.id)
+		t.peer, t.expires = nil, time.Time{}
+	}
 }
 
 // liveTicketsLocked reports whether any client could still resume.

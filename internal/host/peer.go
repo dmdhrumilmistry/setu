@@ -69,6 +69,11 @@ type peer struct {
 	client      *audit.Client     // audit identity, fixed once ready
 	viewer      *desktop.Viewer   // desktop shares, once ready
 	inputErrAt  time.Time         // last remote input failure reported
+	uploads     int               // uploads in progress
+
+	lastInput   atomic.Int64 // unix nanoseconds of the client's last input
+	idleWarned  atomic.Bool
+	idleClosing atomic.Bool
 
 	// mustResume: admitted only because it named a resume ticket, so it
 	// must present that ticket's token instead of a normal login.
@@ -120,6 +125,7 @@ func (s *Session) newPeer(role, label, keyName, resumeID string) (*peer, error) 
 			p.close("connection " + st.String())
 		}
 	})
+	pc.OnDataChannel(p.onDataChannel)
 	dc.OnOpen(p.onOpen)
 	dc.OnClose(func() { p.close("channel closed") })
 	dc.OnMessage(p.onMessage)
@@ -183,6 +189,7 @@ func (p *peer) onMessage(msg webrtc.DataChannelMessage) {
 
 	if !msg.IsString {
 		if st == stateReady && p.role == proto.RoleControl && p.s.desk == nil && len(msg.Data) <= maxInputFrame {
+			p.touch()
 			input.Write(msg.Data)
 			p.s.writeInput(msg.Data)
 		}
@@ -296,6 +303,11 @@ func (p *peer) activate(t *ticket, pos *int64) {
 	// so no keystroke can reach the PTY unaudited.
 	p.state = stateReady
 	p.client = &c
+	p.touch()
+	if t != nil && t.lastInput > 0 {
+		// Reconnecting is not input: the idle timeout keeps counting.
+		p.lastInput.Store(t.lastInput)
+	}
 	if p.role == proto.RoleControl && s.desk == nil {
 		p.input = s.audit.Input(c, s.passwordPrompt)
 	}
@@ -316,7 +328,7 @@ func (p *peer) activate(t *ticket, pos *int64) {
 		from, resumed = *pos, true
 	}
 	ready := proto.Control{T: proto.CtlReady, V: proto.Version, Role: p.role, Cmd: s.commandLine(), Host: s.host, Cols: s.cols, Rows: s.rows,
-		Approval: how, Kind: s.kind(), OS: s.hostOS(), Resume: token}
+		Approval: how, Kind: s.kind(), OS: s.hostOS(), Upload: s.uploadsAllowed(p.role), Resume: token}
 	if s.desk == nil {
 		ready.Pos, ready.Resumed = &from, resumed
 	}

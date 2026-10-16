@@ -26,6 +26,7 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/dmdhrumilmistry/setu/internal/audit"
@@ -50,8 +51,15 @@ type Config struct {
 // control key (and the password) gets a shell.
 type Profile struct {
 	Command []string `json:"command"`
-	Dir     string   `json:"dir,omitempty"`
-	Enabled bool     `json:"enabled"`
+	// Desktop, if set, makes the profile share this computer's desktop
+	// (screen, mouse, keyboard, clipboard) instead of running Command.
+	Desktop *DesktopProfile `json:"desktop,omitempty"`
+	// NoUpload refuses file uploads from clients.
+	// IdleTimeout disconnects control clients after this long without input.
+	IdleTimeout Duration `json:"idle_timeout,omitempty"`
+	NoUpload    bool     `json:"no_upload,omitempty"`
+	Dir         string   `json:"dir,omitempty"`
+	Enabled     bool     `json:"enabled"`
 	// ControlKey and ViewKey are shared links: audit records can only say
 	// "someone holding the shared link". Either may be empty.
 	ControlKey string `json:"control_key,omitempty"`
@@ -76,6 +84,25 @@ type Profile struct {
 
 	Created time.Time `json:"created"`
 	Rotated time.Time `json:"rotated,omitzero"`
+}
+
+// DesktopProfile configures a remote desktop profile.
+type DesktopProfile struct {
+	FPS     int `json:"fps,omitempty"` // frame rate cap (0 = default)
+	Display int `json:"display"`       // display index; -1 = the primary display
+	// X11Display and XAuthority are the graphical session's DISPLAY and
+	// XAUTHORITY, captured when the profile is created: service managers
+	// start without that environment (Linux and the BSDs only).
+	X11Display string `json:"x11_display,omitempty"`
+	XAuthority string `json:"xauthority,omitempty"`
+}
+
+// Label is what the profile shares, for listings and logs.
+func (p *Profile) Label() string {
+	if p.Desktop != nil {
+		return "remote desktop"
+	}
+	return strings.Join(p.Command, " ")
 }
 
 // PersonalKey is an invite key held by one named person.
@@ -304,7 +331,14 @@ func (p *Profile) People() []string {
 
 // Validate checks a profile before it is saved or served.
 func (p *Profile) Validate() error {
-	if len(p.Command) == 0 || p.Command[0] == "" {
+	switch {
+	case p.Desktop != nil && len(p.Command) > 0:
+		return errors.New("a desktop profile has no command")
+	case p.Desktop != nil && (p.Desktop.FPS < 0 || p.Desktop.FPS > 60):
+		return errors.New("desktop frame rate must be 1..60 (0 = default)")
+	case p.Desktop != nil && p.Desktop.Display < -1:
+		return errors.New("desktop display must be -1 (primary) or a display number")
+	case p.Desktop == nil && (len(p.Command) == 0 || p.Command[0] == ""):
 		return errors.New("profile has no command")
 	}
 	if p.Dir != "" {
@@ -358,6 +392,9 @@ func (p *Profile) Validate() error {
 			return err
 		}
 	}
+	if p.IdleTimeout < 0 {
+		return errors.New("idle timeout must not be negative")
+	}
 	if p.MaxClients < 1 || p.MaxClients > MaxClientsLimit {
 		return fmt.Errorf("max clients must be 1..%d", MaxClientsLimit)
 	}
@@ -385,7 +422,11 @@ func (p *Profile) CheckPolicy(pol *policy.Policy, now time.Time) error {
 	if err := pol.CheckService(); err != nil {
 		return err
 	}
-	if err := pol.CheckCommand(p.Command); err != nil {
+	if p.Desktop != nil {
+		if err := pol.CheckDesktop(false); err != nil {
+			return err
+		}
+	} else if err := pol.CheckCommand(p.Command); err != nil {
 		return err
 	}
 	if err := pol.CheckWebURL(p.WebURL); err != nil {
@@ -402,6 +443,9 @@ func (p *Profile) CheckPolicy(pol *policy.Policy, now time.Time) error {
 	}
 	if pol.RequirePersonalKeys && p.ControlKey != "" {
 		return &policy.Violation{Key: "RequirePersonalKeys", Msg: "shared control links are not allowed; give each person their own key"}
+	}
+	if _, err := pol.IdleTimeout(time.Duration(p.IdleTimeout), false); err != nil {
+		return err
 	}
 	if err := pol.CheckKeyValidity(time.Duration(p.ValidFor)); err != nil {
 		return err

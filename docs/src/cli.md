@@ -32,6 +32,7 @@ setu share [flags] [--] [command [args...]]
 | `--view-link` | off | Also create a read-only invite. |
 | `--once` | off | The invite stops working after the first successful join. |
 | `--expire DURATION` | `0` (never) | Stop accepting new clients after this long, for example `30m`. |
+| `--idle-timeout DURATION` | `0` (never) | Disconnect a control client after this long without input (typing, mouse, clipboard, uploads), for example `15m`. Watching is not input: view-only clients are never disconnected, and a control client that only watches gets a warning a minute before. |
 | `--max-clients N` | 2 | Maximum concurrent clients. |
 | `--approve` | off | Ask before admitting each client: `y` once, `a` always for that device, `N` no. |
 | `--trust-device FP` | none | Device key fingerprint approved without asking (repeatable or comma separated). With `--approve` and no terminal (`-d`, `--headless`), only these devices may join. |
@@ -44,6 +45,8 @@ setu share [flags] [--] [command [args...]]
 | `--headless` | off | Do not attach this terminal; just serve clients. |
 | `--qr` | on | Print a QR code of the browser link. |
 | `--link-file PATH` | none | Also write the invite link(s) to PATH (mode 0600). |
+| `--upload-dir PATH` | `~/Downloads/setu` | Where files that control clients upload are saved (see [Uploading files](joining.md#uploading-files)). |
+| `--no-upload` | off | Do not accept file uploads. |
 | `--verbose` | off | Verbose logging. |
 
 **Networking**
@@ -155,6 +158,11 @@ Ids can be abbreviated to any unique prefix.
 | `--turn URL` | none | TURN server (credential from `SETU_TURN_PASSWORD`). |
 | `--turn-user NAME` | none | TURN username. |
 | `--web-url URL` | GitHub Pages | Base URL of the web client. |
+| `--no-upload` | off | Do not accept file uploads from clients (they are saved to `~/Downloads/setu` otherwise). |
+| `--idle-timeout DURATION` | `0` (never) | Disconnect control clients after this long without input. |
+| `--desktop` | off | Share this computer's desktop instead of a command (no command is given). See [always-on remote desktop](service.md#always-on-remote-desktop). |
+| `--display N` | `-1` (primary) | With `--desktop`: display to share, by number. |
+| `--fps N` | 20 | With `--desktop`: maximum frames per second, 1 to 60. |
 
 ### setu service rotate
 

@@ -64,17 +64,25 @@ const (
 	remapDelay = 8 * time.Millisecond
 )
 
-func open() (Screen, error) {
+func open(opt OpenOptions) (Screen, error) {
 	if os.Getenv("XDG_SESSION_TYPE") == "wayland" {
 		return nil, errors.New("Wayland sessions are not supported yet: log in with an X11 session (for example \"Ubuntu on Xorg\")")
 	}
-	if os.Getenv("DISPLAY") == "" {
+	display := opt.X11Display
+	if display == "" {
+		display = os.Getenv("DISPLAY")
+	}
+	if display == "" {
 		return nil, errors.New("no X11 display: DISPLAY is not set (run setu desktop inside your graphical session)")
 	}
+	if opt.XAuthority != "" {
+		// xgb reads the cookie file from the environment only.
+		os.Setenv("XAUTHORITY", opt.XAuthority)
+	}
 	xgb.Logger = log.New(io.Discard, "", 0) // xgb logs X errors to stderr; setu reports them itself
-	c, err := xgb.NewConn()
+	c, err := xgb.NewConnDisplay(display)
 	if err != nil {
-		return nil, fmt.Errorf("connect to X11 display %s: %w", os.Getenv("DISPLAY"), err)
+		return nil, fmt.Errorf("connect to X11 display %s: %w", display, err)
 	}
 	s, err := newX11(c)
 	if err != nil {

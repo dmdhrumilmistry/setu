@@ -44,6 +44,34 @@ person only their own link.
 Profile names use 1 to 32 lowercase letters, digits, `-` or `_`. The service
 stores only a PBKDF2 verifier of the password, never the password itself.
 
+## Always-on remote desktop
+
+A profile can share the whole desktop instead of a command, so you can reach
+a machine any time it is logged in:
+
+```sh
+setu service add --desktop --person alice office-pc   # prompts for a password, prints Alice's link
+setu service install
+```
+
+It gets everything a terminal profile has (password, personal keys, expiry,
+`rotate`, audit log) and works like [`setu desktop`](desktop.md) in the
+browser. `--display N` picks a monitor and `--fps N` caps the frame rate. What
+each system needs:
+
+| System | Before it works |
+| --- | --- |
+| Windows | The service runs in your session after you log in. A locked session cannot be seen or controlled (Windows allows no program to), so keep it logged in and unlocked. |
+| macOS | The service runs the setu binary itself, not your terminal, so allow **setu** under Screen & System Audio Recording and Accessibility (macOS asks when it starts). The permissions belong to that exact binary: allow them again after updating setu. |
+| Linux, BSD | Run `service add --desktop` in a terminal inside your X11 session: it records that session's `DISPLAY` and `XAUTHORITY`, which the service manager does not pass on. Wayland is not supported yet. |
+
+If the desktop is not available yet (just after boot, before you log in), the
+service retries with a growing delay, like a command that exits.
+
+Long-lived links are a good place for `--idle-timeout 30m`: a control
+client that sends no input for that long is disconnected (after a warning),
+so a browser tab left open does not stay connected to your machine.
+
 ## Start it at login
 
 ```sh

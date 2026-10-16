@@ -731,6 +731,21 @@ func (s *Session) DesktopInput(c Client, clicks, keys, scrolls, typedChars int) 
 		)...)
 }
 
+// FileUpload records a file a client uploaded to the host, with its SHA-256
+// so the exact content can be identified later.
+func (s *Session) FileUpload(c Client, name, path string, size int64, sha256 string) {
+	if s == nil {
+		return
+	}
+	s.emit(otellog.SeverityInfo, "setu.file.upload", fmt.Sprintf("client #%d uploaded %s (%d bytes)", c.ID, name, size),
+		append(c.attrs(),
+			attribute.String("file.name", name),
+			attribute.String("file.path", path),
+			attribute.Int64("file.size", size),
+			attribute.String("file.hash.sha256", sha256),
+		)...)
+}
+
 // InviteDisabled records the invite no longer accepting clients.
 func (s *Session) InviteDisabled(reason string) {
 	if s == nil {

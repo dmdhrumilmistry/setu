@@ -74,6 +74,7 @@ same.
 | `setu.desktop.clipboard` | Clipboard text crossed between a client and the host ([remote desktop](desktop.md)): direction (`setu.clipboard.direction` `to_host` or `to_client`) and size (`setu.clipboard.bytes`), never the text. |
 | `setu.desktop.display` | A client switched the shared display. |
 | `setu.desktop.input` | When a control client leaves: how many clicks, key presses, scrolls and typed characters it sent. Keystrokes themselves are not recorded. |
+| `setu.file.upload` | A client uploaded a file: `file.name`, `file.path` (where it was saved), `file.size` and `file.hash.sha256`. |
 | `setu.audit.start` | The startup probe sent by `--audit-required`. |
 
 Every record carries `setu.session.id`, and `setu.session.start` records

@@ -40,6 +40,12 @@
       <enabledValue><decimal value="1" /></enabledValue>
       <disabledValue><decimal value="0" /></disabledValue>
     </policy>
+    <policy name="DisableFileTransfer" class="Machine" displayName="$(string.DisableFileTransfer)" explainText="$(string.DisableFileTransfer_Help)" key="Software\Policies\setu" valueName="DisableFileTransfer">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
     <policy name="RequirePassword" class="Machine" displayName="$(string.RequirePassword)" explainText="$(string.RequirePassword_Help)" presentation="$(presentation.RequirePassword)" key="Software\Policies\setu" valueName="RequirePassword">
       <parentCategory ref="Setu" />
       <supportedOn ref="SUPPORTED_Setu" />
@@ -67,6 +73,13 @@
       <supportedOn ref="SUPPORTED_Setu" />
       <elements>
         <text id="MaxShareDuration" valueName="MaxShareDuration" required="true" />
+      </elements>
+    </policy>
+    <policy name="MaxIdleTime" class="Machine" displayName="$(string.MaxIdleTime)" explainText="$(string.MaxIdleTime_Help)" presentation="$(presentation.MaxIdleTime)" key="Software\Policies\setu">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <elements>
+        <text id="MaxIdleTime" valueName="MaxIdleTime" required="true" />
       </elements>
     </policy>
     <policy name="MaxKeyValidity" class="Machine" displayName="$(string.MaxKeyValidity)" explainText="$(string.MaxKeyValidity_Help)" presentation="$(presentation.MaxKeyValidity)" key="Software\Policies\setu">

@@ -30,6 +30,7 @@ const serviceUsage = `setu service - always-on shares with persistent links, sta
 
 Usage:
   setu service add [flags] <name> [--] command [args...]   create a profile (prints its links once)
+  setu service add --desktop [flags] <name>               an always-on remote desktop profile
   setu service list                                       list profiles
   setu service link <name> [person]                       show a profile's links (+ QR)
   setu service key add [--view] <name> <person>           give one person their own link (audited by name)
@@ -205,8 +206,13 @@ func serviceAdd(args []string) (int, error) {
 	turn := fs.String("turn", "", "TURN server URL for strict NATs (credential from SETU_TURN_PASSWORD)")
 	turnUser := fs.String("turn-user", "", "TURN username")
 	webURL := fs.String("web-url", link.DefaultWebURL, "base URL of the web client")
+	idleTimeout := fs.Duration("idle-timeout", 0, "disconnect control clients after this long without input (e.g. 15m); 0 = never")
+	noUpload := fs.Bool("no-upload", false, "do not accept file uploads from clients (they go to ~/Downloads/setu otherwise)")
+	desktopMode := fs.Bool("desktop", false, "share this computer's desktop (screen, mouse, keyboard, clipboard) instead of a command")
+	display := fs.Int("display", -1, "with --desktop: display to share, by number (0 = first); -1 = the primary display")
+	fps := fs.Int("fps", 0, "with --desktop: maximum frames per second (1-60; 0 = default)")
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "Usage: setu service add [flags] <name> [--] command [args...]\n\n")
+		fmt.Fprint(os.Stderr, "Usage: setu service add [flags] <name> [--] command [args...]\n       setu service add --desktop [flags] <name>\n\n")
 		fs.PrintDefaults()
 	}
 	_ = fs.Parse(args)
@@ -214,11 +220,14 @@ func serviceAdd(args []string) (int, error) {
 	if len(rest) > 1 && rest[1] == "--" {
 		rest = append(rest[:1], rest[2:]...)
 	}
-	if len(rest) < 2 {
+	if (*desktopMode && len(rest) != 1) || (!*desktopMode && len(rest) < 2) {
 		fs.Usage()
 		return 2, nil
 	}
 	name, command := rest[0], rest[1:]
+	if *desktopMode && (*dir != "" || *fps < 0 || *fps > 60 || *display < -1) {
+		return 2, errors.New("--desktop takes no --dir, --fps must be 1-60 and --display -1 or a display number")
+	}
 	if err := service.ValidName(name); err != nil {
 		return 1, err
 	}
@@ -232,6 +241,11 @@ func serviceAdd(args []string) (int, error) {
 	if err := st.pol.CheckService(); err != nil {
 		return 1, err
 	}
+	if *desktopMode {
+		if err := st.pol.CheckDesktop(false); err != nil {
+			return 1, err
+		}
+	}
 	// Under a managed policy, unset options default to what it allows.
 	set := map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
@@ -244,17 +258,22 @@ func serviceAdd(args []string) (int, error) {
 	if max := st.pol.MaxKeyValidity.D(); max > 0 && !set["valid-for"] {
 		*validFor = min(*validFor, max)
 	}
+	if *idleTimeout, err = st.pol.IdleTimeout(*idleTimeout, set["idle-timeout"]); err != nil {
+		return 1, err
+	}
 	if *maxClients, err = st.pol.Clients(*maxClients, set["max-clients"]); err != nil {
 		return 1, err
 	}
 	// Resolve the command now: the service's PATH may differ, and a fixed
 	// path cannot be hijacked by a directory added to PATH later.
-	exe, err := exec.LookPath(command[0])
-	if err != nil {
-		return 1, err
-	}
-	if command[0], err = filepath.Abs(exe); err != nil {
-		return 1, err
+	if !*desktopMode {
+		exe, err := exec.LookPath(command[0])
+		if err != nil {
+			return 1, err
+		}
+		if command[0], err = filepath.Abs(exe); err != nil {
+			return 1, err
+		}
 	}
 	if *dir != "" {
 		if *dir, err = filepath.Abs(*dir); err != nil {
@@ -275,7 +294,20 @@ func serviceAdd(args []string) (int, error) {
 		TURNUser:     *turnUser,
 		TURNPassword: os.Getenv("SETU_TURN_PASSWORD"),
 		WebURL:       *webURL,
+		NoUpload:     *noUpload,
+		IdleTimeout:  service.Duration(*idleTimeout),
 		Created:      now.UTC(),
+	}
+	if *desktopMode {
+		p.Command = nil
+		p.Desktop = &service.DesktopProfile{FPS: *fps, Display: *display}
+		if runtime.GOOS != "windows" && runtime.GOOS != "darwin" {
+			// The service starts without the graphical session's environment.
+			p.Desktop.X11Display, p.Desktop.XAuthority = os.Getenv("DISPLAY"), os.Getenv("XAUTHORITY")
+			if p.Desktop.X11Display == "" {
+				return 1, errors.New("--desktop: DISPLAY is not set; run this in a terminal inside your graphical (X11) session, so the service knows which display to share")
+			}
+		}
 	}
 	if !*noPassword {
 		if p.Password, err = profilePassword(*passwordStdin, st.pol.MinPassword(servicePasswordMin)); err != nil {
@@ -301,13 +333,36 @@ func serviceAdd(args []string) (int, error) {
 		return 1, err
 	}
 	printProfile(name, p, "")
+	if *desktopMode {
+		printDesktopServiceNotes()
+	}
 	return 0, nil
+}
+
+// printDesktopServiceNotes says what each system needs before an
+// always-on desktop profile works.
+func printDesktopServiceNotes() {
+	exe, _ := os.Executable()
+	var note string
+	switch runtime.GOOS {
+	case "darwin":
+		note = "On macOS the service runs setu itself (" + exe + "), not your terminal: when it starts, allow\n" +
+			"\"setu\" under System Settings > Privacy & Security > Screen & System Audio Recording and Accessibility.\n" +
+			"macOS ties these permissions to this exact binary, so allow them again after updating setu."
+	case "windows":
+		note = "The service runs in your session after you log in. Windows lets no program see or control the\n" +
+			"lock screen or UAC prompts, so a locked session cannot be used remotely: keep it logged in and unlocked."
+	default:
+		note = "The service shares display " + os.Getenv("DISPLAY") + " (captured now). It needs an X11 session: Wayland is not supported yet,\n" +
+			"and the session must be logged in while you connect."
+	}
+	fmt.Fprintf(os.Stderr, "\nRemote desktop: %s\nStart serving with `setu service install` (or `setu service run`).\n", note)
 }
 
 // printProfile prints a profile's links (only person's, if person is set)
 // and its security settings.
 func printProfile(name string, p *service.Profile, person string) {
-	fmt.Fprintf(os.Stderr, "\nProfile %s: %s\n", name, strings.Join(p.Command, " "))
+	fmt.Fprintf(os.Stderr, "\nProfile %s: %s\n", name, p.Label())
 	for _, l := range p.Links() {
 		if person != "" && l.Person != person {
 			continue
@@ -373,7 +428,7 @@ func serviceList() (int, error) {
 		if !p.ExpiresAt.IsZero() {
 			exp = p.ExpiresAt.Local().Format("2006-01-02")
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\n", name, state, pw, p.MaxClients, exp, strings.Join(p.Command, " "))
+		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\n", name, state, pw, p.MaxClients, exp, p.Label())
 	}
 	return 0, w.Flush()
 }

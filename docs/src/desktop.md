@@ -14,6 +14,10 @@ setu desktop -d --password           # keep serving in the background
 Open the printed link on another computer, a tablet or a phone, enter the
 password, and compare the verification code with the one the host prints.
 
+For a desktop you can reach at any time, create an
+[always-on remote desktop](service.md#always-on-remote-desktop) profile with
+`setu service add --desktop`.
+
 ## Platforms
 
 | Host | Capture | Input | Clipboard |
@@ -81,6 +85,7 @@ The toolbar at the bottom of the page:
 | **Cmd as Ctrl** / **Ctrl as Cmd** | Shown when exactly one side is a Mac (see Keyboard below). On by default; turn it off to send the keys unchanged. |
 | **Keyboard** | Opens the on-screen keyboard (touch devices). |
 | **Clipboard** | Text to and from the remote clipboard (see below). |
+| **Upload** | Send files to the remote computer; you can also drop them on the screen. See [Uploading files](joining.md#uploading-files). |
 | **Fullscreen** | In Chrome and Edge, fullscreen also captures Esc, Alt+Tab and the Windows key for the remote computer. |
 
 **Mouse.** Move, click, drag, right-click and scroll as usual. Back and

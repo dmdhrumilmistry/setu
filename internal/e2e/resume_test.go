@@ -114,3 +114,30 @@ func TestResumeView(t *testing.T) {
 		t.Fatalf("resumed view client got role %q", v2.Role)
 	}
 }
+
+// TestResumeAfterIdleTimeout: a client the host disconnected for being idle
+// cannot come straight back with its resume token.
+func TestResumeAfterIdleTimeout(t *testing.T) {
+	r := relaytest.New()
+	defer r.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	const limit = 3 * time.Second
+	ctl, _ := startHost(t, ctx, r.URL(), func(c *host.Config) {
+		c.IdleTimeout = limit
+		c.Password = "correct horse"
+	})
+	c, err := dial(t, ctx, ctl, "correct horse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msg := waitError(t, c, 3*limit); !strings.Contains(msg, "without input") {
+		t.Fatalf("idle client told %q", msg)
+	}
+	short, cancel2 := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel2()
+	if c2, err := c.Resume(short); err == nil {
+		c2.Close()
+		t.Fatal("an idle-disconnected client resumed without logging in")
+	}
+}
