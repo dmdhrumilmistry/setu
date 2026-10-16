@@ -113,6 +113,36 @@ host  → {t:"exit", code} | {t:"error", msg}
 `fpA` and `fpB` are the DTLS fingerprints from both SDPs. They feed the proof
 and the 6-digit **SAS** that both sides display.
 
+### Reconnecting
+
+Hosts that support it add `resume` (a random 32-byte token) and `pos` to
+`ready`. `pos` is the position, in bytes since the command started, of the
+first output byte that follows. The client counts output bytes from there. When
+the connection drops (ICE `failed`, the channel closes, or no message for 15 s
+while the page is visible), the client signals again with a new nostr key and
+`sid`, plus `resume: ResumeID(token)` in the encrypted hello. It then answers
+the host's `hello` with `{t:"auth", resume, pos}` in place of a password proof:
+
+```
+client ──hello{sid,ts,resume:id}──▶   host admits it past --max-clients, --once/--expire and the lockout,
+                                      but it must then present the token
+host  → {t:"hello", …}
+client→ {t:"auth", resume:token, pos, device_key, device_sig}
+host  → {t:"ready", resume:newToken, pos, resumed:true}   then only the output after pos
+```
+
+The host stores `SHA-256("setu/v1/resume-hash\n" ‖ token)` and checks it in
+constant time. The token is bound to the room (role and personal key) and to
+the device key if one was proven. It is replaced by every `ready`, and it
+expires `resumeGrace` (10 minutes) after its connection is lost. If the old
+connection is still open (the host has not noticed the drop yet), it is closed.
+If `pos` has already left the 256 KiB replay buffer, `resumed` is false and the
+client clears its screen before the full replay. An invalid token gets
+`{t:"error", msg: proto.ErrResume}`, and the client then joins afresh. The
+client retries with full-jitter exponential backoff (1 s doubling to 30 s) and
+gives up when the grace period ends. Clients ping every 5 s (`{t:"ping"}` →
+`{t:"pong"}`), and the host drops a pinging client that stays silent for 90 s.
+
 ## Remote desktop
 
 `setu desktop` reuses signaling, the handshake and admission unchanged. The

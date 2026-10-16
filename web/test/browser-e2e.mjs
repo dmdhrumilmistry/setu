@@ -80,6 +80,13 @@ try {
   browser = await playwright.chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args });
   const ctx = await browser.newContext({ ignoreHTTPSErrors: !!proxy });
   const page = await ctx.newPage();
+  // Keep a handle on the page's peer connections, to cut one below.
+  await page.addInitScript(() => {
+    const Orig = window.RTCPeerConnection;
+    window.__pcs = [];
+    window.RTCPeerConnection = function (...a) { const pc = new Orig(...a); window.__pcs.push(pc); return pc; };
+    window.RTCPeerConnection.prototype = Orig.prototype;
+  });
   page.on('console', (m) => console.log('page|', m.text()));
   page.on('pageerror', (e) => console.log('pageerror|', e.message));
   page.on('response', (r) => { if (r.status() >= 400) console.log('http|', r.status(), r.url()); });
@@ -98,6 +105,19 @@ try {
   const sas = await page.textContent('#sas');
   await until(() => host.log.includes(`verification code ${sas}`), 5000, 'matching SAS on host');
   console.log(`OK: browser joined, typed, received echo; SAS ${sas} matches host`);
+
+  // A dropped connection (a phone changing networks) resumes by itself: no
+  // password prompt, same terminal, and typing works again.
+  await page.evaluate(() => window.__pcs.at(-1).close());
+  await until(() => /client #\d+ reconnected via nostr/.test(host.log), 45000, 'host saw the client reconnect');
+  await until(async () => (await rows()).includes('[setu] reconnected'), 15000, 'reconnected notice');
+  if (!(await page.isHidden('#pw-form')) || (await page.isHidden('#screen-term'))) throw new Error('reconnect asked for the password again');
+  await page.click('#term');
+  await page.keyboard.type('again');
+  await page.keyboard.press('Enter');
+  await until(async () => (await rows()).includes('got:again'), 15000, 'echo after reconnect');
+  if ((await rows()).split('READY').length > 2) throw new Error('reconnect replayed output the terminal already had');
+  console.log('OK: dropped connection resumed without a password, output continued');
 
   // Device keys: the home page shows this browser's (remembered) device key,
   // and the host verified the same key when it joined above.

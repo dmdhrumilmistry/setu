@@ -102,6 +102,8 @@ type Session struct {
 	peers       map[int]*peer
 	nextID      int
 	ring        []byte
+	outTotal    int64 // output bytes produced so far; ring ends here
+	tickets     map[string]*ticket
 	cols, rows  int
 	accepting   bool
 	failures    int
@@ -152,7 +154,7 @@ func New(cfg Config) (*Session, error) {
 	if cfg.Log == nil {
 		cfg.Log = os.Stderr
 	}
-	s := &Session{cfg: cfg, peers: map[int]*peer{}, accepting: true, router: &stdinRouter{}, id: secure.RandomID(8), trusted: map[string]bool{}}
+	s := &Session{cfg: cfg, peers: map[int]*peer{}, tickets: map[string]*ticket{}, accepting: true, router: &stdinRouter{}, id: secure.RandomID(8), trusted: map[string]bool{}}
 	for _, fp := range cfg.TrustedDevices {
 		n, err := secure.NormalizeDeviceFingerprint(fp)
 		if err != nil {
@@ -258,6 +260,8 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 		t := time.AfterFunc(s.cfg.Expire, func() { s.stopAccepting("invite expired") })
 		defer t.Stop()
 	}
+
+	go s.maintain(ctx)
 
 	signalErr := make(chan error, 1)
 	if s.cfg.Manual {
@@ -388,6 +392,7 @@ func (s *Session) pumpOutput(done chan<- struct{}) {
 			chunk := append([]byte(nil), buf[:n]...)
 			s.mu.Lock()
 			s.ring = append(s.ring, chunk...)
+			s.outTotal += int64(n)
 			if len(s.ring) > replayBytes {
 				s.ring = append([]byte(nil), s.ring[len(s.ring)-replayBytes:]...)
 			}
@@ -441,14 +446,33 @@ func (s *Session) kind() string {
 	return proto.KindTerminal
 }
 
-// admit decides whether a new handshake may start.
-func (s *Session) admit() error {
+// maintain drops unresponsive clients and expired resume tickets.
+func (s *Session) maintain(ctx context.Context) {
+	t := time.NewTicker(10 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.dropIdle()
+			s.gcTickets()
+		}
+	}
+}
+
+// admit decides whether a new handshake may start. A client that holds a
+// resume ticket (resume) is the same client coming back, so it is admitted
+// even if the invite was disabled, the host is locked after failed logins,
+// or its own dead connection still fills the session; it must then prove
+// the ticket before anything else happens.
+func (s *Session) admit(resume bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !s.accepting {
+	if !resume && !s.accepting {
 		return errors.New("invite no longer valid")
 	}
-	if time.Now().Before(s.lockedUntil) {
+	if !resume && time.Now().Before(s.lockedUntil) {
 		return errors.New("host is temporarily locked after failed logins")
 	}
 	pending, ready := 0, 0
@@ -462,7 +486,7 @@ func (s *Session) admit() error {
 	if pending >= maxPendingHandshakes {
 		return errors.New("too many pending connections")
 	}
-	if ready+pending >= s.cfg.MaxClients {
+	if !resume && ready+pending >= s.cfg.MaxClients {
 		return fmt.Errorf("session full (max %d clients)", s.cfg.MaxClients)
 	}
 	return nil
@@ -494,11 +518,14 @@ func (s *Session) stopAccepting(reason string) {
 	was := s.accepting
 	s.accepting = false
 	stop := s.stopSignal
+	// Connected clients may still need to reconnect: signaling stays up
+	// (for them only) until their resume tickets expire.
+	resumable := s.liveTicketsLocked()
 	s.mu.Unlock()
 	if was {
 		s.audit.InviteDisabled(reason)
 		s.logf("invite disabled: %s (connected clients stay connected)", reason)
-		if stop != nil && !s.cfg.Manual {
+		if stop != nil && !s.cfg.Manual && !resumable {
 			stop()
 		}
 	}

@@ -96,6 +96,20 @@ host: <code>setu share --turn turn:turn.example.com:3478 --turn-user NAME</code>
 </ol>
 <h3 id="webrtc-connection-failed">&quot;WebRTC connection failed&quot;</h3>
 <p>Same cause as above: no network path. TURN is the fix for strict networks.</p>
+<h3 id="connection-lost-reconnecting">&quot;connection lost; reconnecting…&quot;</h3>
+<p>The network path between the two sides broke: the phone changed networks,
+went out of coverage or slept, or the host's network dropped. The browser and
+<code>setu join</code> reconnect by themselves, without asking for the password again,
+and the terminal picks up where it stopped. Missed output is replayed, up to
+the last 256 KiB. Reconnecting works for 10 minutes after the drop. If it
+fails (the share ended or restarted, or the host was offline the whole
+time), press <strong>Reconnect</strong> to join again normally, or run <code>setu join</code> again.
+Shares started with <code>--manual</code> cannot reconnect, because they have no
+signaling channel. Neither can hosts running a setu version from before
+reconnects existed.</p>
+<p>A connection that only stalls is noticed within about 15 seconds while the
+page is visible. When you come back to a backgrounded tab it is checked within
+5 seconds.</p>
 <h3 id="session-full-or-invite-no-longer-valid">&quot;session full&quot; or &quot;invite no longer valid&quot;</h3>
 <p>The share reached <code>--max-clients</code>, was <code>--once</code> and someone already joined, or
 it expired (<code>--expire</code>), or too many wrong passwords disabled it. Start a new
@@ -178,6 +192,7 @@ terminal, and <code>--web-url=</code> prints terminal-only links.</p>
       <li class="l2"><a href="#connecting">Connecting</a></li>
       <li class="l3"><a href="#the-browser-stays-on-connecting-or-the-join-times-out">The browser stays on &#34;connecting&#34; or the join times out</a></li>
       <li class="l3"><a href="#webrtc-connection-failed">&#34;WebRTC connection failed&#34;</a></li>
+      <li class="l3"><a href="#connection-lost-reconnecting">&#34;connection lost; reconnecting…&#34;</a></li>
       <li class="l3"><a href="#session-full-or-invite-no-longer-valid">&#34;session full&#34; or &#34;invite no longer valid&#34;</a></li>
       <li class="l3"><a href="#host-is-temporarily-locked-after-failed-logins">&#34;host is temporarily locked after failed logins&#34;</a></li>
       <li class="l2"><a href="#security">Security</a></li>

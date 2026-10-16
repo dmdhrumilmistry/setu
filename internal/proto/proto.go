@@ -57,6 +57,11 @@ type Signal struct {
 	ICE    []ICEServer `json:"ice,omitempty"`
 	TS     int64       `json:"ts"`
 	Reason string      `json:"reason,omitempty"`
+	// Resume (hello only) names the resume ticket a reconnecting client
+	// holds (secure.ResumeID of its token), so the host admits it even when
+	// the share is full or no longer accepts new clients. It is only a
+	// hint: the token itself is checked on the data channel.
+	Resume string `json:"resume,omitempty"`
 }
 
 // Control message types (text frames on the data channel). Binary frames are
@@ -69,7 +74,13 @@ const (
 	CtlError  = "error"  // host -> client: fatal error, channel closes
 	CtlExit   = "exit"   // host -> client: command exited
 	CtlInfo   = "info"   // host -> client: informational notice
+	CtlPing   = "ping"   // client -> host: liveness probe (hosts that issue resume tokens answer)
+	CtlPong   = "pong"   // host -> client: answer to ping
 )
+
+// ErrResume is the "error" message a host sends when a resume token is not
+// (or no longer) valid. The client should forget the token and join afresh.
+const ErrResume = "this session can no longer be resumed"
 
 // Desktop control message types.
 const (
@@ -128,6 +139,20 @@ type Control struct {
 	// use them to approve known devices automatically.
 	DeviceKey []byte `json:"device_key,omitempty"`
 	DeviceSig []byte `json:"device_sig,omitempty"`
+
+	// Resume is a resume token: sent by the host with "ready", and back by
+	// a reconnecting client with "auth" instead of a password proof. It is
+	// single use; every "ready" carries a fresh one.
+	Resume []byte `json:"resume,omitempty"`
+	// Pos is a position in the terminal output stream (bytes since the
+	// command started). In "ready" it is the position of the first output
+	// byte that follows; in a resuming "auth", the position the client has
+	// received up to, so the host sends only what it missed.
+	Pos *int64 `json:"pos,omitempty"`
+	// Resumed (sent with "ready") means the output continues exactly at
+	// the client's position; otherwise the client should clear its screen
+	// before the replay.
+	Resumed bool `json:"resumed,omitempty"`
 
 	// Approval tells the client how it was admitted (sent with "ready"):
 	// ApprovalTrusted, ApprovalPrompt, or empty when no approval applied.

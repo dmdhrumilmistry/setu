@@ -619,6 +619,18 @@ func (s *Session) ClientConnected(c Client) {
 		fmt.Sprintf("client #%d connected (role=%s)", c.ID, c.Role), c.attrs()...)
 }
 
+// ClientReconnected records a client that resumed its session over a new
+// connection (after a network change, say) without logging in again.
+// first is the client id it was given when it first joined.
+func (s *Session) ClientReconnected(c Client, first int) {
+	if s == nil {
+		return
+	}
+	s.emit(otellog.SeverityInfo, "setu.client.reconnect",
+		fmt.Sprintf("client #%d reconnected (first joined as #%d, role=%s)", c.ID, first, c.Role),
+		append(c.attrs(), attribute.Int("setu.client.first_id", first))...)
+}
+
 // ClientDisconnected records a connected client leaving.
 func (s *Session) ClientDisconnected(c Client, reason string) {
 	if s == nil {

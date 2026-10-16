@@ -24,6 +24,11 @@ test('auth proof matches Go', async () => {
   assert.equal(C.hex(proof), 'b6660ec4b55b56c57d702ee56424657a7a82c8ad458c49a11cfa3dbc07a73a44');
 });
 
+test('resume id matches Go', async () => {
+  const tok = Uint8Array.from({ length: 32 }, (_, i) => i);
+  assert.equal(await C.resumeId(tok), '2f44565e3fdd6644726803d41e7fc36e');
+});
+
 test('weak PBKDF2 rejected', async () => {
   await assert.rejects(C.passwordKey('x', C.utf8('s'), 10));
 });

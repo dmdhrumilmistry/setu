@@ -7,6 +7,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dmdhrumilmistry/setu/internal/audit"
@@ -68,11 +69,20 @@ type peer struct {
 	client      *audit.Client     // audit identity, fixed once ready
 	viewer      *desktop.Viewer   // desktop shares, once ready
 	inputErrAt  time.Time         // last remote input failure reported
+
+	// mustResume: admitted only because it named a resume ticket, so it
+	// must present that ticket's token instead of a normal login.
+	mustResume bool
+	ticket     *ticket      // resume ticket, once ready (guarded by s.mu)
+	lastRx     atomic.Int64 // unix nanos of the last message received
+	pinger     atomic.Bool  // the client sends liveness pings
 }
 
-// newPeer registers a peer after checking admission.
-func (s *Session) newPeer(role, label, keyName string) (*peer, error) {
-	if err := s.admit(); err != nil {
+// newPeer registers a peer after checking admission. resumeID is the
+// resume ticket the client says it holds, if any.
+func (s *Session) newPeer(role, label, keyName, resumeID string) (*peer, error) {
+	resume := s.hasTicket(resumeID)
+	if err := s.admit(resume); err != nil {
 		return nil, err
 	}
 	pc, err := rtc.NewPeer(s.cfg.ICE)
@@ -93,7 +103,7 @@ func (s *Session) newPeer(role, label, keyName string) (*peer, error) {
 	}
 	s.mu.Lock()
 	s.nextID++
-	p := &peer{s: s, id: s.nextID, role: role, label: label, keyName: keyName, pc: pc, dc: dc, screen: screen, nonce: secure.RandomBytes(32)}
+	p := &peer{s: s, id: s.nextID, role: role, label: label, keyName: keyName, pc: pc, dc: dc, screen: screen, nonce: secure.RandomBytes(32), mustResume: resume}
 	s.peers[p.id] = p
 	s.mu.Unlock()
 
@@ -165,6 +175,7 @@ func (p *peer) onOpen() {
 }
 
 func (p *peer) onMessage(msg webrtc.DataChannelMessage) {
+	p.lastRx.Store(time.Now().UnixNano())
 	p.mu.Lock()
 	st, input := p.state, p.input
 	p.mu.Unlock()
@@ -203,6 +214,10 @@ func (p *peer) onMessage(msg webrtc.DataChannelMessage) {
 			p.deviceFP = fp
 			p.mu.Unlock()
 		}
+		if len(c.Resume) > 0 || p.mustResume {
+			p.resume(c)
+			return
+		}
 		if p.s.pwKey != nil {
 			want := secure.AuthProof(p.s.pwKey, p.nonce, p.localFP, p.remoteFP)
 			if !hmac.Equal(want, c.Proof) {
@@ -212,7 +227,12 @@ func (p *peer) onMessage(msg webrtc.DataChannelMessage) {
 				return
 			}
 		}
-		go p.activate()
+		go p.activate(nil, nil)
+	case proto.CtlPing:
+		if st != stateClosed {
+			p.pinger.Store(true)
+			p.sendControl(proto.Control{T: proto.CtlPong})
+		}
 	case proto.CtlResize:
 		if st == stateReady && p.role == proto.RoleControl && p.s.desk == nil {
 			p.s.resize(c.Cols, c.Rows)
@@ -224,12 +244,39 @@ func (p *peer) onMessage(msg webrtc.DataChannelMessage) {
 	}
 }
 
-func (p *peer) activate() {
-	how, ok := p.s.approve(p)
-	if !ok {
-		p.sendControl(proto.Control{T: proto.CtlError, Msg: "the host denied the connection"})
-		time.AfterFunc(200*time.Millisecond, func() { p.close("denied by host") })
+// resume handles an "auth" that presents a resume token. The token stands
+// in for the password and the approval the client passed when it first
+// joined; a client that only got in by naming a ticket has no other way in.
+func (p *peer) resume(c proto.Control) {
+	t, old, err := p.s.claimTicket(p, c.Resume)
+	if err != nil {
+		if p.mustResume {
+			p.s.authFailed(p)
+		}
+		p.sendControl(proto.Control{T: proto.CtlError, Msg: proto.ErrResume})
+		time.AfterFunc(200*time.Millisecond, func() { p.close("invalid resume token") })
 		return
+	}
+	if old != nil {
+		old.close("replaced by its reconnection")
+	}
+	go p.activate(t, c.Pos)
+}
+
+// activate admits an authenticated client: a new one (t == nil) after the
+// host's approval, or one resuming ticket t, which continues the output at
+// pos when the host still has it.
+func (p *peer) activate(t *ticket, pos *int64) {
+	how := ""
+	if t == nil {
+		var ok bool
+		if how, ok = p.s.approve(p); !ok {
+			p.sendControl(proto.Control{T: proto.CtlError, Msg: "the host denied the connection"})
+			time.AfterFunc(200*time.Millisecond, func() { p.close("denied by host") })
+			return
+		}
+	} else {
+		how = t.approval
 	}
 	s := p.s
 	c := p.auditClient()
@@ -248,18 +295,42 @@ func (p *peer) activate() {
 		p.input = s.audit.Input(c, s.passwordPrompt)
 	}
 	p.mu.Unlock()
-	s.failures = 0
-	p.sendControl(proto.Control{T: proto.CtlReady, V: proto.Version, Role: p.role, Cmd: s.commandLine(), Host: s.host, Cols: s.cols, Rows: s.rows, Approval: how, Kind: s.kind(), OS: s.hostOS()})
-	if len(s.ring) > 0 {
-		for off := 0; off < len(s.ring); off += 16 << 10 {
-			end := min(off+16<<10, len(s.ring))
-			p.sendOutput(s.ring[off:end])
+	if t == nil {
+		s.failures = 0
+	}
+	firstID := 0
+	if t != nil {
+		firstID = t.firstID
+	}
+	token := s.issueTicket(p, t, how)
+	// Replay what the client has not seen: everything we still have for a
+	// new client, only the missed part for one that resumes.
+	start := s.outTotal - int64(len(s.ring))
+	from, resumed := start, false
+	if t != nil && pos != nil && *pos >= start && *pos <= s.outTotal {
+		from, resumed = *pos, true
+	}
+	ready := proto.Control{T: proto.CtlReady, V: proto.Version, Role: p.role, Cmd: s.commandLine(), Host: s.host, Cols: s.cols, Rows: s.rows,
+		Approval: how, Kind: s.kind(), OS: s.hostOS(), Resume: token}
+	if s.desk == nil {
+		ready.Pos, ready.Resumed = &from, resumed
+	}
+	p.sendControl(ready)
+	if replay := s.ring[from-start:]; len(replay) > 0 && s.desk == nil {
+		for off := 0; off < len(replay); off += 16 << 10 {
+			end := min(off+16<<10, len(replay))
+			p.sendOutput(replay[off:end])
 		}
 	}
 	s.mu.Unlock()
 	p.deadline.Stop()
 	if s.desk != nil {
 		p.joinDesktop()
+	}
+	if t != nil {
+		s.audit.ClientReconnected(c, firstID)
+		s.logf("client #%d reconnected via %s (first joined as #%d), role=%s: %s", p.id, p.label, firstID, p.role, c.Actor())
+		return
 	}
 	s.audit.ClientConnected(c)
 	s.logf("client #%d connected via %s, role=%s: %s", p.id, p.label, p.role, c.Actor())
@@ -307,6 +378,7 @@ func (p *peer) close(reason string) {
 	if p.deadline != nil {
 		p.deadline.Stop()
 	}
+	p.s.releaseTicket(p)
 	p.s.mu.Lock()
 	delete(p.s.peers, p.id)
 	p.s.mu.Unlock()
