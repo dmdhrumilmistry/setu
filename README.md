@@ -164,8 +164,10 @@ fullscreen with keyboard capture, and text clipboard sync both ways (Ctrl+V
 on the remote screen pastes your local clipboard there; copies on the remote
 computer arrive in your clipboard). Only the tiles that changed are sent, and
 each browser acknowledges frames, so slow links get fewer frames instead of
-lag. Hosts: Windows, and Linux or BSD with an X11 session (Wayland and macOS
-are not supported yet). `--display N` picks a monitor and `--fps N` caps the
+lag. Hosts: Windows, macOS 13+, and Linux or BSD with an X11 session (Wayland is
+not supported yet). Shortcuts follow your own keyboard: between a Mac and a PC,
+Ctrl and Cmd are swapped, so Ctrl+C on a PC copies on a Mac host and Cmd+C on a
+Mac copies on a Windows or Linux host. `--display N` picks a monitor and `--fps N` caps the
 frame rate. Organizations can disable it with the `DisableDesktop` policy.
 See the [remote desktop guide](https://dmdhrumilmistry.github.io/setu/docs/desktop.html).
 

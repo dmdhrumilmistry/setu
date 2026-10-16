@@ -38,7 +38,7 @@ func TestRealScreen(t *testing.T) {
 		t.Fatalf("read clipboard: %v", err)
 	}
 	defer scr.SetClipboard(saved)
-	const text = "setu clipboard test: héllo 👋"
+	const text = "setu clipboard test: héllo 👋\nsecond line" // LF on the wire, whatever the host uses
 	if err := scr.SetClipboard(text); err != nil {
 		t.Fatalf("set clipboard: %v", err)
 	}

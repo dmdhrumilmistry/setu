@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/dmdhrumilmistry/setu/internal/audit"
@@ -65,6 +66,14 @@ func (s *Session) startDesktop(ctx context.Context) (func(), error) {
 			scr.Close()
 		}
 	}, nil
+}
+
+// hostOS tells desktop clients which keyboard conventions apply here.
+func (s *Session) hostOS() string {
+	if s.desk == nil {
+		return ""
+	}
+	return runtime.GOOS
 }
 
 func screenControl(ds []desktop.Display, cur int) proto.Control {

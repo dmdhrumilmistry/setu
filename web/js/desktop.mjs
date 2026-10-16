@@ -2,6 +2,8 @@
 // and turns mouse, touch, keyboard and clipboard events into input for the
 // host. Wire format: internal/desktop (binary tiles + frame end on the
 // "setu-screen" channel) and internal/proto (JSON control messages).
+import { MODIFIERS, chunks, combos, crossPlatform, hostCode, isMacPlatform, isShortcut } from './keymap.mjs';
+
 const $ = (id) => document.getElementById(id);
 
 const MSG_TILE = 1;
@@ -11,15 +13,7 @@ const CLIP_PART = 8192; // characters per clipboard message
 const TYPE_PART = 200; // characters per "Type it" message
 const LONG_PRESS = 550;
 const TAP_SLOP = 8;
-
-const COMBOS = {
-  super: ['MetaLeft'],
-  alttab: ['AltLeft', 'Tab'],
-  altf4: ['AltLeft', 'F4'],
-  taskmgr: ['ControlLeft', 'ShiftLeft', 'Escape'],
-  prtsc: ['PrintScreen'],
-  esc: ['Escape'],
-};
+const COPY_WAIT = 1200; // ms to wait for the host's clipboard to change after a copy shortcut
 
 // Keys some mobile keyboards report without a KeyboardEvent.code.
 const CODE_FOR_KEY = {
@@ -27,24 +21,9 @@ const CODE_FOR_KEY = {
   ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight', ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown',
 };
 
-const MODIFIERS = new Set(['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight']);
+const isMac = isMacPlatform(navigator.userAgentData?.platform || navigator.platform);
 
-// chunks splits text into pieces of at most n UTF-16 units without
-// cutting a surrogate pair (an emoji) in half.
-function chunks(text, n) {
-  const out = [];
-  for (let i = 0; i < text.length;) {
-    let end = Math.min(i + n, text.length);
-    if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1])) end--;
-    out.push(text.slice(i, end));
-    i = end;
-  }
-  return out;
-}
-
-const isMac =/Mac|iPhone|iPad/.test(navigator.userAgentData?.platform || navigator.platform || '');
-
-export function createDesktop({ send, control }) {
+export function createDesktop({ send, control, hostOS }) {
   const canvas = $('desk-canvas');
   const ctx = canvas.getContext('2d', { alpha: false });
   const view = $('desk-view');
@@ -263,11 +242,29 @@ export function createDesktop({ send, control }) {
 
   // ---------- keyboard ----------
   function keyCode(e) {
-    let code = e.code || CODE_FOR_KEY[e.key] || '';
-    if (isMac && code === 'MetaLeft') code = 'ControlLeft'; // Cmd+C / Cmd+V act like Ctrl on the host
-    if (isMac && code === 'MetaRight') code = 'ControlRight';
-    return code;
+    return hostCode(e.code || CODE_FOR_KEY[e.key] || '', swap);
   }
+
+  // Ctrl/Cmd swap between Mac and PC keyboards (see keymap.mjs), on by
+  // default when exactly one side is a Mac.
+  const cross = crossPlatform(isMac, hostOS);
+  let swap = cross;
+  try { swap = cross && localStorage.getItem('setu-swap') !== '0'; } catch { /* storage blocked */ }
+  const swapBtn = $('desk-swap');
+  swapBtn.textContent = isMac ? 'Cmd as Ctrl' : 'Ctrl as Cmd';
+  swapBtn.title = isMac
+    ? 'Your Cmd key acts as Ctrl on the remote computer (Cmd+C copies there), and Ctrl as its Windows/Super key'
+    : 'Your Ctrl key acts as Cmd on the remote Mac (Ctrl+C copies there), and the Windows key as its Ctrl';
+  swapBtn.hidden = !control || !cross;
+  const showSwap = () => swapBtn.setAttribute('aria-pressed', String(swap));
+  showSwap();
+  swapBtn.addEventListener('click', () => {
+    releaseAll(); // modifiers held under the old mapping
+    swap = !swap;
+    showSwap();
+    try { localStorage.setItem('setu-swap', swap ? '1' : '0'); } catch { /* storage blocked */ }
+    input.focus({ preventScroll: true });
+  });
 
   function key(code, down) {
     if (down) held.add(code); else held.delete(code);
@@ -283,11 +280,13 @@ export function createDesktop({ send, control }) {
     if (!control || e.isComposing || e.keyCode === 229) return; // IME and soft keyboards: see 'input'
     const code = keyCode(e);
     if (!code) return;
-    // Ctrl/Cmd+V: let the browser deliver the local clipboard first (the
-    // paste handler sends it, then the keystroke).
-    if (code === 'KeyV' && (e.ctrlKey || (isMac && e.metaKey))) return;
+    const shortcut = isShortcut(e, isMac);
+    // Paste: let the browser deliver the local clipboard first (the paste
+    // handler sends it, then the keystroke).
+    if (shortcut && e.code === 'KeyV') return;
     e.preventDefault();
     key(code, true);
+    if (shortcut && (e.code === 'KeyC' || e.code === 'KeyX') && !e.repeat) armCopy();
   });
   input.addEventListener('keyup', (e) => {
     if (!control) return;
@@ -330,12 +329,43 @@ export function createDesktop({ send, control }) {
     parts.forEach((part, i) => send({ t: 'clipboard', text: part, more: i < parts.length - 1 }));
   }
 
+  // armCopy runs inside the copy keystroke. Browsers (Safari, Firefox) only
+  // let a page write the clipboard during a user action, but the copied text
+  // arrives from the host a moment later: so the clipboard write starts now,
+  // with a promise for the text, which resolves when the host's clipboard
+  // changes (or, if it does not, with whatever the host clipboard holds).
+  let copyWait = null;
+  function armCopy() {
+    if (copyWait) return;
+    const text = new Promise((resolve) => {
+      copyWait = { resolve, timer: setTimeout(() => send({ t: 'clipboard-get' }), COPY_WAIT) };
+      setTimeout(() => { if (copyWait?.resolve === resolve) { copyWait = null; resolve(null); } }, COPY_WAIT + 3000);
+    });
+    const blob = text.then((t) => {
+      if (t == null) throw new Error('no text from the host');
+      return new Blob([t], { type: 'text/plain' });
+    });
+    const write = window.ClipboardItem && navigator.clipboard?.write
+      ? navigator.clipboard.write([new ClipboardItem({ 'text/plain': blob })])
+      : blob.then((b) => b.text()).then((t) => navigator.clipboard.writeText(t));
+    write.then(() => toast('Copied from the remote computer')).catch(async () => {
+      const t = await text;
+      if (t != null) toast('The remote clipboard changed', 'Copy', () => copyLocal(t));
+    });
+  }
+
   async function onClipboard(m) {
     clipIn += m.text || '';
     if (m.more) return;
     const text = clipIn;
     clipIn = '';
     $('clip-text').value = text;
+    if (copyWait) {
+      clearTimeout(copyWait.timer);
+      copyWait.resolve(text);
+      copyWait = null;
+      return;
+    }
     try {
       if (!document.hasFocus()) throw new Error('not focused');
       await navigator.clipboard.writeText(text);
@@ -370,8 +400,15 @@ export function createDesktop({ send, control }) {
     send({ t: 'quality', quality: quality.value });
     try { localStorage.setItem('setu-quality', quality.value); } catch { /* storage blocked */ }
   });
+  const hostCombos = combos(hostOS);
+  $('desk-keys').append(...hostCombos.map(([label], i) => {
+    const o = document.createElement('option');
+    o.value = String(i);
+    o.textContent = label;
+    return o;
+  }));
   $('desk-keys').addEventListener('change', (e) => {
-    const combo = COMBOS[e.target.value];
+    const combo = hostCombos[Number(e.target.value)]?.[1];
     e.target.value = '';
     if (!combo) return;
     combo.forEach((c) => key(c, true));
@@ -408,6 +445,19 @@ export function createDesktop({ send, control }) {
 
   for (const id of ['desk-keys', 'desk-kbd', 'desk-clip-btn']) $(id).hidden = !control;
   canvas.style.cursor = control ? 'default' : 'not-allowed';
+  // Keep keystrokes and pastes going to the remote computer: clicking
+  // anywhere on the screen area, or typing after focus was lost, refocuses
+  // the input.
+  if (control) {
+    view.addEventListener('pointerdown', () => input.focus({ preventScroll: true }));
+    document.addEventListener('keydown', (e) => {
+      if (document.activeElement === document.body && !$('screen-desk').hidden) {
+        input.focus({ preventScroll: true });
+        input.dispatchEvent(new KeyboardEvent('keydown', e));
+        e.preventDefault();
+      }
+    });
+  }
   new ResizeObserver(layout).observe(view);
   overlay.textContent = 'Waiting for the first picture...';
   overlay.hidden = false;

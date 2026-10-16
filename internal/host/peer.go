@@ -249,7 +249,7 @@ func (p *peer) activate() {
 	}
 	p.mu.Unlock()
 	s.failures = 0
-	p.sendControl(proto.Control{T: proto.CtlReady, V: proto.Version, Role: p.role, Cmd: s.commandLine(), Host: s.host, Cols: s.cols, Rows: s.rows, Approval: how, Kind: s.kind()})
+	p.sendControl(proto.Control{T: proto.CtlReady, V: proto.Version, Role: p.role, Cmd: s.commandLine(), Host: s.host, Cols: s.cols, Rows: s.rows, Approval: how, Kind: s.kind(), OS: s.hostOS()})
 	if len(s.ring) > 0 {
 		for off := 0; off < len(s.ring); off += 16 << 10 {
 			end := min(off+16<<10, len(s.ring))

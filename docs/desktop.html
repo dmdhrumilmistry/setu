@@ -105,6 +105,12 @@ password, and compare the verification code with the one the host prints.</p>
 <td>text</td>
 </tr>
 <tr>
+<td>macOS 13+</td>
+<td>CoreGraphics, every display, full Retina resolution</td>
+<td>CoreGraphics events</td>
+<td>text</td>
+</tr>
+<tr>
 <td>Linux and the BSDs, X11 session</td>
 <td>MIT-SHM (falls back to <code>GetImage</code>), RandR monitors</td>
 <td>XTEST</td>
@@ -116,17 +122,17 @@ password, and compare the verification code with the one the host prints.</p>
 <td></td>
 <td></td>
 </tr>
-<tr>
-<td>macOS</td>
-<td>not supported yet</td>
-<td></td>
-<td></td>
-</tr>
 </tbody>
 </table>
 <p>Run <code>setu desktop</code> inside your graphical session: as yourself, on the desktop
 you want to share (on Linux, <code>DISPLAY</code> must be set). It needs no extra
 packages, drivers or administrator rights. Any modern browser can join.</p>
+<p><strong>macOS permissions.</strong> The first time, macOS asks whether your terminal app
+(Terminal, iTerm2, ...) may record the screen. Allow it in <strong>System Settings &gt;
+Privacy &amp; Security &gt; Screen &amp; System Audio Recording</strong>, and allow it under
+<strong>Accessibility</strong> too so remote mouse and keyboard input works, then restart
+the terminal. Without Accessibility the screen is still shared, and the
+browser shows why input does nothing.</p>
 <h2 id="using-it">Using it</h2>
 <p>The toolbar at the bottom of the page:</p>
 <table>
@@ -151,7 +157,11 @@ packages, drivers or administrator rights. Any modern browser can join.</p>
 </tr>
 <tr>
 <td><strong>Send keys...</strong></td>
-<td>Key combinations the browser or your own computer would otherwise catch: Windows/Super, Alt+Tab, Alt+F4, Ctrl+Shift+Esc, Print Screen, Esc.</td>
+<td>Key combinations the browser or your own computer would otherwise catch, for the remote computer's system: Cmd+Tab, Spotlight, Force Quit, screenshot and lock on a Mac; the Windows key, Alt+Tab, Alt+F4, Task Manager and lock on Windows; Super, Alt+Tab, a terminal and lock on Linux.</td>
+</tr>
+<tr>
+<td><strong>Cmd as Ctrl</strong> / <strong>Ctrl as Cmd</strong></td>
+<td>Shown when exactly one side is a Mac (see Keyboard below). On by default; turn it off to send the keys unchanged.</td>
 </tr>
 <tr>
 <td><strong>Keyboard</strong></td>
@@ -172,15 +182,53 @@ forward buttons work too.</p>
 <p><strong>Touch.</strong> Tap to click, drag with one finger to drag, press and hold to
 right-click, and drag with two fingers to scroll.</p>
 <p><strong>Keyboard.</strong> Keys are sent as physical keys, so the remote computer's
-keyboard layout applies, just as if you typed on it. On a Mac, Cmd acts as
-Ctrl on the remote computer, so Cmd+C and Cmd+V copy and paste there.</p>
+keyboard layout applies, just as if you typed on it. Shortcuts use your own
+habits whatever the remote system is, because when exactly one side is a Mac,
+Ctrl and Cmd are swapped:</p>
+<table>
+<thead>
+<tr>
+<th>You use</th>
+<th>Remote computer</th>
+<th>Your keys there</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mac</td>
+<td>Windows or Linux</td>
+<td>Cmd acts as Ctrl (Cmd+C copies, Cmd+V pastes), Ctrl acts as the Windows/Super key</td>
+</tr>
+<tr>
+<td>Windows or Linux</td>
+<td>Mac</td>
+<td>Ctrl acts as Cmd (Ctrl+C copies, Ctrl+V pastes), the Windows key acts as Ctrl</td>
+</tr>
+<tr>
+<td>Mac</td>
+<td>Mac</td>
+<td>unchanged</td>
+</tr>
+<tr>
+<td>Windows or Linux</td>
+<td>Windows or Linux</td>
+<td>unchanged</td>
+</tr>
+</tbody>
+</table>
+<p>Option and Alt are the same key everywhere. Keys a Mac keyboard does not have
+arrive as their Mac equivalents (Insert is Help, Print Screen is F13).</p>
 <p><strong>Clipboard.</strong></p>
 <ul>
-<li>Press Ctrl+V (Cmd+V) on the remote screen: your local clipboard text goes to
-the remote clipboard first, then the paste happens there.</li>
-<li>Copy something on the remote computer: the text arrives in your browser and
-is put on your local clipboard (or, if the browser does not allow that, a
-prompt offers a Copy button).</li>
+<li>Press Ctrl+V (Cmd+V on a Mac) on the remote screen: your local clipboard
+text goes to the remote clipboard first, then the paste happens there.</li>
+<li>Press Ctrl+C or Ctrl+X (Cmd on a Mac) on the remote screen: what the remote
+app copies lands on your local clipboard. This works in Safari and Firefox
+too, which only let a page write the clipboard during a keystroke or click.</li>
+<li>Copy something on the remote computer another way (a menu, the mouse): the
+text arrives in your browser and is put on your local clipboard where the
+browser allows it, or a prompt offers a Copy button.</li>
+<li>Line endings are converted between Windows (CRLF) and Mac and Linux (LF).</li>
 <li>The <strong>Clipboard</strong> panel can send text, fetch the remote clipboard, and
 <strong>Type it</strong>: enter the text as keystrokes, for places where pasting does not
 work, such as login prompts.</li>
@@ -226,6 +274,14 @@ ones, and nothing is captured while nobody is watching. See
 </tr>
 </thead>
 <tbody>
+<tr>
+<td><code>macOS has not given setu permission to record the screen</code></td>
+<td>Allow your terminal app under Screen &amp; System Audio Recording (see macOS permissions above), then restart the terminal.</td>
+</tr>
+<tr>
+<td>&quot;Remote input failed: macOS has not given setu permission to control the computer&quot;</td>
+<td>Allow your terminal app under Accessibility, then restart the terminal.</td>
+</tr>
 <tr>
 <td><code>Wayland sessions are not supported yet</code></td>
 <td>Log out and pick an X11 session (&quot;Ubuntu on Xorg&quot;, &quot;Plasma (X11)&quot;) on the login screen.</td>

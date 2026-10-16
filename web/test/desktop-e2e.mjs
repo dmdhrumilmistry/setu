@@ -4,7 +4,7 @@
 //   go build -o setu ./cmd/setu && node web/test/desktop-e2e.mjs
 // SETU_DESKTOP_INPUT_TEST=1 also clicks on the shared screen and replaces
 // the clipboard, so CI sets it and local runs leave it off by default.
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, dirname } from 'node:path';
@@ -54,6 +54,13 @@ const host = spawn(bin, ['desktop', '--qr=false', '--view-link', '--fps', '10', 
   { env: hostEnv, stdio: ['ignore', 'ignore', 'pipe'] });
 let log = '';
 host.stderr.on('data', (d) => { log += d; process.stderr.write('host| ' + d); });
+
+function hostClipboard() {
+  try { return execFileSync('xclip', ['-o', '-selection', 'clipboard'], { timeout: 3000 }).toString(); } catch (e) { return e.code === 'ENOENT' ? null : ''; }
+}
+function setHostClipboard(text) {
+  spawn('xclip', ['-i', '-selection', 'clipboard']).stdin.end(text);
+}
 
 async function until(fn, ms, what) {
   const t0 = Date.now();
@@ -112,6 +119,22 @@ try {
     await page.click('#clip-get');
     await until(async () => (await page.inputValue('#clip-text')) === text, 10000, 'clipboard read back from the host');
     console.log('OK: clipboard round trip through the host');
+
+    // Shortcuts on the remote screen, checked against the host's X11
+    // clipboard with xclip (CI installs it).
+    if (hostClipboard() !== null) {
+      await page.click('#clip-close');
+      const pasted = 'pasted with Ctrl+V\nsecond line';
+      await page.evaluate((t) => navigator.clipboard.writeText(t), pasted);
+      await page.keyboard.press('Control+V');
+      await until(() => hostClipboard() === pasted, 10000, 'Ctrl+V reached the host clipboard');
+      const copied = 'copied with Ctrl+C ' + Date.now();
+      await page.keyboard.press('Control+C');
+      setHostClipboard(copied); // what the focused host app would do
+      await until(async () => (await page.evaluate(() => navigator.clipboard.readText())) === copied, 10000, 'Ctrl+C filled the local clipboard');
+      console.log('OK: Ctrl+V and Ctrl+C on the remote screen move text both ways');
+      await page.click('#desk-clip-btn');
+    }
 
     await page.click('#clip-close');
     const box = await page.locator('#desk-canvas').boundingBox();

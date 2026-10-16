@@ -66,40 +66,48 @@ var ErrUnsupported = errors.New("remote desktop is not supported on this platfor
 // Open connects to this machine's desktop.
 func Open() (Screen, error) { return open() }
 
-// key is a physical key: its Linux evdev code (X11 keycode = evdev + 8) and
-// its PC set-1 scancode (0xE0xx for extended keys; 0 = not available).
+// key is a physical key: its Linux evdev code (X11 keycode = evdev + 8), its
+// PC set-1 scancode (0xE0xx for extended keys; 0 = not available) and its
+// macOS virtual keycode (kVK_*). Keys a Mac keyboard lacks use the standard
+// Mac equivalents: Insert is Help, PrintScreen/ScrollLock/Pause are F13-F15
+// and NumLock is the keypad's Clear.
 type key struct {
 	evdev uint16
 	scan  uint16
+	mac   uint16
 }
 
 // keys maps KeyboardEvent.code values to physical keys.
 var keys = map[string]key{
-	"Escape": {1, 0x01}, "Digit1": {2, 0x02}, "Digit2": {3, 0x03}, "Digit3": {4, 0x04}, "Digit4": {5, 0x05},
-	"Digit5": {6, 0x06}, "Digit6": {7, 0x07}, "Digit7": {8, 0x08}, "Digit8": {9, 0x09}, "Digit9": {10, 0x0a},
-	"Digit0": {11, 0x0b}, "Minus": {12, 0x0c}, "Equal": {13, 0x0d}, "Backspace": {14, 0x0e}, "Tab": {15, 0x0f},
-	"KeyQ": {16, 0x10}, "KeyW": {17, 0x11}, "KeyE": {18, 0x12}, "KeyR": {19, 0x13}, "KeyT": {20, 0x14},
-	"KeyY": {21, 0x15}, "KeyU": {22, 0x16}, "KeyI": {23, 0x17}, "KeyO": {24, 0x18}, "KeyP": {25, 0x19},
-	"BracketLeft": {26, 0x1a}, "BracketRight": {27, 0x1b}, "Enter": {28, 0x1c}, "ControlLeft": {29, 0x1d},
-	"KeyA": {30, 0x1e}, "KeyS": {31, 0x1f}, "KeyD": {32, 0x20}, "KeyF": {33, 0x21}, "KeyG": {34, 0x22},
-	"KeyH": {35, 0x23}, "KeyJ": {36, 0x24}, "KeyK": {37, 0x25}, "KeyL": {38, 0x26}, "Semicolon": {39, 0x27},
-	"Quote": {40, 0x28}, "Backquote": {41, 0x29}, "ShiftLeft": {42, 0x2a}, "Backslash": {43, 0x2b},
-	"KeyZ": {44, 0x2c}, "KeyX": {45, 0x2d}, "KeyC": {46, 0x2e}, "KeyV": {47, 0x2f}, "KeyB": {48, 0x30},
-	"KeyN": {49, 0x31}, "KeyM": {50, 0x32}, "Comma": {51, 0x33}, "Period": {52, 0x34}, "Slash": {53, 0x35},
-	"ShiftRight": {54, 0x36}, "NumpadMultiply": {55, 0x37}, "AltLeft": {56, 0x38}, "Space": {57, 0x39},
-	"CapsLock": {58, 0x3a}, "F1": {59, 0x3b}, "F2": {60, 0x3c}, "F3": {61, 0x3d}, "F4": {62, 0x3e},
-	"F5": {63, 0x3f}, "F6": {64, 0x40}, "F7": {65, 0x41}, "F8": {66, 0x42}, "F9": {67, 0x43}, "F10": {68, 0x44},
-	"NumLock": {69, 0xe045}, "ScrollLock": {70, 0x46}, "Numpad7": {71, 0x47}, "Numpad8": {72, 0x48},
-	"Numpad9": {73, 0x49}, "NumpadSubtract": {74, 0x4a}, "Numpad4": {75, 0x4b}, "Numpad5": {76, 0x4c},
-	"Numpad6": {77, 0x4d}, "NumpadAdd": {78, 0x4e}, "Numpad1": {79, 0x4f}, "Numpad2": {80, 0x50},
-	"Numpad3": {81, 0x51}, "Numpad0": {82, 0x52}, "NumpadDecimal": {83, 0x53}, "IntlBackslash": {86, 0x56},
-	"F11": {87, 0x57}, "F12": {88, 0x58}, "IntlRo": {89, 0x73}, "NumpadEnter": {96, 0xe01c},
-	"ControlRight": {97, 0xe01d}, "NumpadDivide": {98, 0xe035}, "PrintScreen": {99, 0xe037},
-	"AltRight": {100, 0xe038}, "Home": {102, 0xe047}, "ArrowUp": {103, 0xe048}, "PageUp": {104, 0xe049},
-	"ArrowLeft": {105, 0xe04b}, "ArrowRight": {106, 0xe04d}, "End": {107, 0xe04f}, "ArrowDown": {108, 0xe050},
-	"PageDown": {109, 0xe051}, "Insert": {110, 0xe052}, "Delete": {111, 0xe053}, "NumpadEqual": {117, 0x59},
-	"Pause": {119, 0}, "IntlYen": {124, 0x7d}, "MetaLeft": {125, 0xe05b}, "MetaRight": {126, 0xe05c},
-	"ContextMenu": {127, 0xe05d},
+	"Escape": {1, 0x01, 0x35}, "Digit1": {2, 0x02, 0x12}, "Digit2": {3, 0x03, 0x13}, "Digit3": {4, 0x04, 0x14},
+	"Digit4": {5, 0x05, 0x15}, "Digit5": {6, 0x06, 0x17}, "Digit6": {7, 0x07, 0x16}, "Digit7": {8, 0x08, 0x1a},
+	"Digit8": {9, 0x09, 0x1c}, "Digit9": {10, 0x0a, 0x19}, "Digit0": {11, 0x0b, 0x1d}, "Minus": {12, 0x0c, 0x1b},
+	"Equal": {13, 0x0d, 0x18}, "Backspace": {14, 0x0e, 0x33}, "Tab": {15, 0x0f, 0x30},
+	"KeyQ": {16, 0x10, 0x0c}, "KeyW": {17, 0x11, 0x0d}, "KeyE": {18, 0x12, 0x0e}, "KeyR": {19, 0x13, 0x0f},
+	"KeyT": {20, 0x14, 0x11}, "KeyY": {21, 0x15, 0x10}, "KeyU": {22, 0x16, 0x20}, "KeyI": {23, 0x17, 0x22},
+	"KeyO": {24, 0x18, 0x1f}, "KeyP": {25, 0x19, 0x23}, "BracketLeft": {26, 0x1a, 0x21}, "BracketRight": {27, 0x1b, 0x1e},
+	"Enter": {28, 0x1c, 0x24}, "ControlLeft": {29, 0x1d, 0x3b},
+	"KeyA": {30, 0x1e, 0x00}, "KeyS": {31, 0x1f, 0x01}, "KeyD": {32, 0x20, 0x02}, "KeyF": {33, 0x21, 0x03},
+	"KeyG": {34, 0x22, 0x05}, "KeyH": {35, 0x23, 0x04}, "KeyJ": {36, 0x24, 0x26}, "KeyK": {37, 0x25, 0x28},
+	"KeyL": {38, 0x26, 0x25}, "Semicolon": {39, 0x27, 0x29}, "Quote": {40, 0x28, 0x27}, "Backquote": {41, 0x29, 0x32},
+	"ShiftLeft": {42, 0x2a, 0x38}, "Backslash": {43, 0x2b, 0x2a},
+	"KeyZ": {44, 0x2c, 0x06}, "KeyX": {45, 0x2d, 0x07}, "KeyC": {46, 0x2e, 0x08}, "KeyV": {47, 0x2f, 0x09},
+	"KeyB": {48, 0x30, 0x0b}, "KeyN": {49, 0x31, 0x2d}, "KeyM": {50, 0x32, 0x2e}, "Comma": {51, 0x33, 0x2b},
+	"Period": {52, 0x34, 0x2f}, "Slash": {53, 0x35, 0x2c}, "ShiftRight": {54, 0x36, 0x3c},
+	"NumpadMultiply": {55, 0x37, 0x43}, "AltLeft": {56, 0x38, 0x3a}, "Space": {57, 0x39, 0x31}, "CapsLock": {58, 0x3a, 0x39},
+	"F1": {59, 0x3b, 0x7a}, "F2": {60, 0x3c, 0x78}, "F3": {61, 0x3d, 0x63}, "F4": {62, 0x3e, 0x76}, "F5": {63, 0x3f, 0x60},
+	"F6": {64, 0x40, 0x61}, "F7": {65, 0x41, 0x62}, "F8": {66, 0x42, 0x64}, "F9": {67, 0x43, 0x65}, "F10": {68, 0x44, 0x6d},
+	"NumLock": {69, 0xe045, 0x47}, "ScrollLock": {70, 0x46, 0x6b}, "Numpad7": {71, 0x47, 0x59}, "Numpad8": {72, 0x48, 0x5b},
+	"Numpad9": {73, 0x49, 0x5c}, "NumpadSubtract": {74, 0x4a, 0x4e}, "Numpad4": {75, 0x4b, 0x56}, "Numpad5": {76, 0x4c, 0x57},
+	"Numpad6": {77, 0x4d, 0x58}, "NumpadAdd": {78, 0x4e, 0x45}, "Numpad1": {79, 0x4f, 0x53}, "Numpad2": {80, 0x50, 0x54},
+	"Numpad3": {81, 0x51, 0x55}, "Numpad0": {82, 0x52, 0x52}, "NumpadDecimal": {83, 0x53, 0x41}, "IntlBackslash": {86, 0x56, 0x0a},
+	"F11": {87, 0x57, 0x67}, "F12": {88, 0x58, 0x6f}, "IntlRo": {89, 0x73, 0x5e}, "NumpadEnter": {96, 0xe01c, 0x4c},
+	"ControlRight": {97, 0xe01d, 0x3e}, "NumpadDivide": {98, 0xe035, 0x4b}, "PrintScreen": {99, 0xe037, 0x69},
+	"AltRight": {100, 0xe038, 0x3d}, "Home": {102, 0xe047, 0x73}, "ArrowUp": {103, 0xe048, 0x7e}, "PageUp": {104, 0xe049, 0x74},
+	"ArrowLeft": {105, 0xe04b, 0x7b}, "ArrowRight": {106, 0xe04d, 0x7c}, "End": {107, 0xe04f, 0x77}, "ArrowDown": {108, 0xe050, 0x7d},
+	"PageDown": {109, 0xe051, 0x79}, "Insert": {110, 0xe052, 0x72}, "Delete": {111, 0xe053, 0x75}, "NumpadEqual": {117, 0x59, 0x51},
+	"Pause": {119, 0, 0x71}, "IntlYen": {124, 0x7d, 0x5d}, "MetaLeft": {125, 0xe05b, 0x37}, "MetaRight": {126, 0xe05c, 0x36},
+	"ContextMenu": {127, 0xe05d, 0x6e},
 }
 
 // lookupKey returns the physical key for a KeyboardEvent.code.

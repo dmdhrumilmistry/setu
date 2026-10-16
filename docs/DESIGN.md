@@ -52,7 +52,7 @@ HKDF, PBKDF2, AES-GCM and HMAC in its standard library. The Rust options
 | `internal/audit` | OpenTelemetry audit log: rebuilds commands from keystrokes, redacts secrets, exports OTLP/HTTP log records through a bounded batch queue |
 | `internal/service` | The `setu service` supervisor: persistent profiles (keys, password verifiers), hot-reloaded config, restart with backoff, and the systemd / launchd / Task Scheduler autostart entries |
 | `internal/daemon` | Detached `setu share -d` processes and their registry |
-| `internal/desktop` | `setu desktop`: screen capture and input injection (GDI and `SendInput` on Windows, X11 with MIT-SHM and XTEST elsewhere, no cgo), clipboard, and the hub that streams changed tiles to every viewer with per-viewer flow control |
+| `internal/desktop` | `setu desktop`: screen capture and input injection (GDI and `SendInput` on Windows, CoreGraphics and NSPasteboard through purego on macOS, X11 with MIT-SHM and XTEST on Linux and the BSDs; no cgo), clipboard, and the hub that streams changed tiles to every viewer with per-viewer flow control |
 | `web/` | The static client: `crypto.mjs` mirrors `secure`/`link`, `nostr.mjs` mirrors `nostr`, `app.mjs` handles the UI, WebRTC and xterm.js |
 
 ## Protocol
@@ -118,7 +118,9 @@ and the 6-digit **SAS** that both sides display.
 `setu desktop` reuses signaling, the handshake and admission unchanged. The
 host opens a second reliable, ordered channel, `"setu-screen"`, used only
 host to client, so a large frame never delays control messages. `ready`
-carries `kind: "desktop"`; `setu join` refuses such shares.
+carries `kind: "desktop"` and the host's `os` (GOOS); `setu join` refuses such
+shares. When exactly one side is a Mac, the web client swaps Ctrl and Cmd
+(`web/js/keymap.mjs`), so shortcuts keep the viewer's habits.
 
 ```
 host  → {t:"screen", displays:[{name,w,h,primary}], display}   on join and on every layout change
@@ -151,12 +153,18 @@ position rides in the frame end, so pointer movement alone produces a frame
 without tiles.
 
 Input is applied to the physical key (`KeyboardEvent.code` mapped to PC
-scancodes on Windows and evdev keycodes on X11), so the host's own layout
+scancodes on Windows, `kVK_*` virtual keycodes on macOS and evdev keycodes on
+X11), so the host's own layout
 decides the character. `text` uses Unicode injection on Windows and a briefly
 remapped spare keycode on X11 for characters the layout lacks. Keys and
 buttons a viewer holds are released when it leaves. The host's clipboard is
-polled for changes (`GetClipboardSequenceNumber`, XFixes selection events)
-and sent to control viewers; text a viewer set is not echoed back.
+polled for changes every 250 ms (`GetClipboardSequenceNumber`, the
+NSPasteboard change count, XFixes selection events) and sent to control
+viewers; text a viewer set is not echoed back. Text is LF on the wire; the
+Windows backend converts to and from CRLF. A copy shortcut in the browser
+starts a clipboard write at once with a promise for the text, resolved when
+the host clipboard changes (or with `clipboard-get` if it does not), because
+browsers only allow clipboard writes during a user action.
 
 ## Audit log
 

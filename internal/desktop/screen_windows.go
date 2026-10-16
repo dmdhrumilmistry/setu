@@ -8,6 +8,7 @@ import (
 	"image"
 	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -414,14 +415,16 @@ func (s *winScreen) Clipboard() (string, error) {
 		return "", fmt.Errorf("GlobalLock: %w", err)
 	}
 	defer procGlobalUnlock.Call(h)
-	return windows.UTF16PtrToString((*uint16)(ptr(p))), nil
+	// Windows text uses CRLF; clients and other hosts use LF.
+	return strings.ReplaceAll(windows.UTF16PtrToString((*uint16)(ptr(p))), "\r\n", "\n"), nil
 }
 
 func (s *winScreen) SetClipboard(text string) error {
 	// The clipboard is opened per OS thread: stay on one until it is closed.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-	u, err := windows.UTF16FromString(text)
+	// Windows programs expect CRLF line endings; text from Mac and Linux has LF.
+	u, err := windows.UTF16FromString(strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\n", "\r\n"))
 	if err != nil {
 		return errors.New("clipboard text contains a NUL character")
 	}
