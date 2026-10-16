@@ -206,6 +206,7 @@ func serviceAdd(args []string) (int, error) {
 	turn := fs.String("turn", "", "TURN server URL for strict NATs (credential from SETU_TURN_PASSWORD)")
 	turnUser := fs.String("turn-user", "", "TURN username")
 	webURL := fs.String("web-url", link.DefaultWebURL, "base URL of the web client")
+	idleTimeout := fs.Duration("idle-timeout", 0, "disconnect control clients after this long without input (e.g. 15m); 0 = never")
 	noUpload := fs.Bool("no-upload", false, "do not accept file uploads from clients (they go to ~/Downloads/setu otherwise)")
 	desktopMode := fs.Bool("desktop", false, "share this computer's desktop (screen, mouse, keyboard, clipboard) instead of a command")
 	display := fs.Int("display", -1, "with --desktop: display to share, by number (0 = first); -1 = the primary display")
@@ -257,6 +258,9 @@ func serviceAdd(args []string) (int, error) {
 	if max := st.pol.MaxKeyValidity.D(); max > 0 && !set["valid-for"] {
 		*validFor = min(*validFor, max)
 	}
+	if *idleTimeout, err = st.pol.IdleTimeout(*idleTimeout, set["idle-timeout"]); err != nil {
+		return 1, err
+	}
 	if *maxClients, err = st.pol.Clients(*maxClients, set["max-clients"]); err != nil {
 		return 1, err
 	}
@@ -291,6 +295,7 @@ func serviceAdd(args []string) (int, error) {
 		TURNPassword: os.Getenv("SETU_TURN_PASSWORD"),
 		WebURL:       *webURL,
 		NoUpload:     *noUpload,
+		IdleTimeout:  service.Duration(*idleTimeout),
 		Created:      now.UTC(),
 	}
 	if *desktopMode {

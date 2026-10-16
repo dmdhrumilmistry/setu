@@ -118,6 +118,10 @@ an SSH private key.</p>
 <td>View-only links are separate secrets. The host decides each client's role from which secret decrypted the request, never from what the client claims.</td>
 </tr>
 <tr>
+<td>Idle timeout</td>
+<td><code>--idle-timeout 15m</code> disconnects a control client that sent no input (typing, mouse, clipboard, uploads) for that long, after a warning a minute before, so a forgotten tab does not stay an open door. Watching is not input; view-only clients are not affected. The <code>MaxIdleTime</code> policy sets a maximum.</td>
+</tr>
+<tr>
 <td>File upload</td>
 <td>Control clients only, on a channel of its own. Files go to one folder under a cleaned name (no folders, control characters or reserved names), never replace a file, are readable only by the host user, are capped at 2 GiB, and are deleted if the transfer breaks. Each is logged with its SHA-256. <code>--no-upload</code> or the <code>DisableFileTransfer</code> policy turns uploads off.</td>
 </tr>

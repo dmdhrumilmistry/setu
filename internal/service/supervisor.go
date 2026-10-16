@@ -301,6 +301,9 @@ func hostConfig(name string, p *Profile, pol *policy.Policy) (host.Config, error
 		PasswordVerifier: p.Password,
 		MaxClients:       p.MaxClients,
 	}
+	if cfg.IdleTimeout, err = pol.IdleTimeout(time.Duration(p.IdleTimeout), false); err != nil {
+		return host.Config{}, err
+	}
 	if !p.NoUpload && pol.FileTransferAllowed() {
 		if cfg.UploadDir, err = host.DefaultUploadDir(); err != nil {
 			return host.Config{}, err

@@ -110,6 +110,7 @@ func (u *upload) onMessage(m webrtc.DataChannelMessage) {
 		u.fail("file data before the upload header")
 		return
 	}
+	u.p.touch()
 	u.mu.Lock()
 	if u.written+int64(len(m.Data)) > u.size {
 		u.mu.Unlock()

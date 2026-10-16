@@ -68,6 +68,10 @@ each system needs:
 If the desktop is not available yet (just after boot, before you log in), the
 service retries with a growing delay, like a command that exits.
 
+Long-lived links are a good place for `--idle-timeout 30m`: a control
+client that sends no input for that long is disconnected (after a warning),
+so a browser tab left open does not stay connected to your machine.
+
 ## Start it at login
 
 ```sh
