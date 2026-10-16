@@ -32,6 +32,7 @@ code, pre, textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas
 .status { font-size: 12px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
 .status[data-kind=ok] { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
 .status[data-kind=warn] { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+.reconnect { padding: 4px 12px; font-size: 12px; }
 .status[data-kind=err] { color: var(--err); border-color: color-mix(in srgb, var(--err) 40%, transparent); }
 main { flex: 1; min-height: 0; overflow: auto; }
 .card { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }

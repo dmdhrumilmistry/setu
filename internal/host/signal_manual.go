@@ -17,7 +17,7 @@ func (s *Session) serveManual(ctx context.Context) error {
 	if s.cfg.ReadAnswer == nil {
 		return errors.New("manual mode needs an answer reader")
 	}
-	p, err := s.newPeer(proto.RoleControl, "manual", "")
+	p, err := s.newPeer(proto.RoleControl, "manual", "", "")
 	if err != nil {
 		return err
 	}

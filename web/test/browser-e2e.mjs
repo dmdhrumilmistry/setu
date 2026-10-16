@@ -58,7 +58,7 @@ function startHost(extra, tag) {
   proc.stderr.on('data', (d) => { h.log += d; process.stderr.write(tag + '| ' + d); });
   return h;
 }
-const host = startHost([], 'host');
+const host = startHost(['--verbose'], 'host');
 const hosts = [host];
 
 const deadline = (ms, what) => new Promise((_, rej) => setTimeout(() => rej(new Error('timeout: ' + what)), ms));
@@ -80,7 +80,15 @@ try {
   browser = await playwright.chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args });
   const ctx = await browser.newContext({ ignoreHTTPSErrors: !!proxy });
   const page = await ctx.newPage();
+  // Keep a handle on the page's peer connections, to cut one below.
+  await page.addInitScript(() => {
+    const Orig = window.RTCPeerConnection;
+    window.__pcs = [];
+    window.RTCPeerConnection = function (...a) { const pc = new Orig(...a); window.__pcs.push(pc); return pc; };
+    window.RTCPeerConnection.prototype = Orig.prototype;
+  });
   page.on('console', (m) => console.log('page|', m.text()));
+  page.on('dialog', (d) => d.accept()); // the "leave this page?" prompt on reload
   page.on('pageerror', (e) => console.log('pageerror|', e.message));
   page.on('response', (r) => { if (r.status() >= 400) console.log('http|', r.status(), r.url()); });
   await page.goto(url);
@@ -98,6 +106,63 @@ try {
   const sas = await page.textContent('#sas');
   await until(() => host.log.includes(`verification code ${sas}`), 5000, 'matching SAS on host');
   console.log(`OK: browser joined, typed, received echo; SAS ${sas} matches host`);
+
+  // A dropped connection (a phone changing networks) resumes by itself: no
+  // password prompt, same terminal, and typing works again.
+  await page.evaluate(() => window.__pcs.at(-1).close());
+  await until(() => /client #\d+ reconnected via nostr/.test(host.log), 45000, 'host saw the client reconnect');
+  await until(async () => (await rows()).includes('[setu] reconnected'), 15000, 'reconnected notice');
+  if (!(await page.isHidden('#pw-form')) || (await page.isHidden('#screen-term'))) throw new Error('reconnect asked for the password again');
+  await page.click('#term');
+  await page.keyboard.type('again');
+  await page.keyboard.press('Enter');
+  await until(async () => (await rows()).includes('got:again'), 15000, 'echo after reconnect');
+  if ((await rows()).split('READY').length > 2) throw new Error('reconnect replayed output the terminal already had');
+  console.log('OK: dropped connection resumed without a password, output continued');
+
+  // Switching to another tab: the page tells the host it is in the
+  // background, and a connection lost meanwhile waits for the user to come
+  // back instead of being given up.
+  const setVisibility = (state) => page.evaluate((st) => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => st });
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => st === 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, state);
+  await setVisibility('hidden');
+  await until(() => /client #\d+ is now in the background/.test(host.log), 10000, 'host told about the background tab');
+  const seen = (host.log.match(/reconnected via nostr/g) || []).length;
+  await page.evaluate(() => window.__pcs.at(-1).close());
+  await until(async () => /reconnects when you return/.test(await page.textContent('#status')), 15000, 'reconnect paused while hidden');
+  await new Promise((r) => setTimeout(r, 3000));
+  if ((host.log.match(/reconnected via nostr/g) || []).length !== seen) throw new Error('reconnected while the tab was hidden');
+  await setVisibility('visible');
+  await until(() => (host.log.match(/reconnected via nostr/g) || []).length === seen + 1, 45000, 'reconnected when the tab came back');
+  await until(async () => /connected · control/.test(await page.textContent('#status')), 15000, 'connected again');
+  console.log('OK: background tab kept its session and reconnected on return');
+
+  // A reload (or the browser discarding the background tab and loading it
+  // again) restores the session in this tab without the link or password.
+  const reconnects = () => (host.log.match(/reconnected via nostr/g) || []).length;
+  const before = reconnects();
+  await page.reload();
+  await page.waitForSelector('#screen-term:not([hidden])', { timeout: 45000 });
+  await until(async () => (await rows()).includes('session restored'), 15000, 'restored notice');
+  await until(async () => (await rows()).includes('got:again'), 15000, 'replayed output after reload');
+  if (reconnects() !== before + 1) throw new Error('reload did not resume the same session');
+  await page.click('#term');
+  await page.keyboard.type('reloaded');
+  await page.keyboard.press('Enter');
+  await until(async () => (await rows()).includes('got:reloaded'), 15000, 'echo after reload');
+  console.log('OK: reloaded tab restored the session without the link or password');
+
+  // Leave forgets it: the next load is the home page, and the host sees the
+  // client go.
+  await page.click('#leave');
+  await page.waitForSelector('#screen-home:not([hidden])', { timeout: 15000 });
+  await page.reload();
+  await page.waitForSelector('#screen-home:not([hidden])', { timeout: 15000 });
+  if (await page.evaluate(() => sessionStorage.length) !== 0) throw new Error('session kept after Leave');
+  console.log('OK: Leave forgot the session in this tab');
 
   // Device keys: the home page shows this browser's (remembered) device key,
   // and the host verified the same key when it joined above.

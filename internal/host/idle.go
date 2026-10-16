@@ -41,6 +41,7 @@ func (p *peer) checkIdle(limit time.Duration) {
 	switch {
 	case idle >= limit:
 		if p.idleClosing.CompareAndSwap(false, true) {
+			p.s.revokeTicket(p) // an idle client must join again, not resume
 			p.sendControl(proto.Control{T: proto.CtlError, Msg: fmt.Sprintf("disconnected after %s without input", limit)})
 			time.AfterFunc(200*time.Millisecond, func() { p.close("idle timeout") })
 		}

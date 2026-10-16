@@ -98,3 +98,17 @@ func TestPasswordKeyMinIterations(t *testing.T) {
 		t.Fatal("weak iteration count accepted")
 	}
 }
+
+// TestResumeID pins the value web/test/crypto.test.mjs checks too.
+func TestResumeID(t *testing.T) {
+	tok := make([]byte, ResumeTokenSize)
+	for i := range tok {
+		tok[i] = byte(i)
+	}
+	if got := ResumeID(tok); got != "2f44565e3fdd6644726803d41e7fc36e" {
+		t.Fatalf("ResumeID = %s", got)
+	}
+	if ResumeHash(tok) == ResumeHash(append(tok[:31:31], 0xff)) {
+		t.Fatal("ResumeHash ignores the token")
+	}
+}

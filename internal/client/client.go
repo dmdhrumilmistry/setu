@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"os"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dmdhrumilmistry/setu/internal/link"
@@ -36,10 +39,28 @@ type Options struct {
 	// automatically next time (see secure.LoadOrCreateDeviceKey). nil
 	// sends no key.
 	DeviceKey *secure.DeviceKey
+	// NoReconnect turns off reconnecting after a dropped connection.
+	NoReconnect bool
 }
 
 // ErrDetached is returned when the user typed the ~. escape.
 var ErrDetached = errors.New("detached")
+
+// ErrResumeRejected means the host no longer knows the session this client
+// tried to resume (it expired or the share restarted); join afresh.
+var ErrResumeRejected = errors.New(proto.ErrResume)
+
+const (
+	// pingInterval and deadAfter detect a connection that died without
+	// ICE noticing yet (only with hosts that answer pings).
+	pingInterval = 5 * time.Second
+	deadAfter    = 15 * time.Second
+	// reconnectWindow matches the host's resume grace period.
+	reconnectWindow = 10 * time.Minute
+	attemptTimeout  = 30 * time.Second
+	minBackoff      = time.Second
+	maxBackoff      = 30 * time.Second
+)
 
 // Join connects to a share and attaches the local terminal. It returns the
 // remote command's exit code when known.
@@ -57,6 +78,8 @@ func Join(ctx context.Context, invite string, opt Options) (int, error) {
 // Conn is an authenticated connection to a host.
 type Conn struct {
 	opt             Options
+	invite          string
+	p               *peerConn
 	pc              *webrtc.PeerConnection
 	dc              *webrtc.DataChannel
 	Role, Cmd, Host string
@@ -65,6 +88,38 @@ type Conn struct {
 	Out             <-chan []byte        // terminal output
 	Ctl             <-chan proto.Control // control frames after ready
 	Closed, Failed  <-chan struct{}
+
+	// Resumed is set on a connection made by Resume when the output
+	// continues exactly where the previous connection stopped; otherwise
+	// the host replays its whole buffer and the screen should be cleared.
+	Resumed bool
+	token   []byte // resume token from "ready" (nil: the host cannot resume)
+	pos     int64  // output stream position of the first byte on Out
+	hasPos  bool
+}
+
+// CanResume reports whether the host gave this connection a resume token.
+func (c *Conn) CanResume() bool { return c.token != nil && c.hasPos }
+
+// Pos is the output stream position after every byte delivered on Out.
+func (c *Conn) Pos() int64 { return c.pos + c.p.recv.Load() }
+
+// Resume makes a new connection to the same session, after this one was
+// lost, without logging in again. The host sends only the output this
+// connection missed when it still has it. c must not be used afterwards
+// except to drain Out.
+func (c *Conn) Resume(ctx context.Context) (*Conn, error) {
+	if !c.CanResume() {
+		return nil, errors.New("the host does not support resuming")
+	}
+	go c.Close()
+	return dial(ctx, c.invite, c.opt, &resumeState{token: c.token, pos: c.Pos()})
+}
+
+// resumeState is what a reconnecting client presents.
+type resumeState struct {
+	token []byte
+	pos   int64
 }
 
 // Write sends keystrokes (ignored by the host for view-only clients).
@@ -76,7 +131,10 @@ func (c *Conn) Resize(cols, rows int) error {
 }
 
 // Close tears the connection down.
-func (c *Conn) Close() error { return c.pc.Close() }
+func (c *Conn) Close() error {
+	c.p.stop()
+	return c.pc.Close()
+}
 
 func sendCtl(dc *webrtc.DataChannel, c proto.Control) error {
 	b, err := json.Marshal(c)
@@ -88,6 +146,10 @@ func sendCtl(dc *webrtc.DataChannel, c proto.Control) error {
 
 // Dial performs signaling, the WebRTC connection and the setu handshake.
 func Dial(ctx context.Context, invite string, opt Options) (*Conn, error) {
+	return dial(ctx, invite, opt, nil)
+}
+
+func dial(ctx context.Context, invite string, opt Options, rs *resumeState) (*Conn, error) {
 	inv, err := link.Parse(invite)
 	if err != nil {
 		return nil, err
@@ -115,18 +177,27 @@ func Dial(ctx context.Context, invite string, opt Options) (*Conn, error) {
 		if len(relays) == 0 {
 			relays = nostr.DefaultRelays
 		}
-		pc, err = signalNostr(sctx, inv.Secret, relays, opt.Logf, debugf)
+		resumeID := ""
+		if rs != nil {
+			resumeID = secure.ResumeID(rs.token)
+		}
+		pc, err = signalNostr(sctx, inv.Secret, relays, resumeID, opt.Logf, debugf)
 	} else {
+		if rs != nil {
+			return nil, errors.New("a --manual share cannot be resumed")
+		}
 		pc, err = signalManual(sctx, inv.Offer, opt)
 	}
 	if err != nil {
 		return nil, err
 	}
-	c, err := handshake(ctx, pc, opt)
+	c, err := handshake(ctx, pc, opt, rs)
 	if err != nil {
+		pc.stop()
 		pc.pc.Close()
 		return nil, err
 	}
+	c.invite = invite
 	return c, nil
 }
 
@@ -139,7 +210,13 @@ type peerConn struct {
 	opened chan *webrtc.DataChannel
 	closed chan struct{}
 	failed chan struct{}
+	done   chan struct{} // closed when the connection is abandoned
+	recv   atomic.Int64  // output bytes received
+	once   sync.Once
 }
+
+// stop unblocks the data channel handlers of an abandoned connection.
+func (p *peerConn) stop() { p.once.Do(func() { close(p.done) }) }
 
 // newPeer uses exactly the ICE servers the host chose.
 func newPeer(ice []proto.ICEServer) (*peerConn, error) {
@@ -154,6 +231,7 @@ func newPeer(ice []proto.ICEServer) (*peerConn, error) {
 		opened: make(chan *webrtc.DataChannel, 1),
 		closed: make(chan struct{}),
 		failed: make(chan struct{}),
+		done:   make(chan struct{}),
 	}
 	var failOnce, closeOnce sync.Once
 	pc.OnDataChannel(func(dc *webrtc.DataChannel) {
@@ -166,11 +244,18 @@ func newPeer(ice []proto.ICEServer) (*peerConn, error) {
 			if m.IsString {
 				var c proto.Control
 				if json.Unmarshal(m.Data, &c) == nil {
-					p.ctl <- c
+					select {
+					case p.ctl <- c:
+					case <-p.done:
+					}
 				}
 				return
 			}
-			p.out <- append([]byte(nil), m.Data...)
+			select {
+			case p.out <- append([]byte(nil), m.Data...):
+				p.recv.Add(int64(len(m.Data)))
+			case <-p.done:
+			}
 		})
 		dc.OnOpen(func() {
 			select {
@@ -215,7 +300,7 @@ func signalManual(ctx context.Context, offerCode string, opt Options) (*peerConn
 	return pc, nil
 }
 
-func signalNostr(ctx context.Context, secretStr string, relays []string, logf, debugf func(string, ...any)) (*peerConn, error) {
+func signalNostr(ctx context.Context, secretStr string, relays []string, resumeID string, logf, debugf func(string, ...any)) (*peerConn, error) {
 	sec, err := secure.ParseSecret(secretStr)
 	if err != nil {
 		return nil, err
@@ -304,7 +389,8 @@ func signalNostr(ctx context.Context, secretStr string, relays []string, logf, d
 	// different times and ephemeral events are not stored.
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
-	send(proto.Signal{Type: proto.SigHello, SID: sid})
+	hello := proto.Signal{Type: proto.SigHello, SID: sid, Resume: resumeID}
+	send(hello)
 	for {
 		select {
 		case r := <-done:
@@ -314,7 +400,7 @@ func signalNostr(ctx context.Context, secretStr string, relays []string, logf, d
 			}
 			return r.pc, r.err
 		case <-ticker.C:
-			send(proto.Signal{Type: proto.SigHello, SID: sid})
+			send(hello)
 		case <-ctx.Done():
 			return nil, fmt.Errorf("host did not answer (is `setu share` running and the link current?): %w", ctx.Err())
 		}
@@ -322,7 +408,7 @@ func signalNostr(ctx context.Context, secretStr string, relays []string, logf, d
 }
 
 // handshake waits for the data channel and runs hello -> auth -> ready.
-func handshake(ctx context.Context, p *peerConn, opt Options) (*Conn, error) {
+func handshake(ctx context.Context, p *peerConn, opt Options, rs *resumeState) (*Conn, error) {
 	ctl, out, closed, opened, failed := p.ctl, p.out, p.closed, p.opened, p.failed
 	pc := p.pc
 	var dc *webrtc.DataChannel
@@ -349,7 +435,7 @@ func handshake(ctx context.Context, p *peerConn, opt Options) (*Conn, error) {
 	send := func(c proto.Control) error { return sendCtl(dc, c) }
 
 	// Handshake: hello -> auth -> ready.
-	conn := &Conn{opt: opt, pc: pc, dc: dc, SAS: sas, Out: out, Ctl: ctl, Closed: closed, Failed: failed}
+	conn := &Conn{opt: opt, p: p, pc: pc, dc: dc, SAS: sas, Out: out, Ctl: ctl, Closed: closed, Failed: failed}
 	for conn.Role == "" {
 		select {
 		case c := <-ctl:
@@ -358,7 +444,9 @@ func handshake(ctx context.Context, p *peerConn, opt Options) (*Conn, error) {
 				if c.V != proto.Version {
 					return nil, fmt.Errorf("protocol version mismatch (host %d, client %d) — update setu", c.V, proto.Version)
 				}
-				opt.Logf("connected peer-to-peer. Verification code: %s (should match the host)", sas)
+				if rs == nil {
+					opt.Logf("connected peer-to-peer. Verification code: %s (should match the host)", sas)
+				}
 				auth := proto.Control{T: proto.CtlAuth}
 				auth.Client = opt.Info
 				if opt.DeviceKey != nil {
@@ -368,7 +456,11 @@ func handshake(ctx context.Context, p *peerConn, opt Options) (*Conn, error) {
 					}
 					auth.DeviceKey, auth.DeviceSig = opt.DeviceKey.Public(), sig
 				}
-				if c.Auth == proto.AuthPassword {
+				if rs != nil {
+					// The resume token replaces the password proof.
+					pos := rs.pos
+					auth.Resume, auth.Pos = rs.token, &pos
+				} else if c.Auth == proto.AuthPassword {
 					if opt.Password == nil {
 						return nil, errors.New("host requires a password")
 					}
@@ -390,7 +482,15 @@ func handshake(ctx context.Context, p *peerConn, opt Options) (*Conn, error) {
 					return nil, errors.New("this invite shares a remote desktop: open the browser link instead of using setu join")
 				}
 				conn.Role, conn.Cmd, conn.Host, conn.Approval = c.Role, c.Cmd, c.Host, c.Approval
+				conn.token, conn.Resumed = c.Resume, rs != nil && c.Resumed
+				if c.Pos != nil {
+					// Every output byte follows "ready", so recv counts from here.
+					conn.pos, conn.hasPos = *c.Pos, true
+				}
 			case proto.CtlError:
+				if rs != nil && c.Msg == proto.ErrResume {
+					return nil, ErrResumeRejected
+				}
 				return nil, fmt.Errorf("host: %s", c.Msg)
 			}
 		case <-closed:
@@ -408,12 +508,10 @@ func handshake(ctx context.Context, p *peerConn, opt Options) (*Conn, error) {
 	return conn, nil
 }
 
-// attachTerminal wires the local terminal to the connection.
+// attachTerminal wires the local terminal to the connection, and to the
+// connections that replace it when the network drops and the host lets the
+// session be resumed.
 func (conn *Conn) attachTerminal(ctx context.Context) (int, error) {
-	role, dc := conn.Role, conn.dc
-	out, ctl, closed, failed := conn.Out, conn.Ctl, conn.Closed, conn.Failed
-	send := func(c proto.Control) error { return sendCtl(dc, c) }
-	// Attach the terminal.
 	isTTY := tty.IsTerminal(os.Stdin)
 	if isTTY {
 		restore, err := tty.MakeRaw(os.Stdin)
@@ -421,17 +519,13 @@ func (conn *Conn) attachTerminal(ctx context.Context) (int, error) {
 			defer restore()
 		}
 	}
-	sendSize := func() {
-		c, r := tty.Size(os.Stdout)
-		_ = send(proto.Control{T: proto.CtlResize, Cols: c, Rows: r})
-	}
-	if role == proto.RoleControl {
-		sendSize()
-	}
 	resize := make(chan struct{}, 1)
 	stopResize := tty.NotifyResize(resize)
 	defer stopResize()
 
+	// Keystrokes go through a channel, so they reach whichever connection
+	// is current; keystrokes typed while reconnecting are dropped.
+	input := make(chan []byte, 64)
 	detached := make(chan struct{})
 	go func() {
 		var esc tty.Escape
@@ -451,8 +545,8 @@ func (conn *Conn) attachTerminal(ctx context.Context) (int, error) {
 					// treats CR as Enter, so a bare LF would never submit.
 					fwd = pipedNewlines(fwd, &lastCR)
 				}
-				if role == proto.RoleControl && len(fwd) > 0 {
-					_ = dc.Send(fwd)
+				if len(fwd) > 0 {
+					input <- append([]byte(nil), fwd...)
 				}
 			}
 			if err != nil {
@@ -461,11 +555,59 @@ func (conn *Conn) attachTerminal(ctx context.Context) (int, error) {
 		}
 	}()
 
+	cur := conn
+	defer func() { cur.Close() }()
+	for {
+		code, err, lost := cur.serve(ctx, input, resize, detached)
+		if !lost {
+			return code, err
+		}
+		if cur.opt.NoReconnect || !cur.CanResume() {
+			return 1, err
+		}
+		next, rerr := cur.reconnect(ctx, err, input, detached)
+		if next == nil {
+			return 1, rerr
+		}
+		if next.Resumed {
+			cur.opt.Logf("reconnected")
+		} else {
+			os.Stdout.WriteString("\x1b[H\x1b[2J") // the host replays its whole buffer
+			cur.opt.Logf("reconnected (some output was lost while disconnected)")
+		}
+		cur = next
+	}
+}
+
+// serve runs one connection. lost reports a connection that dropped
+// without the session ending, which may be resumed.
+func (conn *Conn) serve(ctx context.Context, input <-chan []byte, resize <-chan struct{}, detached <-chan struct{}) (code int, err error, lost bool) {
+	role, dc := conn.Role, conn.dc
+	out, ctl, closed, failed := conn.Out, conn.Ctl, conn.Closed, conn.Failed
+	send := func(c proto.Control) error { return sendCtl(dc, c) }
+	sendSize := func() {
+		c, r := tty.Size(os.Stdout)
+		_ = send(proto.Control{T: proto.CtlResize, Cols: c, Rows: r})
+	}
+	if role == proto.RoleControl {
+		sendSize()
+	}
+	// Hosts that hand out resume tokens answer pings; others are left alone.
+	var tick <-chan time.Time
+	if conn.CanResume() {
+		t := time.NewTicker(pingInterval)
+		defer t.Stop()
+		tick = t.C
+	}
+	lastRx := time.Now()
+
 	for {
 		select {
 		case b := <-out:
+			lastRx = time.Now()
 			os.Stdout.Write(b)
 		case c := <-ctl:
+			lastRx = time.Now()
 			switch c.T {
 			case proto.CtlExit:
 				drain(out)
@@ -473,25 +615,130 @@ func (conn *Conn) attachTerminal(ctx context.Context) (int, error) {
 				if c.Code != nil {
 					code = *c.Code
 				}
-				return code, nil
+				return code, nil, false
 			case proto.CtlError:
-				return 1, fmt.Errorf("host: %s", c.Msg)
+				return 1, fmt.Errorf("host: %s", c.Msg), false
 			case proto.CtlInfo:
 				fmt.Fprintf(os.Stderr, "\r\n[setu] %s\r\n", c.Msg)
 			}
+		case b := <-input:
+			if role == proto.RoleControl {
+				_ = dc.Send(b)
+			}
+		case <-tick:
+			if time.Since(lastRx) > deadAfter {
+				drain(out)
+				return 1, errors.New("connection lost (no response from host)"), true
+			}
+			_ = send(proto.Control{T: proto.CtlPing})
 		case <-resize:
 			if role == proto.RoleControl {
 				sendSize()
 			}
 		case <-detached:
-			return 0, ErrDetached
+			return 0, ErrDetached, false
 		case <-closed:
-			drain(out)
-			return 1, errors.New("host closed the connection")
+			return conn.ended(errors.New("host closed the connection"))
 		case <-failed:
-			return 1, errors.New("connection lost")
+			return conn.ended(errors.New("connection lost"))
 		case <-ctx.Done():
-			return 1, ctx.Err()
+			return 1, ctx.Err(), false
+		}
+	}
+}
+
+// ended handles a closed connection: the session is over if the host said
+// so (its last frames may still be queued), otherwise the connection was lost.
+func (conn *Conn) ended(cause error) (int, error, bool) {
+	drain(conn.Out)
+	for {
+		select {
+		case c := <-conn.Ctl:
+			switch c.T {
+			case proto.CtlExit:
+				drain(conn.Out)
+				code := 0
+				if c.Code != nil {
+					code = *c.Code
+				}
+				return code, nil, false
+			case proto.CtlError:
+				return 1, fmt.Errorf("host: %s", c.Msg), false
+			}
+		default:
+			return 1, cause, true
+		}
+	}
+}
+
+// reconnect resumes the session after cause, retrying with jittered
+// exponential backoff until the host's resume window closes. It returns nil
+// and the reason when it gives up.
+func (conn *Conn) reconnect(ctx context.Context, cause error, input <-chan []byte, detached <-chan struct{}) (*Conn, error) {
+	opt := conn.opt
+	opt.Logf("%v; reconnecting… (<Enter> ~ . to give up)", cause)
+	deadline := time.Now().Add(reconnectWindow)
+	rs := &resumeState{token: conn.token, pos: conn.Pos()}
+	go conn.Close()
+	type result struct {
+		c   *Conn
+		err error
+	}
+	backoff := minBackoff
+	for attempt := 1; ; attempt++ {
+		actx, cancel := context.WithTimeout(ctx, attemptTimeout)
+		ropt := opt
+		ropt.Timeout = attemptTimeout
+		ropt.Logf = func(string, ...any) {} // keep the screen quiet between attempts
+		done := make(chan result, 1)
+		go func() {
+			c, err := dial(actx, conn.invite, ropt, rs)
+			done <- result{c, err}
+		}()
+		var r result
+	wait:
+		for {
+			select {
+			case r = <-done:
+				break wait
+			case <-input: // not sent: the host may never see it
+			case <-detached:
+				cancel()
+				return nil, ErrDetached
+			}
+		}
+		cancel()
+		if r.err == nil {
+			r.c.opt = opt
+			return r.c, nil
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if errors.Is(r.err, ErrResumeRejected) || strings.HasPrefix(r.err.Error(), "host rejected") {
+			return nil, fmt.Errorf("could not reconnect: %w", r.err)
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("could not reconnect within %s: %w", reconnectWindow, r.err)
+		}
+		opt.Logf("reconnect attempt %d failed (%v); retrying", attempt, r.err)
+		// Full jitter, so many clients of one host do not retry in step.
+		sleep := backoff/2 + rand.N(backoff/2+1)
+		backoff = min(backoff*2, maxBackoff)
+		t := time.NewTimer(sleep)
+	pause:
+		for {
+			select {
+			case <-t.C:
+				break pause
+			case <-input:
+			case <-detached:
+				t.Stop()
+				return nil, ErrDetached
+			case <-ctx.Done():
+				t.Stop()
+				return nil, ctx.Err()
+			}
 		}
 	}
 }

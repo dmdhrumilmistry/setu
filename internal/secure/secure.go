@@ -224,3 +224,20 @@ func RandomBytes(n int) []byte {
 
 // RandomID returns a random hex id of n bytes.
 func RandomID(n int) string { return hex.EncodeToString(RandomBytes(n)) }
+
+// ResumeTokenSize is the length of a resume token in bytes.
+const ResumeTokenSize = 32
+
+// ResumeID is the public name of a resume token: a reconnecting client puts
+// it in its (encrypted) hello so the host can find the ticket before any
+// connection exists. It reveals nothing usable about the token itself.
+func ResumeID(token []byte) string {
+	h := sha256.Sum256(append([]byte("setu/v1/resume-id\n"), token...))
+	return hex.EncodeToString(h[:16])
+}
+
+// ResumeHash is what a host stores to check a resume token later, so a
+// memory dump of the host's ticket table cannot be replayed.
+func ResumeHash(token []byte) [32]byte {
+	return sha256.Sum256(append([]byte("setu/v1/resume-hash\n"), token...))
+}

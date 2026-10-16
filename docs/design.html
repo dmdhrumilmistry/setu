@@ -233,6 +233,42 @@ host  → {t:&quot;exit&quot;, code} | {t:&quot;error&quot;, msg}
 </code></pre>
 <p><code>fpA</code> and <code>fpB</code> are the DTLS fingerprints from both SDPs. They feed the proof
 and the 6-digit <strong>SAS</strong> that both sides display.</p>
+<h3 id="reconnecting">Reconnecting</h3>
+<p>Hosts that support it add <code>resume</code> (a random 32-byte token) and <code>pos</code> to
+<code>ready</code>. <code>pos</code> is the position, in bytes since the command started, of the
+first output byte that follows. The client counts output bytes from there. When
+the connection drops (ICE <code>failed</code>, the channel closes, or no message for 15 s
+while the page is visible), the client signals again with a new nostr key and
+<code>sid</code>, plus <code>resume: ResumeID(token)</code> in the encrypted hello. It then answers
+the host's <code>hello</code> with <code>{t:&quot;auth&quot;, resume, pos}</code> in place of a password proof:</p>
+<pre><code>client ──hello{sid,ts,resume:id}──▶   host admits it past --max-clients, --once/--expire and the lockout,
+                                      but it must then present the token
+host  → {t:&quot;hello&quot;, …}
+client→ {t:&quot;auth&quot;, resume:token, pos, device_key, device_sig}
+host  → {t:&quot;ready&quot;, resume:newToken, pos, resumed:true}   then only the output after pos
+</code></pre>
+<p>The host stores <code>SHA-256(&quot;setu/v1/resume-hash\n&quot; ‖ token)</code> and checks it in
+constant time. The token is bound to the room (role and personal key) and to
+the device key if one was proven. It is replaced by every <code>ready</code>, and it
+expires <code>resumeGrace</code> (10 minutes) after its connection is lost. If the old
+connection is still open (the host has not noticed the drop yet), it is closed.
+If <code>pos</code> has already left the 256 KiB replay buffer, <code>resumed</code> is false and the
+client clears its screen before the full replay. An invalid token gets
+<code>{t:&quot;error&quot;, msg: proto.ErrResume}</code>, and the client then joins afresh. The
+client retries with full-jitter exponential backoff (1 s doubling to 30 s) and
+gives up when the grace period ends. Clients ping every 5 s (<code>{t:&quot;ping&quot;}</code> →
+<code>{t:&quot;pong&quot;}</code>), and the host drops a pinging client that stays silent for 90 s.</p>
+<p>The web client sends <code>{t:&quot;visibility&quot;, hidden}</code> whenever its page moves to or
+from the background. A hidden client is never dropped for silence: browsers
+throttle or freeze background timers, and ICE consent checks still catch a dead
+path. If its connection drops, its ticket lasts <code>backgroundGrace</code> (1 hour). The
+page does not retry while hidden; on return it retries with a fresh window.
+To survive the browser discarding and reloading the tab, the client keeps
+<code>{invite, token, at}</code> in <code>sessionStorage</code> (<code>web/js/keep.mjs</code>). That storage is
+tab-scoped and gone when the tab closes, expires an hour after the page was
+last active, and is cleared on exit, error, give-up and <strong>Leave</strong>. A restored
+page resumes without <code>pos</code>, so the host replays its whole buffer onto the new
+terminal.</p>
 <h2 id="remote-desktop">Remote desktop</h2>
 <p><code>setu desktop</code> reuses signaling, the handshake and admission unchanged. The
 host opens a second reliable, ordered channel, <code>&quot;setu-screen&quot;</code>, used only
@@ -370,6 +406,7 @@ key bar and a compose box.</li>
       <li class="l3"><a href="#signaling-over-nostr-default">Signaling over nostr (default)</a></li>
       <li class="l3"><a href="#manual-signaling---manual">Manual signaling (--manual)</a></li>
       <li class="l3"><a href="#data-channel-setu-reliable-and-ordered">Data channel (&#34;setu&#34;, reliable and ordered)</a></li>
+      <li class="l3"><a href="#reconnecting">Reconnecting</a></li>
       <li class="l2"><a href="#remote-desktop">Remote desktop</a></li>
       <li class="l2"><a href="#file-upload">File upload</a></li>
       <li class="l2"><a href="#audit-log">Audit log</a></li>

@@ -24,6 +24,10 @@ Open the link or scan the QR code and you are in the same terminal session.
   which only ever see encrypted messages, and Google's STUN servers. You can
   also use `--manual` to copy and paste the connection details with no relays
   at all.
+* **Survives network changes.** If the connection drops (a phone switching
+  between Wi-Fi and mobile data, a laptop waking up), the browser and
+  `setu join` reconnect by themselves. They don't ask for the password again,
+  and the terminal continues where it left off.
 * **Browser or CLI.** There is a static web client hosted on GitHub Pages
   (xterm.js, a mobile key bar, a compose box for long prompts), and
   `setu join` for terminals.

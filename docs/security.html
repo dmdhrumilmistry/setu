@@ -138,6 +138,10 @@ an SSH private key.</p>
 <td><code>--max-clients</code>, <code>--once</code>, <code>--expire</code>, <code>--approve</code>. Handshakes must finish within 2 minutes, and at most 3 can be pending.</td>
 </tr>
 <tr>
+<td>Reconnects</td>
+<td>A client whose connection drops (a phone switching between Wi-Fi and mobile data, a laptop waking up) resumes the same session automatically. When it becomes ready the host hands it a random 256-bit resume token over the encrypted data channel; the client keeps it in memory only, and the host stores only a hash. The token stands in for the password and approval on reconnect, is bound to the same invite (role and personal key) and to the client's device key, works once (every reconnect gets a new one) and expires 10 minutes after the connection is lost, or an hour if the client had said its tab was in the background. With &quot;Keep a session going&quot; on (the default), the web client keeps the invite and the current token in <code>sessionStorage</code>, so a reload, or a tab the browser discarded in the background, resumes too. That storage belongs to the one tab, is deleted when the tab closes, expires after an hour away, and is wiped when the session ends or you press <strong>Leave</strong>. Because the token is bound to the device key, with &quot;Remember this device&quot; off a reload asks for the password again. A wrong token counts as a failed login. A client disconnected by <code>--idle-timeout</code> loses its token, so it must log in again, and reconnecting does not reset its idle clock. After <code>--once</code> or <code>--expire</code>, the host keeps listening only for clients holding a live token, and only until the last one expires. Reconnect attempts back off exponentially (with jitter) up to 30 seconds apart.</td>
+</tr>
+<tr>
 <td>Hygiene</td>
 <td><code>SETU_PASSWORD</code>, <code>SETU_TURN_PASSWORD</code> and audit collector headers are removed from the environment before the shared command starts. Link files and session directories are owner-only. Slow clients are disconnected after 8 MiB of backlog.</td>
 </tr>

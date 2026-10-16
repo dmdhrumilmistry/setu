@@ -42,6 +42,16 @@ export async function sha256(bytes) {
   return new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
 }
 
+// Public name of a resume token (mirrors secure.ResumeID): the hello of a
+// reconnecting client carries it so the host can admit the client back.
+export async function resumeId(token) {
+  const prefix = utf8('setu/v1/resume-id\n');
+  const buf = new Uint8Array(prefix.length + token.length);
+  buf.set(prefix);
+  buf.set(token, prefix.length);
+  return hex((await sha256(buf)).subarray(0, 16));
+}
+
 async function hkdf(secret, info) {
   const k = await crypto.subtle.importKey('raw', secret, 'HKDF', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: utf8(info) }, k, 256);

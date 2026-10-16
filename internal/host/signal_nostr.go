@@ -125,7 +125,7 @@ func (ns *nostrSignaler) handle(ctx context.Context, ev nostr.Event) {
 		return // not for us / tampered: ignore silently
 	}
 	var m proto.Signal
-	if json.Unmarshal(pt, &m) != nil || m.SID == "" || len(m.SID) > 64 {
+	if json.Unmarshal(pt, &m) != nil || m.SID == "" || len(m.SID) > 64 || len(m.Resume) > 64 {
 		return
 	}
 	if d := time.Since(time.Unix(m.TS, 0)); d > maxClockSkew || d < -maxClockSkew {
@@ -155,7 +155,7 @@ func (ns *nostrSignaler) onHello(ctx context.Context, ev nostr.Event, rr roomRol
 	ns.lastHello = time.Now()
 	ns.mu.Unlock()
 
-	p, err := ns.s.newPeer(rr.role, "nostr", rr.name)
+	p, err := ns.s.newPeer(rr.role, "nostr", rr.name, m.Resume)
 	if err != nil {
 		ns.reply(ev.PubKey, rr, proto.Signal{Type: proto.SigReject, SID: m.SID, Reason: err.Error()})
 		who := audit.Client{Role: rr.role, Via: "nostr", KeyName: rr.name}
