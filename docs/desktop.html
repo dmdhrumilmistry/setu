@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Remote desktop - setu docs</title>
+<meta name="description" content="setu desktop shares this computer&#39;s whole desktop with a browser: the screen, the mouse, the keyboard and the clipboard. It uses the same peer-to-peer ...">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/theme.js"></script>
+<script src="assets/docs.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button class="icon-btn nav-toggle" id="nav-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" width="26" height="26"><span>setu</span><small>docs</small></a>
+  <div class="search" role="search">
+    <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input id="search" type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false">
+    <kbd class="search-key" aria-hidden="true">/</kbd>
+    <ul id="search-results" class="search-results" role="listbox" aria-label="Search results" hidden></ul>
+  </div>
+  <nav class="toplinks" aria-label="Site">
+    <a href="../">Web client</a>
+    <a href="https://github.com/dmdhrumilmistry/setu">GitHub</a>
+  </nav>
+  <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <svg class="sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+</header>
+<div class="layout">
+  <nav id="sidebar" class="sidebar" aria-label="Documentation">
+    <div class="nav-section">
+      <p class="nav-title">Get started</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="quickstart.html">Quick start</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Guides</p>
+      <ul>
+        <li><a href="sharing.html">Sharing a terminal</a></li>
+        <li><a href="joining.html">Joining a session</a></li>
+        <li><a href="desktop.html" aria-current="page">Remote desktop</a></li>
+        <li><a href="claude-code.html">Claude Code from your phone</a></li>
+        <li><a href="service.html">Always-on service</a></li>
+        <li><a href="audit.html">Audit logging</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Administration</p>
+      <ul>
+        <li><a href="mdm.html">MDM and managed policy</a></li>
+        <li><a href="security.html">Security model</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Reference</p>
+      <ul>
+        <li><a href="cli.html">CLI reference</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting and FAQ</a></li>
+        <li><a href="design.html">Design and protocol</a></li>
+      </ul>
+    </div>
+    
+  </nav>
+  <div class="scrim" id="scrim" hidden></div>
+  <main id="main" tabindex="-1">
+    <article class="content">
+<h1 id="remote-desktop">Remote desktop</h1>
+<p><code>setu desktop</code> shares this computer's whole desktop with a browser: the
+screen, the mouse, the keyboard and the clipboard. It uses the same
+peer-to-peer connection, invite links, passwords, approval and audit log as
+<a href="sharing.html"><code>setu share</code></a>, so there is still no server of yours in the middle.</p>
+<pre><code class="language-sh">setu desktop --password              # prints a link and a QR code; open it anywhere
+setu desktop --password --view-link  # also a watch-only link
+setu desktop -d --password           # keep serving in the background
+</code></pre>
+<p>Open the printed link on another computer, a tablet or a phone, enter the
+password, and compare the verification code with the one the host prints.</p>
+<h2 id="platforms">Platforms</h2>
+<table>
+<thead>
+<tr>
+<th>Host</th>
+<th>Capture</th>
+<th>Input</th>
+<th>Clipboard</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Windows 10 / 11, Server 2016+</td>
+<td>GDI, every monitor</td>
+<td><code>SendInput</code> (layout independent)</td>
+<td>text</td>
+</tr>
+<tr>
+<td>Linux and the BSDs, X11 session</td>
+<td>MIT-SHM (falls back to <code>GetImage</code>), RandR monitors</td>
+<td>XTEST</td>
+<td>text, <code>CLIPBOARD</code> selection</td>
+</tr>
+<tr>
+<td>Linux, Wayland session</td>
+<td>not supported yet: log in with an X11 session (&quot;on Xorg&quot;)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>macOS</td>
+<td>not supported yet</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Run <code>setu desktop</code> inside your graphical session: as yourself, on the desktop
+you want to share (on Linux, <code>DISPLAY</code> must be set). It needs no extra
+packages, drivers or administrator rights. Any modern browser can join.</p>
+<h2 id="using-it">Using it</h2>
+<p>The toolbar at the bottom of the page:</p>
+<table>
+<thead>
+<tr>
+<th>Control</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Fit</strong> / <strong>1:1</strong></td>
+<td>Fit the screen to the window, or show it at actual size (scroll to pan).</td>
+</tr>
+<tr>
+<td><strong>Display</strong></td>
+<td>Share another monitor (control links only; shown when there is more than one).</td>
+</tr>
+<tr>
+<td><strong>Sharp / Balanced / Fast</strong></td>
+<td>Image quality. <em>Fast</em> suits slow links and phones; <em>Sharp</em> suits reading small text. Your choice is remembered.</td>
+</tr>
+<tr>
+<td><strong>Send keys...</strong></td>
+<td>Key combinations the browser or your own computer would otherwise catch: Windows/Super, Alt+Tab, Alt+F4, Ctrl+Shift+Esc, Print Screen, Esc.</td>
+</tr>
+<tr>
+<td><strong>Keyboard</strong></td>
+<td>Opens the on-screen keyboard (touch devices).</td>
+</tr>
+<tr>
+<td><strong>Clipboard</strong></td>
+<td>Text to and from the remote clipboard (see below).</td>
+</tr>
+<tr>
+<td><strong>Fullscreen</strong></td>
+<td>In Chrome and Edge, fullscreen also captures Esc, Alt+Tab and the Windows key for the remote computer.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Mouse.</strong> Move, click, drag, right-click and scroll as usual. Back and
+forward buttons work too.</p>
+<p><strong>Touch.</strong> Tap to click, drag with one finger to drag, press and hold to
+right-click, and drag with two fingers to scroll.</p>
+<p><strong>Keyboard.</strong> Keys are sent as physical keys, so the remote computer's
+keyboard layout applies, just as if you typed on it. On a Mac, Cmd acts as
+Ctrl on the remote computer, so Cmd+C and Cmd+V copy and paste there.</p>
+<p><strong>Clipboard.</strong></p>
+<ul>
+<li>Press Ctrl+V (Cmd+V) on the remote screen: your local clipboard text goes to
+the remote clipboard first, then the paste happens there.</li>
+<li>Copy something on the remote computer: the text arrives in your browser and
+is put on your local clipboard (or, if the browser does not allow that, a
+prompt offers a Copy button).</li>
+<li>The <strong>Clipboard</strong> panel can send text, fetch the remote clipboard, and
+<strong>Type it</strong>: enter the text as keystrokes, for places where pasting does not
+work, such as login prompts.</li>
+</ul>
+<p>Clipboard sync is text only, up to 1 MiB, and only for control links.</p>
+<h2 id="security-and-logging">Security and logging</h2>
+<p>Everything from <a href="security.html">Security model</a> applies, plus:</p>
+<ul>
+<li><strong>A control link is full control of your computer</strong>, as you. Use
+<code>--password</code>, and <code>--once</code> or <code>--expire</code> for one-off help sessions. With
+<code>--approve</code>, the host terminal asks before anyone joins.</li>
+<li><strong>View-only links</strong> (<code>--view-link</code>) can watch the screen but never send
+input, never receive your clipboard, and cannot switch displays. The host
+enforces this from which link was used, not from what the browser claims.</li>
+<li>Keys and mouse buttons a client is holding are released when it
+disconnects, so a dropped connection cannot leave a key stuck down.</li>
+<li>Organizations can turn remote desktop off with the <code>DisableDesktop</code>
+<a href="mdm.html#settings">managed policy</a>. When a policy restricts
+<code>AllowedCommands</code>, remote desktop is refused unless the list includes
+<code>@desktop</code>.</li>
+</ul>
+<p>The host log (and <code>setu logs &lt;id&gt;</code> for background shares) records who
+connected, display switches, clipboard transfers and a summary of each
+client's input. With <a href="audit.html">audit logging</a> on, the same appears as
+<code>setu.desktop.*</code> records. Clipboard contents and keystrokes are never
+recorded, only their sizes and counts, because they often hold passwords.</p>
+<h2 id="how-it-works">How it works</h2>
+<p>The host captures the shared display up to <code>--fps</code> times a second (20 by
+default), compares it with the previous capture in 64x64 tiles, and sends only
+the tiles that changed: lossless PNG for text and UI, JPEG for photos and
+video. Each viewer acknowledges a frame once it has drawn it, and the host
+keeps at most two frames in flight per viewer, so a slow network or device
+gets fewer, fresher frames instead of growing lag. The screen is captured once
+for all viewers, encoded tiles are shared between viewers who need the same
+ones, and nothing is captured while nobody is watching. See
+<a href="design.html#remote-desktop">Design and protocol</a> for the wire format.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Wayland sessions are not supported yet</code></td>
+<td>Log out and pick an X11 session (&quot;Ubuntu on Xorg&quot;, &quot;Plasma (X11)&quot;) on the login screen.</td>
+</tr>
+<tr>
+<td><code>no X11 display: DISPLAY is not set</code></td>
+<td>Run <code>setu desktop</code> from a terminal inside your desktop session, not over plain SSH.</td>
+</tr>
+<tr>
+<td>&quot;The remote screen cannot be captured right now&quot;</td>
+<td>Windows is showing the lock screen or a UAC prompt (the secure desktop). Sharing resumes when it goes away.</td>
+</tr>
+<tr>
+<td>Clicks do nothing in one window</td>
+<td>On Windows, input cannot reach windows running as administrator unless setu runs as administrator too.</td>
+</tr>
+<tr>
+<td>Blurry text</td>
+<td>Choose <strong>Sharp</strong>, or <strong>1:1</strong> to stop scaling.</td>
+</tr>
+<tr>
+<td>Laggy on a slow link</td>
+<td>Choose <strong>Fast</strong>, or lower <code>--fps</code>.</td>
+</tr>
+</tbody>
+</table>
+
+    </article>
+    <nav class="pager" aria-label="Previous and next page">
+      <a class="prev" href="joining.html"><span>Previous</span>Joining a session</a>
+      <a class="next" href="claude-code.html"><span>Next</span>Claude Code from your phone</a>
+    </nav>
+    <footer class="footer">
+      <a href="https://github.com/dmdhrumilmistry/setu/edit/main/docs/src/desktop.md">Edit this page on GitHub</a>
+      <span>setu is open source. Peer-to-peer terminal sharing with no server of your own.</span>
+    </footer>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    <p class="toc-title">On this page</p>
+    <ul>
+      <li class="l2"><a href="#platforms">Platforms</a></li>
+      <li class="l2"><a href="#using-it">Using it</a></li>
+      <li class="l2"><a href="#security-and-logging">Security and logging</a></li>
+      <li class="l2"><a href="#how-it-works">How it works</a></li>
+      <li class="l2"><a href="#troubleshooting">Troubleshooting</a></li>
+    </ul>
+  </aside>
+</div>
+</body>
+</html>

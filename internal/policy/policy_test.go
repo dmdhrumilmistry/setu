@@ -77,6 +77,15 @@ func TestChecks(t *testing.T) {
 	if !isViolation(p.CheckShare(true), "DisableManual") {
 		t.Error("manual allowed")
 	}
+	if !isViolation(p.CheckDesktop(false), "AllowedCommands") {
+		t.Error("desktop allowed although AllowedCommands does not list @desktop")
+	}
+	if !isViolation(mustParse(t, `{"DisableDesktop": true}`).CheckDesktop(false), "DisableDesktop") {
+		t.Error("desktop allowed although disabled")
+	}
+	if err := mustParse(t, `{"AllowedCommands": ["claude", "@desktop"]}`).CheckDesktop(false); err != nil {
+		t.Errorf("desktop listed in AllowedCommands: %v", err)
+	}
 	for cmd, ok := range map[string]bool{
 		"claude": true, "/opt/bin/claude": true,
 		"/usr/bin/bash": true, "/bin/bash": false, "bash": false, "zsh": false,

@@ -50,6 +50,7 @@
       <ul>
         <li><a href="sharing.html">Sharing a terminal</a></li>
         <li><a href="joining.html">Joining a session</a></li>
+        <li><a href="desktop.html">Remote desktop</a></li>
         <li><a href="claude-code.html">Claude Code from your phone</a></li>
         <li><a href="service.html">Always-on service</a></li>
         <li><a href="audit.html">Audit logging</a></li>
@@ -179,6 +180,10 @@ HKDF, PBKDF2, AES-GCM and HMAC in its standard library. The Rust options
 <td>Detached <code>setu share -d</code> processes and their registry</td>
 </tr>
 <tr>
+<td><code>internal/desktop</code></td>
+<td><code>setu desktop</code>: screen capture and input injection (GDI and <code>SendInput</code> on Windows, X11 with MIT-SHM and XTEST elsewhere, no cgo), clipboard, and the hub that streams changed tiles to every viewer with per-viewer flow control</td>
+</tr>
+<tr>
 <td><code>web/</code></td>
 <td>The static client: <code>crypto.mjs</code> mirrors <code>secure</code>/<code>link</code>, <code>nostr.mjs</code> mirrors <code>nostr</code>, <code>app.mjs</code> handles the UI, WebRTC and xterm.js</td>
 </tr>
@@ -228,6 +233,42 @@ host  → {t:&quot;exit&quot;, code} | {t:&quot;error&quot;, msg}
 </code></pre>
 <p><code>fpA</code> and <code>fpB</code> are the DTLS fingerprints from both SDPs. They feed the proof
 and the 6-digit <strong>SAS</strong> that both sides display.</p>
+<h2 id="remote-desktop">Remote desktop</h2>
+<p><code>setu desktop</code> reuses signaling, the handshake and admission unchanged. The
+host opens a second reliable, ordered channel, <code>&quot;setu-screen&quot;</code>, used only
+host to client, so a large frame never delays control messages. <code>ready</code>
+carries <code>kind: &quot;desktop&quot;</code>; <code>setu join</code> refuses such shares.</p>
+<pre><code>host  → {t:&quot;screen&quot;, displays:[{name,w,h,primary}], display}   on join and on every layout change
+host  → binary on &quot;setu-screen&quot;: tiles, then a frame end
+client→ {t:&quot;ack&quot;, frame}                       after drawing that frame
+client→ {t:&quot;pointer&quot;, x, y, buttons}           control only; buttons = PointerEvent.buttons
+client→ {t:&quot;wheel&quot;, dx, dy} | {t:&quot;key&quot;, key: KeyboardEvent.code, down} | {t:&quot;text&quot;, text}
+both  → {t:&quot;clipboard&quot;, text, more}            control only; parts of at most 8192 characters, 1 MiB in total
+client→ {t:&quot;clipboard-get&quot;} | {t:&quot;display&quot;, display} | {t:&quot;refresh&quot;} | {t:&quot;quality&quot;, quality}
+</code></pre>
+<p>Binary messages (little endian) are at most 60 KiB, under every WebRTC
+implementation's message size limit:</p>
+<pre><code>tile       [1, enc (1 JPEG, 2 PNG), x u16, y u16, w u16, h u16, image bytes]
+frame end  [2, id u32, cursorX i32, cursorY i32, cursorVisible u8]
+</code></pre>
+<p>The hub captures the shared display at most <code>--fps</code> times a second, and only
+while some viewer has fewer than two unacknowledged frames, so idle viewers
+and slow links cost nothing and never build a queue. Each capture is compared
+with the previous one in 64x64 tiles; every viewer accumulates the tiles that
+changed since its last frame, and they are sent as horizontal runs of up to 8
+tiles. A run with at most 256 colours is encoded as a paletted PNG (crisp
+text), anything else as JPEG at the viewer's quality; runs whose encoding
+would exceed the message limit are split. Distinct runs are encoded once per
+capture, in parallel, and shared by every viewer that needs them. Cursor
+position rides in the frame end, so pointer movement alone produces a frame
+without tiles.</p>
+<p>Input is applied to the physical key (<code>KeyboardEvent.code</code> mapped to PC
+scancodes on Windows and evdev keycodes on X11), so the host's own layout
+decides the character. <code>text</code> uses Unicode injection on Windows and a briefly
+remapped spare keycode on X11 for characters the layout lacks. Keys and
+buttons a viewer holds are released when it leaves. The host's clipboard is
+polled for changes (<code>GetClipboardSequenceNumber</code>, XFixes selection events)
+and sent to control viewers; text a viewer set is not echoed back.</p>
 <h2 id="audit-log">Audit log</h2>
 <p>The host hands every keystroke it writes to the PTY to a per-client
 <code>audit.Input</code>. That input is attached in the same critical section that
@@ -306,6 +347,7 @@ key bar and a compose box.</li>
       <li class="l3"><a href="#signaling-over-nostr-default">Signaling over nostr (default)</a></li>
       <li class="l3"><a href="#manual-signaling---manual">Manual signaling (--manual)</a></li>
       <li class="l3"><a href="#data-channel-setu-reliable-and-ordered">Data channel (&#34;setu&#34;, reliable and ordered)</a></li>
+      <li class="l2"><a href="#remote-desktop">Remote desktop</a></li>
       <li class="l2"><a href="#audit-log">Audit log</a></li>
       <li class="l2"><a href="#service">Service</a></li>
       <li class="l2"><a href="#implementation-steps">Implementation steps</a></li>

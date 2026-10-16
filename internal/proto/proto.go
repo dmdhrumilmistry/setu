@@ -12,8 +12,19 @@ import (
 // Control.Client) does not change it: both sides ignore unknown fields.
 const Version = 1
 
-// DataChannelLabel is the label of the single reliable, ordered channel.
+// DataChannelLabel is the label of the reliable, ordered control channel.
 const DataChannelLabel = "setu"
+
+// ScreenChannelLabel is the second channel a desktop share opens: binary
+// screen updates (see internal/desktop), host to client only, so a large
+// frame never delays control messages.
+const ScreenChannelLabel = "setu-screen"
+
+// What a session shares (Control.Kind in "ready").
+const (
+	KindTerminal = "terminal"
+	KindDesktop  = "desktop"
+)
 
 // Roles a client can be granted. The role is decided by which invite secret
 // the client used, never by anything the client claims.
@@ -60,6 +71,29 @@ const (
 	CtlInfo   = "info"   // host -> client: informational notice
 )
 
+// Desktop control message types.
+const (
+	CtlScreen        = "screen"        // host -> client: displays and the shared one
+	CtlAck           = "ack"           // client -> host: frame drawn
+	CtlRefresh       = "refresh"       // client -> host: repaint everything
+	CtlQuality       = "quality"       // client -> host: image quality
+	CtlPointer       = "pointer"       // client -> host: mouse position and buttons (control)
+	CtlWheel         = "wheel"         // client -> host: scroll notches (control)
+	CtlKey           = "key"           // client -> host: physical key down/up (control)
+	CtlText          = "text"          // client -> host: text to type (control)
+	CtlClipboard     = "clipboard"     // both ways: clipboard text, in parts (control)
+	CtlClipboardGet  = "clipboard-get" // client -> host: send me the host clipboard (control)
+	CtlSelectDisplay = "display"       // client -> host: share another display (control)
+)
+
+// DisplayInfo describes one of the host's displays.
+type DisplayInfo struct {
+	Name    string `json:"name"`
+	W       int    `json:"w"`
+	H       int    `json:"h"`
+	Primary bool   `json:"primary,omitempty"`
+}
+
 // Auth methods announced in the hello.
 const (
 	AuthNone     = "none"
@@ -98,6 +132,25 @@ type Control struct {
 	// Approval tells the client how it was admitted (sent with "ready"):
 	// ApprovalTrusted, ApprovalPrompt, or empty when no approval applied.
 	Approval string `json:"approval,omitempty"`
+
+	// Kind is what the session shares (sent with "ready"); empty means a
+	// terminal, for hosts that predate desktop sharing.
+	Kind string `json:"kind,omitempty"`
+
+	// Desktop fields. Coordinates are pixels of the shared display.
+	Displays []DisplayInfo `json:"displays,omitempty"`
+	Display  *int          `json:"display,omitempty"`
+	X        int           `json:"x,omitempty"`
+	Y        int           `json:"y,omitempty"`
+	Buttons  int           `json:"buttons,omitempty"` // PointerEvent.buttons
+	DX       int           `json:"dx,omitempty"`
+	DY       int           `json:"dy,omitempty"`
+	Key      string        `json:"key,omitempty"` // KeyboardEvent.code
+	Down     bool          `json:"down,omitempty"`
+	Text     string        `json:"text,omitempty"`
+	More     bool          `json:"more,omitempty"` // clipboard: more parts follow
+	Frame    uint32        `json:"frame,omitempty"`
+	Quality  string        `json:"quality,omitempty"`
 }
 
 // How a client was admitted when the host requires approval.

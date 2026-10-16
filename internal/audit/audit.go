@@ -419,6 +419,7 @@ func processResource(version, host, hostID, username string, extra map[string]st
 type SessionInfo struct {
 	ID         string
 	Command    string
+	Kind       string // proto.KindTerminal or proto.KindDesktop
 	Mode       string // "nostr" or "manual"
 	Profile    string // service profile name, if any
 	Password   bool
@@ -445,6 +446,7 @@ func (l *Logger) Session(info SessionInfo) *Session {
 	s := &Session{l: l, attrs: attrs, command: info.Command}
 	s.emit(otellog.SeverityInfo, "setu.session.start", "session started: "+info.Command,
 		attribute.String("setu.session.command", info.Command),
+		attribute.String("setu.session.kind", info.Kind),
 		attribute.String("setu.session.mode", info.Mode),
 		attribute.Bool("setu.session.password", info.Password),
 		attribute.Bool("setu.session.view_link", info.ViewLink),
@@ -669,6 +671,53 @@ const (
 	DeniedByHost          = "prompt-denied"  // host answered "no" or did not answer
 	DeniedUnknownDevice   = "unknown-device" // no prompt available, device not trusted
 )
+
+// Clipboard directions (setu.clipboard.direction).
+const (
+	ClipboardToHost   = "to_host"
+	ClipboardToClient = "to_client"
+)
+
+// Clipboard records clipboard text crossing between a client and the host
+// during a desktop share. Only its size is recorded, never the text, which
+// often holds passwords and tokens.
+func (s *Session) Clipboard(c Client, direction string, size int) {
+	if s == nil {
+		return
+	}
+	body := fmt.Sprintf("clipboard text (%d bytes) from client #%d to the host", size, c.ID)
+	if direction == ClipboardToClient {
+		body = fmt.Sprintf("host clipboard text (%d bytes) to client #%d", size, c.ID)
+	}
+	s.emit(otellog.SeverityInfo, "setu.desktop.clipboard", body,
+		append(c.attrs(), attribute.String("setu.clipboard.direction", direction), attribute.Int("setu.clipboard.bytes", size))...)
+}
+
+// DisplaySelected records a client switching the shared display.
+func (s *Session) DisplaySelected(c Client, display string) {
+	if s == nil {
+		return
+	}
+	s.emit(otellog.SeverityInfo, "setu.desktop.display", fmt.Sprintf("client #%d switched to display %s", c.ID, display),
+		append(c.attrs(), attribute.String("setu.desktop.display", display))...)
+}
+
+// DesktopInput summarises a control client's remote input when it leaves.
+// Keystrokes on a desktop go to arbitrary applications, so only counts are
+// recorded.
+func (s *Session) DesktopInput(c Client, clicks, keys, scrolls, typedChars int) {
+	if s == nil {
+		return
+	}
+	s.emit(otellog.SeverityInfo, "setu.desktop.input",
+		fmt.Sprintf("client #%d input: %d clicks, %d key presses, %d scrolls, %d typed characters", c.ID, clicks, keys, scrolls, typedChars),
+		append(c.attrs(),
+			attribute.Int("setu.desktop.clicks", clicks),
+			attribute.Int("setu.desktop.key_presses", keys),
+			attribute.Int("setu.desktop.scrolls", scrolls),
+			attribute.Int("setu.desktop.typed_chars", typedChars),
+		)...)
+}
 
 // InviteDisabled records the invite no longer accepting clients.
 func (s *Session) InviteDisabled(reason string) {

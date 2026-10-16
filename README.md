@@ -149,6 +149,26 @@ Windows, which does not roam). `config.json` holds the keys, so it must be
 mode 0600. setu refuses to load it otherwise. Only one supervisor can serve a
 state directory at a time.
 
+### Remote desktop (`setu desktop`)
+
+```sh
+setu desktop --password              # share this computer's screen, mouse, keyboard and clipboard
+setu desktop --password --view-link  # also a watch-only link
+setu desktop -d --password           # in the background (setu ps / setu stop)
+```
+
+The same links, passwords, approval, audit log and background mode as
+`setu share`, viewed in any browser: fit or 1:1 scaling, monitor switching,
+quality presets, special key combinations, touch gestures on phones,
+fullscreen with keyboard capture, and text clipboard sync both ways (Ctrl+V
+on the remote screen pastes your local clipboard there; copies on the remote
+computer arrive in your clipboard). Only the tiles that changed are sent, and
+each browser acknowledges frames, so slow links get fewer frames instead of
+lag. Hosts: Windows, and Linux or BSD with an X11 session (Wayland and macOS
+are not supported yet). `--display N` picks a monitor and `--fps N` caps the
+frame rate. Organizations can disable it with the `DisableDesktop` policy.
+See the [remote desktop guide](https://dmdhrumilmistry.github.io/setu/docs/desktop.html).
+
 ### Audit logging (OpenTelemetry)
 
 setu can send an audit trail to an OpenTelemetry collector as OTLP/HTTP log

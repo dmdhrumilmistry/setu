@@ -5,10 +5,12 @@ import (
 	"crypto/hmac"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/dmdhrumilmistry/setu/internal/audit"
+	"github.com/dmdhrumilmistry/setu/internal/desktop"
 	"github.com/dmdhrumilmistry/setu/internal/proto"
 	"github.com/dmdhrumilmistry/setu/internal/rtc"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
@@ -45,8 +47,11 @@ type peer struct {
 	// its signature over this connection verified.
 	deviceFP string
 
-	pc *webrtc.PeerConnection
-	dc *webrtc.DataChannel
+	pc      *webrtc.PeerConnection
+	dc      *webrtc.DataChannel
+	screen  *webrtc.DataChannel // desktop shares: screen updates
+	clip    strings.Builder     // clipboard text being received (data channel goroutine only)
+	clipOut sync.Mutex          // one outgoing clipboard transfer at a time
 
 	mu          sync.Mutex
 	state       peerState
@@ -61,6 +66,8 @@ type peer struct {
 	info        *proto.ClientInfo // self-reported device details (sanitized)
 	input       *audit.Input      // keystroke audit (control clients, once ready)
 	client      *audit.Client     // audit identity, fixed once ready
+	viewer      *desktop.Viewer   // desktop shares, once ready
+	inputErrAt  time.Time         // last remote input failure reported
 }
 
 // newPeer registers a peer after checking admission.
@@ -77,9 +84,16 @@ func (s *Session) newPeer(role, label, keyName string) (*peer, error) {
 		pc.Close()
 		return nil, err
 	}
+	var screen *webrtc.DataChannel
+	if s.desk != nil {
+		if screen, err = pc.CreateDataChannel(proto.ScreenChannelLabel, nil); err != nil {
+			pc.Close()
+			return nil, err
+		}
+	}
 	s.mu.Lock()
 	s.nextID++
-	p := &peer{s: s, id: s.nextID, role: role, label: label, keyName: keyName, pc: pc, dc: dc, nonce: secure.RandomBytes(32)}
+	p := &peer{s: s, id: s.nextID, role: role, label: label, keyName: keyName, pc: pc, dc: dc, screen: screen, nonce: secure.RandomBytes(32)}
 	s.peers[p.id] = p
 	s.mu.Unlock()
 
@@ -156,7 +170,7 @@ func (p *peer) onMessage(msg webrtc.DataChannelMessage) {
 	p.mu.Unlock()
 
 	if !msg.IsString {
-		if st == stateReady && p.role == proto.RoleControl && len(msg.Data) <= maxInputFrame {
+		if st == stateReady && p.role == proto.RoleControl && p.s.desk == nil && len(msg.Data) <= maxInputFrame {
 			input.Write(msg.Data)
 			p.s.writeInput(msg.Data)
 		}
@@ -200,8 +214,12 @@ func (p *peer) onMessage(msg webrtc.DataChannelMessage) {
 		}
 		go p.activate()
 	case proto.CtlResize:
-		if st == stateReady && p.role == proto.RoleControl {
+		if st == stateReady && p.role == proto.RoleControl && p.s.desk == nil {
 			p.s.resize(c.Cols, c.Rows)
+		}
+	default:
+		if st == stateReady && p.s.desk != nil {
+			p.onDesktopMessage(c)
 		}
 	}
 }
@@ -226,12 +244,12 @@ func (p *peer) activate() {
 	// so no keystroke can reach the PTY unaudited.
 	p.state = stateReady
 	p.client = &c
-	if p.role == proto.RoleControl {
+	if p.role == proto.RoleControl && s.desk == nil {
 		p.input = s.audit.Input(c, s.passwordPrompt)
 	}
 	p.mu.Unlock()
 	s.failures = 0
-	p.sendControl(proto.Control{T: proto.CtlReady, V: proto.Version, Role: p.role, Cmd: s.commandLine(), Host: s.host, Cols: s.cols, Rows: s.rows, Approval: how})
+	p.sendControl(proto.Control{T: proto.CtlReady, V: proto.Version, Role: p.role, Cmd: s.commandLine(), Host: s.host, Cols: s.cols, Rows: s.rows, Approval: how, Kind: s.kind()})
 	if len(s.ring) > 0 {
 		for off := 0; off < len(s.ring); off += 16 << 10 {
 			end := min(off+16<<10, len(s.ring))
@@ -240,6 +258,9 @@ func (p *peer) activate() {
 	}
 	s.mu.Unlock()
 	p.deadline.Stop()
+	if s.desk != nil {
+		p.joinDesktop()
+	}
 	s.audit.ClientConnected(c)
 	s.logf("client #%d connected via %s, role=%s: %s", p.id, p.label, p.role, c.Actor())
 	if s.cfg.Once {
@@ -272,9 +293,13 @@ func (p *peer) close(reason string) {
 	}
 	wasReady := p.state == stateReady
 	p.state = stateClosed
-	hooks, input, client := p.onClose, p.input, p.client
+	hooks, input, client, viewer := p.onClose, p.input, p.client, p.viewer
+	p.viewer = nil
 	p.mu.Unlock()
 	input.Close()
+	if viewer != nil {
+		p.leaveDesktop(viewer, client)
+	}
 	if wasReady && client != nil {
 		p.s.audit.ClientDisconnected(*client, reason)
 	}

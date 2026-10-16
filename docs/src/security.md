@@ -15,6 +15,7 @@ an SSH private key.
 | Verification code | Both sides show a 6-digit code derived from both DTLS certificates. Different codes mean someone is in the middle. |
 | Password | A second factor. The host sends a salt, a PBKDF2-SHA256 work factor (200,000 iterations; clients refuse less than 100,000) and a fresh nonce; the client answers with an HMAC bound to both certificates. The password never crosses the wire and a proof cannot be replayed. 5 failures lock the share for 10 minutes; 20 disable the invite. |
 | Roles | View-only links are separate secrets. The host decides each client's role from which secret decrypted the request, never from what the client claims. |
+| Remote desktop | `setu desktop` uses the same links, passwords, approval and audit log. View-only clients cannot send input, receive the clipboard or switch displays, enforced by the host. Keys and buttons a client holds are released when it leaves. Clipboard contents and keystrokes are never logged, only sizes and counts. The `DisableDesktop` policy turns it off. |
 | Admission | `--max-clients`, `--once`, `--expire`, `--approve`. Handshakes must finish within 2 minutes, and at most 3 can be pending. |
 | Hygiene | `SETU_PASSWORD`, `SETU_TURN_PASSWORD` and audit collector headers are removed from the environment before the shared command starts. Link files and session directories are owner-only. Slow clients are disconnected after 8 MiB of backlog. |
 | Web client | No third-party code at runtime: libraries are vendored and checksum-pinned, a strict Content Security Policy allows only same-origin scripts, and the page refuses to run in a frame. |
@@ -41,6 +42,9 @@ an SSH private key.
 * **The audit log is evidence, not prevention.** Commands are rebuilt from
   keystrokes; the agent's own actions are not keystrokes; redaction is pattern
   based; and on Windows password prompts rely on redaction alone.
+* **A desktop control link is your whole computer.** Anyone holding it (and
+  the password) can do anything you can do at the keyboard. Use `--password`,
+  and `--once` or `--expire` for one-off help.
 * **The agent itself.** setu shares the terminal exactly as it is. Run agents
   with the permissions you would grant them locally.
 

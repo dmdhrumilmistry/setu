@@ -27,6 +27,7 @@ terminal session as your computer.
 
 <div class="cards">
 <a class="card" href="sharing.html"><h3>Share a terminal</h3><p>Any command or your shell, with passwords, view-only links, single-use links, expiry and approval prompts.</p></a>
+<a class="card" href="desktop.html"><h3>Remote desktop</h3><p>Share the whole screen, mouse, keyboard and clipboard of a Windows or Linux computer with any browser.</p></a>
 <a class="card" href="joining.html"><h3>Join from anywhere</h3><p>A mobile-friendly web client with a key bar and a compose box, or <code>setu join</code> from another terminal.</p></a>
 <a class="card" href="claude-code.html"><h3>Drive Claude Code</h3><p>Start an agent on your workstation and steer it from your phone, safely.</p></a>
 <a class="card" href="service.html"><h3>Always-on service</h3><p>Persistent links that survive reboots, a personal key per person, autostart on Linux, macOS and Windows.</p></a>
@@ -63,6 +64,8 @@ The full protocol is in [Design and protocol](DESIGN.md).
 | macOS | yes | terminal or browser |
 | Windows 10 1809+ / Server 2019+ | yes (ConPTY; default shell PowerShell) | terminal or browser |
 | Phones and tablets | no | browser |
+
+[Remote desktop](desktop.md) hosting (`setu desktop`) works on Windows and on Linux or BSD with an X11 session.
 
 ## Where to next
 

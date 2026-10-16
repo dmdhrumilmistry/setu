@@ -50,6 +50,7 @@
       <ul>
         <li><a href="sharing.html">Sharing a terminal</a></li>
         <li><a href="joining.html">Joining a session</a></li>
+        <li><a href="desktop.html">Remote desktop</a></li>
         <li><a href="claude-code.html">Claude Code from your phone</a></li>
         <li><a href="service.html">Always-on service</a></li>
         <li><a href="audit.html">Audit logging</a></li>
@@ -158,6 +159,11 @@ attributes (such as an asset tag) to every record.</li>
 <td><code>setu share --manual</code> is refused, so all signaling uses the allowed relays.</td>
 </tr>
 <tr>
+<td><code>DisableDesktop</code></td>
+<td>bool</td>
+<td><code>setu desktop</code> (remote desktop) is refused.</td>
+</tr>
+<tr>
 <td><code>RequirePassword</code></td>
 <td>bool</td>
 <td>Every share and profile needs a password; <code>setu share</code> prompts even without <code>--password</code>.</td>
@@ -190,7 +196,7 @@ attributes (such as an asset tag) to every record.</li>
 <tr>
 <td><code>AllowedCommands</code></td>
 <td>list</td>
-<td>Only these programs may be shared. A bare name (<code>claude</code>) matches the program name on any OS; an absolute path matches exactly.</td>
+<td>Only these programs may be shared. A bare name (<code>claude</code>) matches the program name on any OS; an absolute path matches exactly. Remote desktop counts as <code>@desktop</code>, so a list without it also refuses <code>setu desktop</code>.</td>
 </tr>
 <tr>
 <td><code>AllowedRelays</code></td>
