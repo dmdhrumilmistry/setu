@@ -146,6 +146,7 @@ func serve(sub string, args []string) (int, error) {
 	approve := fs.Bool("approve", false, "ask on this terminal before admitting each client (answer a to always approve that device)")
 	var trustDevices listFlag
 	fs.Var(&trustDevices, "trust-device", "device key fingerprint to approve without asking (repeatable; see 'setu device'). With --approve and no terminal, only these devices may join")
+	idleTimeout := fs.Duration("idle-timeout", 0, "disconnect control clients after this long without input (e.g. 15m; watching is not input); 0 = never")
 	expire := fs.Duration("expire", 0, "invite stops accepting new clients after this long (e.g. 30m); 0 = never")
 	fs.Var(&relays, "relay", "nostr relay URL (repeatable / comma separated); default: built-in public relays")
 	fs.Var(&stun, "stun", "STUN server URL(s), e.g. stun:stun.l.google.com:19302 (default Google STUN)")
@@ -229,6 +230,9 @@ func serve(sub string, args []string) (int, error) {
 		return 1, err
 	}
 	if *expire, err = pol.ShareExpiry(*expire); err != nil {
+		return 1, err
+	}
+	if *idleTimeout, err = pol.IdleTimeout(*idleTimeout, set["idle-timeout"]); err != nil {
 		return 1, err
 	}
 	if !*manual {
@@ -359,6 +363,7 @@ func serve(sub string, args []string) (int, error) {
 		TrustedDevices: trustDevices,
 		NoPrompt:       noPrompt,
 		Expire:         *expire,
+		IdleTimeout:    *idleTimeout,
 		Mirror:         mirror,
 		Verbose:        *verbose,
 		Audit:          auditLog,
@@ -444,6 +449,9 @@ func serve(sub string, args []string) (int, error) {
 		}
 		if *expire > 0 {
 			notes = append(notes, "expires in "+expire.String())
+		}
+		if *idleTimeout > 0 {
+			notes = append(notes, "idle control clients disconnected after "+idleTimeout.String())
 		}
 		if *approve {
 			switch {

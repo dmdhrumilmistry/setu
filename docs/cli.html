@@ -130,6 +130,11 @@ can be turned off explicitly, for example <code>--qr=false</code>.</p>
 <td>Stop accepting new clients after this long, for example <code>30m</code>.</td>
 </tr>
 <tr>
+<td><code>--idle-timeout DURATION</code></td>
+<td><code>0</code> (never)</td>
+<td>Disconnect a control client after this long without input (typing, mouse, clipboard, uploads), for example <code>15m</code>. Watching is not input: view-only clients are never disconnected, and a control client that only watches gets a warning a minute before.</td>
+</tr>
+<tr>
 <td><code>--max-clients N</code></td>
 <td>2</td>
 <td>Maximum concurrent clients.</td>
@@ -537,6 +542,11 @@ the terminal), plus:</p>
 <td><code>--no-upload</code></td>
 <td>off</td>
 <td>Do not accept file uploads from clients (they are saved to <code>~/Downloads/setu</code> otherwise).</td>
+</tr>
+<tr>
+<td><code>--idle-timeout DURATION</code></td>
+<td><code>0</code> (never)</td>
+<td>Disconnect control clients after this long without input.</td>
 </tr>
 <tr>
 <td><code>--desktop</code></td>

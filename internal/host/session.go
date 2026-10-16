@@ -79,6 +79,10 @@ type Config struct {
 	Log        io.Writer
 	Verbose    bool
 
+	// IdleTimeout disconnects control clients after this long without input
+	// (0 = never). Watching is not input, so view-only clients stay.
+	IdleTimeout time.Duration
+
 	// UploadDir is where control clients' uploads are saved; empty turns
 	// uploads off.
 	UploadDir string
@@ -258,6 +262,9 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 	s.mu.Lock()
 	s.stopSignal = stopSignal
 	s.mu.Unlock()
+	if s.cfg.IdleTimeout > 0 {
+		go s.idleLoop(ctx)
+	}
 	if s.cfg.Expire > 0 {
 		t := time.AfterFunc(s.cfg.Expire, func() { s.stopAccepting("invite expired") })
 		defer t.Stop()

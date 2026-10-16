@@ -55,9 +55,11 @@ type Profile struct {
 	// (screen, mouse, keyboard, clipboard) instead of running Command.
 	Desktop *DesktopProfile `json:"desktop,omitempty"`
 	// NoUpload refuses file uploads from clients.
-	NoUpload bool   `json:"no_upload,omitempty"`
-	Dir      string `json:"dir,omitempty"`
-	Enabled  bool   `json:"enabled"`
+	// IdleTimeout disconnects control clients after this long without input.
+	IdleTimeout Duration `json:"idle_timeout,omitempty"`
+	NoUpload    bool     `json:"no_upload,omitempty"`
+	Dir         string   `json:"dir,omitempty"`
+	Enabled     bool     `json:"enabled"`
 	// ControlKey and ViewKey are shared links: audit records can only say
 	// "someone holding the shared link". Either may be empty.
 	ControlKey string `json:"control_key,omitempty"`
@@ -390,6 +392,9 @@ func (p *Profile) Validate() error {
 			return err
 		}
 	}
+	if p.IdleTimeout < 0 {
+		return errors.New("idle timeout must not be negative")
+	}
 	if p.MaxClients < 1 || p.MaxClients > MaxClientsLimit {
 		return fmt.Errorf("max clients must be 1..%d", MaxClientsLimit)
 	}
@@ -438,6 +443,9 @@ func (p *Profile) CheckPolicy(pol *policy.Policy, now time.Time) error {
 	}
 	if pol.RequirePersonalKeys && p.ControlKey != "" {
 		return &policy.Violation{Key: "RequirePersonalKeys", Msg: "shared control links are not allowed; give each person their own key"}
+	}
+	if _, err := pol.IdleTimeout(time.Duration(p.IdleTimeout), false); err != nil {
+		return err
 	}
 	if err := pol.CheckKeyValidity(time.Duration(p.ValidFor)); err != nil {
 		return err

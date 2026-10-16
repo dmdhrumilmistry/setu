@@ -164,6 +164,11 @@ attributes (such as an asset tag) to every record.</li>
 <td><code>setu desktop</code> (remote desktop) is refused.</td>
 </tr>
 <tr>
+<td><code>MaxIdleTime</code></td>
+<td>duration</td>
+<td>Control clients are disconnected after this long without input (watching is not input; view-only clients are not affected). Without <code>--idle-timeout</code>, shares and profiles get this value; turning it off or a longer value is refused.</td>
+</tr>
+<tr>
 <td><code>DisableFileTransfer</code></td>
 <td>bool</td>
 <td>Clients cannot upload files to this device (shares, remote desktop and service profiles).</td>

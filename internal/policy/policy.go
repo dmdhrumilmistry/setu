@@ -57,6 +57,8 @@ type Policy struct {
 	MaxClients          int      `json:"MaxClients,omitempty"`
 	MaxShareDuration    Duration `json:"MaxShareDuration,omitempty"` // `setu share` must expire within this
 	MaxKeyValidity      Duration `json:"MaxKeyValidity,omitempty"`   // service keys must expire within this
+	// MaxIdleTime disconnects control clients after this long without input.
+	MaxIdleTime Duration `json:"MaxIdleTime,omitempty"`
 
 	// Allow lists (empty = anything).
 	AllowedCommands []string `json:"AllowedCommands,omitempty"` // program names or absolute paths
@@ -165,7 +167,7 @@ func (p *Policy) validate() error {
 	bad := func(f string, a ...any) error {
 		return fmt.Errorf("managed policy %s: %s", p.source, fmt.Sprintf(f, a...))
 	}
-	if p.MinPasswordLength < 0 || p.MaxClients < 0 || p.MaxShareDuration < 0 || p.MaxKeyValidity < 0 {
+	if p.MinPasswordLength < 0 || p.MaxClients < 0 || p.MaxShareDuration < 0 || p.MaxKeyValidity < 0 || p.MaxIdleTime < 0 {
 		return bad("limits must not be negative")
 	}
 	switch p.AuditInput {
@@ -365,6 +367,23 @@ func (p *Policy) ShareExpiry(d time.Duration) (time.Duration, error) {
 	}
 	if d > p.MaxShareDuration.D() {
 		return 0, violation("MaxShareDuration", "shares must expire within %s", p.MaxShareDuration.D())
+	}
+	return d, nil
+}
+
+// IdleTimeout applies MaxIdleTime to an idle timeout (0 = none): an unset
+// one gets the maximum; turning it off, or a longer one, is refused when
+// explicitly asked for.
+func (p *Policy) IdleTimeout(d time.Duration, explicit bool) (time.Duration, error) {
+	if p == nil || p.MaxIdleTime == 0 {
+		return d, nil
+	}
+	max := p.MaxIdleTime.D()
+	switch {
+	case d == 0 && !explicit:
+		return max, nil
+	case d == 0 || d > max:
+		return 0, violation("MaxIdleTime", "control clients must be disconnected after at most %s without input", max)
 	}
 	return d, nil
 }

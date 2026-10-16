@@ -7,6 +7,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dmdhrumilmistry/setu/internal/audit"
@@ -69,6 +70,10 @@ type peer struct {
 	viewer      *desktop.Viewer   // desktop shares, once ready
 	inputErrAt  time.Time         // last remote input failure reported
 	uploads     int               // uploads in progress
+
+	lastInput   atomic.Int64 // unix nanoseconds of the client's last input
+	idleWarned  atomic.Bool
+	idleClosing atomic.Bool
 }
 
 // newPeer registers a peer after checking admission.
@@ -173,6 +178,7 @@ func (p *peer) onMessage(msg webrtc.DataChannelMessage) {
 
 	if !msg.IsString {
 		if st == stateReady && p.role == proto.RoleControl && p.s.desk == nil && len(msg.Data) <= maxInputFrame {
+			p.touch()
 			input.Write(msg.Data)
 			p.s.writeInput(msg.Data)
 		}
@@ -246,6 +252,7 @@ func (p *peer) activate() {
 	// so no keystroke can reach the PTY unaudited.
 	p.state = stateReady
 	p.client = &c
+	p.touch()
 	if p.role == proto.RoleControl && s.desk == nil {
 		p.input = s.audit.Input(c, s.passwordPrompt)
 	}

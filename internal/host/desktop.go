@@ -224,6 +224,7 @@ func (p *peer) onDesktopMessage(c proto.Control) {
 	if p.role != proto.RoleControl {
 		return
 	}
+	p.touch()
 	var err error
 	switch c.T {
 	case proto.CtlPointer:
