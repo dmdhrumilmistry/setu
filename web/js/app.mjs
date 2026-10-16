@@ -251,7 +251,7 @@ function onReady(m) {
   document.title = `setu · ${m.cmd || 'terminal'}`;
   if (m.kind === 'desktop') {
     show('screen-desk');
-    state.desk = createDesktop({ send: sendCtl, control: state.role === 'control' });
+    state.desk = createDesktop({ send: sendCtl, control: state.role === 'control', hostOS: m.os });
     for (const b of state.screenEarly) state.desk.frame(b);
     state.screenEarly = [];
   } else {

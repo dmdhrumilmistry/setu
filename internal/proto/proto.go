@@ -136,6 +136,9 @@ type Control struct {
 	// Kind is what the session shares (sent with "ready"); empty means a
 	// terminal, for hosts that predate desktop sharing.
 	Kind string `json:"kind,omitempty"`
+	// OS is the host's operating system (GOOS) for desktop shares, so a
+	// client can map keys between Mac and PC keyboards.
+	OS string `json:"os,omitempty"`
 
 	// Desktop fields. Coordinates are pixels of the shared display.
 	Displays []DisplayInfo `json:"displays,omitempty"`

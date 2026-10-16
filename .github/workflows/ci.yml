@@ -74,6 +74,8 @@ jobs:
           node-version: 22
       - name: crypto parity with Go
         run: node --test web/test/crypto.test.mjs
+      - name: key mapping between Mac and PC keyboards
+        run: node --test web/test/keymap.test.mjs
       - name: vendored files untouched
         run: cd web/vendor && sha256sum -c SHA256SUMS
 
@@ -94,6 +96,6 @@ jobs:
         run: SETU_LOCAL_RELAY=1 node web/test/browser-e2e.mjs
       - name: browser -> web client -> local relay -> setu desktop (Xvfb)
         run: |
-          sudo apt-get install -y xvfb x11-apps
+          sudo apt-get install -y xvfb x11-apps xclip
           # Xvfb starts solid black, which the test rightly calls blank: put a window on it (away from the centre the test clicks).
           xvfb-run -a -s "-screen 0 1280x800x24" sh -c 'xclock -geometry 400x400+0+0 & sleep 1; SETU_LOCAL_RELAY=1 SETU_DESKTOP_INPUT_TEST=1 node web/test/desktop-e2e.mjs'

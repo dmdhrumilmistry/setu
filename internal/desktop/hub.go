@@ -183,7 +183,7 @@ func (h *Hub) kick() {
 func (h *Hub) Run(ctx context.Context) {
 	frame := time.NewTicker(time.Second / time.Duration(h.opt.FPS))
 	defer frame.Stop()
-	clip := time.NewTicker(500 * time.Millisecond)
+	clip := time.NewTicker(250 * time.Millisecond)
 	defer clip.Stop()
 	layout := time.NewTicker(5 * time.Second)
 	defer layout.Stop()

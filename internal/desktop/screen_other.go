@@ -1,4 +1,4 @@
-//go:build !windows && !linux && !freebsd && !netbsd && !openbsd && !dragonfly
+//go:build !windows && !darwin && !linux && !freebsd && !netbsd && !openbsd && !dragonfly
 
 package desktop
 
@@ -8,5 +8,5 @@ import (
 )
 
 func open() (Screen, error) {
-	return nil, fmt.Errorf("%w (%s): use Windows, or Linux/BSD with an X11 session", ErrUnsupported, runtime.GOOS)
+	return nil, fmt.Errorf("%w (%s): use Windows, macOS, or Linux/BSD with an X11 session", ErrUnsupported, runtime.GOOS)
 }
