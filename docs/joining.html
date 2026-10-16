@@ -134,6 +134,25 @@ Mac) sends from the keyboard.</p>
 <h3 id="pasting-an-invite">Pasting an invite</h3>
 <p>You can also open the web client directly and paste an invite link, a bare
 <code>k=...</code> fragment, or a manual-mode offer code into the box on its home screen.</p>
+<h3 id="uploading-files">Uploading files</h3>
+<p>With a control link you can send files to the shared computer: press
+<strong>Upload</strong> (in the terminal's key bar, or the remote desktop toolbar), or drop
+files onto the terminal or the remote screen. They are saved in
+<code>~/Downloads/setu</code> on that computer (the host can choose another folder with
+<code>--upload-dir</code>, or turn uploads off with <code>--no-upload</code>), and the browser shows
+where, with a button to copy the path.</p>
+<ul>
+<li>A file never replaces an existing one: a second <code>notes.txt</code> is saved as
+<code>notes (1).txt</code>.</li>
+<li>Names are cleaned: folders, control characters and names Windows reserves
+are removed, so a file cannot land outside that folder.</li>
+<li>Files are saved readable only by the host's user and never executable;
+an interrupted upload leaves nothing behind. Files can be up to 2 GiB.</li>
+<li>The host's log, and its audit log, record each file with its size and
+SHA-256.</li>
+<li>View-only links cannot upload. Organizations can turn uploads off with the
+<code>DisableFileTransfer</code> <a href="mdm.html#settings">policy</a>.</li>
+</ul>
 <h2 id="from-a-terminal">From a terminal</h2>
 <pre><code class="language-sh">setu join 'https://dmdhrumilmistry.github.io/setu/#k=...'
 setu join 'k=...'
@@ -227,6 +246,7 @@ wrong passwords and mismatched verification codes.</p>
       <li class="l2"><a href="#from-a-browser">From a browser</a></li>
       <li class="l3"><a href="#on-a-phone">On a phone</a></li>
       <li class="l3"><a href="#pasting-an-invite">Pasting an invite</a></li>
+      <li class="l3"><a href="#uploading-files">Uploading files</a></li>
       <li class="l2"><a href="#from-a-terminal">From a terminal</a></li>
       <li class="l2"><a href="#get-approved-automatically">Get approved automatically</a></li>
       <li class="l2"><a href="#manual-mode">Manual mode</a></li>

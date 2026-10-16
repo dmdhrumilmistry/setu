@@ -177,6 +177,16 @@ can be turned off explicitly, for example <code>--qr=false</code>.</p>
 <td>Also write the invite link(s) to PATH (mode 0600).</td>
 </tr>
 <tr>
+<td><code>--upload-dir PATH</code></td>
+<td><code>~/Downloads/setu</code></td>
+<td>Where files that control clients upload are saved (see <a href="joining.html#uploading-files">Uploading files</a>).</td>
+</tr>
+<tr>
+<td><code>--no-upload</code></td>
+<td>off</td>
+<td>Do not accept file uploads.</td>
+</tr>
+<tr>
 <td><code>--verbose</code></td>
 <td>off</td>
 <td>Verbose logging.</td>
@@ -522,6 +532,11 @@ the terminal), plus:</p>
 <td><code>--web-url URL</code></td>
 <td>GitHub Pages</td>
 <td>Base URL of the web client.</td>
+</tr>
+<tr>
+<td><code>--no-upload</code></td>
+<td>off</td>
+<td>Do not accept file uploads from clients (they are saved to <code>~/Downloads/setu</code> otherwise).</td>
 </tr>
 <tr>
 <td><code>--desktop</code></td>

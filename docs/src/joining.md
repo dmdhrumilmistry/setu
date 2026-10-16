@@ -40,6 +40,26 @@ Mac) sends from the keyboard.
 You can also open the web client directly and paste an invite link, a bare
 `k=...` fragment, or a manual-mode offer code into the box on its home screen.
 
+### Uploading files
+
+With a control link you can send files to the shared computer: press
+**Upload** (in the terminal's key bar, or the remote desktop toolbar), or drop
+files onto the terminal or the remote screen. They are saved in
+`~/Downloads/setu` on that computer (the host can choose another folder with
+`--upload-dir`, or turn uploads off with `--no-upload`), and the browser shows
+where, with a button to copy the path.
+
+* A file never replaces an existing one: a second `notes.txt` is saved as
+  `notes (1).txt`.
+* Names are cleaned: folders, control characters and names Windows reserves
+  are removed, so a file cannot land outside that folder.
+* Files are saved readable only by the host's user and never executable;
+  an interrupted upload leaves nothing behind. Files can be up to 2 GiB.
+* The host's log, and its audit log, record each file with its size and
+  SHA-256.
+* View-only links cannot upload. Organizations can turn uploads off with the
+  `DisableFileTransfer` [policy](mdm.md#settings).
+
 ## From a terminal
 
 ```sh

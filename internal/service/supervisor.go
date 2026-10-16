@@ -301,6 +301,11 @@ func hostConfig(name string, p *Profile, pol *policy.Policy) (host.Config, error
 		PasswordVerifier: p.Password,
 		MaxClients:       p.MaxClients,
 	}
+	if !p.NoUpload && pol.FileTransferAllowed() {
+		if cfg.UploadDir, err = host.DefaultUploadDir(); err != nil {
+			return host.Config{}, err
+		}
+	}
 	if d := p.Desktop; d != nil {
 		cfg.Command = nil
 		cfg.Desktop = &host.DesktopConfig{FPS: d.FPS, Display: d.Display, X11Display: d.X11Display, XAuthority: d.XAuthority}

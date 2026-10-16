@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -160,6 +161,8 @@ func serve(sub string, args []string) (int, error) {
 	}
 	qr := fs.Bool("qr", true, "print a QR code of the invite link")
 	linkFile := fs.String("link-file", "", "also write the invite link(s) to this file (mode 0600)")
+	uploadDir := fs.String("upload-dir", "", "where files uploaded by control clients are saved (default ~/Downloads/setu)")
+	noUpload := fs.Bool("no-upload", false, "do not accept file uploads from clients")
 	verbose := fs.Bool("verbose", false, "verbose logging")
 	auditOn := fs.Bool("audit", false, "send an audit log (connections and typed commands) to an OpenTelemetry collector; see -audit-* flags")
 	auditOpts := addAuditFlags(fs, "audit-", false)
@@ -364,6 +367,9 @@ func serve(sub string, args []string) (int, error) {
 		cfg.Command = nil
 		cfg.Desktop = &host.DesktopConfig{FPS: *fps, Display: *display}
 	}
+	if cfg.UploadDir, err = uploadDirFor(*uploadDir, *noUpload, pol); err != nil {
+		return 1, err
+	}
 
 	customRelays := relays
 	if strings.Join(relays, ",") == strings.Join(nostr.DefaultRelays, ",") {
@@ -450,6 +456,9 @@ func serve(sub string, args []string) (int, error) {
 			}
 		}
 		notes = append(notes, fmt.Sprintf("max %d client(s)", *maxClients))
+		if cfg.UploadDir != "" {
+			notes = append(notes, "uploads saved to "+cfg.UploadDir)
+		}
 		if auditCfg.Enabled() {
 			notes = append(notes, "audited to "+collectorHost(auditCfg.Endpoint))
 		}
@@ -502,6 +511,17 @@ func serve(sub string, args []string) (int, error) {
 	code, err := s.Run(ctx)
 	fmt.Fprintf(os.Stderr, "\r\n[setu] session ended (exit code %d)\n", code)
 	return code, err
+}
+
+// uploadDirFor resolves where uploads go ("" = uploads off).
+func uploadDirFor(dir string, off bool, pol *policy.Policy) (string, error) {
+	if off || !pol.FileTransferAllowed() {
+		return "", nil
+	}
+	if dir == "" {
+		return host.DefaultUploadDir()
+	}
+	return filepath.Abs(dir)
 }
 
 func runJoin(args []string) (int, error) {

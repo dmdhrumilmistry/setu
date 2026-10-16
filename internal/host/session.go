@@ -79,6 +79,10 @@ type Config struct {
 	Log        io.Writer
 	Verbose    bool
 
+	// UploadDir is where control clients' uploads are saved; empty turns
+	// uploads off.
+	UploadDir string
+
 	// Audit, if not nil, receives session, client and command records.
 	Audit *audit.Logger
 }

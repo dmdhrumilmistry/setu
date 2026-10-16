@@ -118,6 +118,10 @@ an SSH private key.</p>
 <td>View-only links are separate secrets. The host decides each client's role from which secret decrypted the request, never from what the client claims.</td>
 </tr>
 <tr>
+<td>File upload</td>
+<td>Control clients only, on a channel of its own. Files go to one folder under a cleaned name (no folders, control characters or reserved names), never replace a file, are readable only by the host user, are capped at 2 GiB, and are deleted if the transfer breaks. Each is logged with its SHA-256. <code>--no-upload</code> or the <code>DisableFileTransfer</code> policy turns uploads off.</td>
+</tr>
+<tr>
 <td>Remote desktop</td>
 <td><code>setu desktop</code> uses the same links, passwords, approval and audit log. View-only clients cannot send input, receive the clipboard or switch displays, enforced by the host. Keys and buttons a client holds are released when it leaves. Clipboard contents and keystrokes are never logged, only sizes and counts. The <code>DisableDesktop</code> policy turns it off.</td>
 </tr>

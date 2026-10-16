@@ -54,8 +54,10 @@ type Profile struct {
 	// Desktop, if set, makes the profile share this computer's desktop
 	// (screen, mouse, keyboard, clipboard) instead of running Command.
 	Desktop *DesktopProfile `json:"desktop,omitempty"`
-	Dir     string          `json:"dir,omitempty"`
-	Enabled bool            `json:"enabled"`
+	// NoUpload refuses file uploads from clients.
+	NoUpload bool   `json:"no_upload,omitempty"`
+	Dir      string `json:"dir,omitempty"`
+	Enabled  bool   `json:"enabled"`
 	// ControlKey and ViewKey are shared links: audit records can only say
 	// "someone holding the shared link". Either may be empty.
 	ControlKey string `json:"control_key,omitempty"`
