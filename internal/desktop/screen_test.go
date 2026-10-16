@@ -5,6 +5,7 @@ import (
 	"image"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/dmdhrumilmistry/setu/internal/desktop"
 )
@@ -54,8 +55,16 @@ func TestRealScreen(t *testing.T) {
 	if err := scr.MoveMouse(x, y); err != nil {
 		t.Fatalf("move mouse: %v", err)
 	}
-	if cx, cy, _ := scr.Cursor(); abs(cx-x) > 1 || abs(cy-y) > 1 {
-		t.Fatalf("pointer at %d,%d after moving to %d,%d", cx, cy, x, y)
+	// macOS applies posted events asynchronously: give the cursor a moment.
+	for i := 0; ; i++ {
+		cx, cy, _ := scr.Cursor()
+		if abs(cx-x) <= 1 && abs(cy-y) <= 1 {
+			break
+		}
+		if i == 20 {
+			t.Fatalf("pointer at %d,%d after moving to %d,%d", cx, cy, x, y)
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
 	for _, err := range []error{scr.Key("ShiftLeft", true), scr.Key("ShiftLeft", false), scr.Scroll(0, 1), scr.Type("a")} {
 		if err != nil && !errors.Is(err, desktop.ErrUnsupported) {

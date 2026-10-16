@@ -145,6 +145,9 @@ try {
     page.on('dialog', (d) => d.accept());
     await page.goto('about:blank');
     await until(() => /remote input: 1 clicks, [1-9]\d* key presses/.test(log), 40000, 'input summary in the host log');
+    // Counted is not the same as applied: the host reports when the system
+    // refused input (for example a missing macOS permission).
+    if (/remote input failed|not control it yet/i.test(log)) throw new Error('the host could not apply remote input');
     console.log('OK: mouse and keyboard input reached the host');
   }
   ok = true;

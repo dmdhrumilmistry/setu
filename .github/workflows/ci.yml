@@ -34,12 +34,14 @@ jobs:
             GOOS=${t%/*} GOARCH=${t#*/} CGO_ENABLED=0 go build -o /dev/null ./cmd/setu
           done
 
-  # Real PTY/ConPTY + WebRTC e2e tests on the other host platforms.
+  # Real PTY/ConPTY + WebRTC e2e tests on the other host platforms, and the
+  # remote desktop backend on several macOS versions (input is injected on
+  # the macOS runners, which allow posting events).
   go-os:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest, macos-15, macos-26, macos-26-intel]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -48,6 +50,8 @@ jobs:
           go-version-file: go.mod
       - run: go vet ./...
       - run: go test -count=1 -v ./...
+        env:
+          SETU_DESKTOP_INPUT_TEST: ${{ startsWith(matrix.os, 'macos') && '1' || '' }}
       - run: go build -o bin/ ./cmd/setu
       - name: CLI smoke test (background share + join over public relays)
         shell: bash
@@ -99,3 +103,22 @@ jobs:
           sudo apt-get install -y xvfb x11-apps xclip
           # Xvfb starts solid black, which the test rightly calls blank: put a window on it (away from the centre the test clicks).
           xvfb-run -a -s "-screen 0 1280x800x24" sh -c 'xclock -geometry 400x400+0+0 & sleep 1; SETU_LOCAL_RELAY=1 SETU_DESKTOP_INPUT_TEST=1 node web/test/desktop-e2e.mjs'
+
+  # A real browser controlling `setu desktop` on a real Mac (public relays:
+  # Go on macOS verifies TLS with the system, so the local test relay's
+  # self-signed certificate cannot be trusted there).
+  desktop-e2e-macos:
+    runs-on: macos-26
+    needs: [go-os, web]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm i --no-save playwright@1.63.0 && npx playwright install chromium
+      - run: go build -o setu ./cmd/setu
+      - name: browser -> web client -> public relays -> setu desktop on macOS
+        run: SETU_DESKTOP_INPUT_TEST=1 node web/test/desktop-e2e.mjs

@@ -65,7 +65,7 @@ The full protocol is in [Design and protocol](DESIGN.md).
 | Windows 10 1809+ / Server 2019+ | yes (ConPTY; default shell PowerShell) | terminal or browser |
 | Phones and tablets | no | browser |
 
-[Remote desktop](desktop.md) hosting (`setu desktop`) works on Windows, macOS 13+ and Linux or BSD with an X11 session.
+[Remote desktop](desktop.md) hosting (`setu desktop`) works on Windows, macOS 12+ and Linux or BSD with an X11 session.
 
 ## Where to next
 
