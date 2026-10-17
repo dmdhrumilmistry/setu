@@ -55,10 +55,23 @@ type Config struct {
 	// PasswordVerifier is an alternative to Password: a key derived ahead
 	// of time, so the plaintext never has to be stored.
 	PasswordVerifier *secure.PasswordVerifier
-	MaxClients       int           // concurrent authenticated clients
-	Once             bool          // disable invites after the first successful join
-	Approve          bool          // ask on the host terminal before admitting a client
-	Expire           time.Duration // disable invites after this long (0 = never)
+	// PasswordEveryJoin asks for the password on every new join. By
+	// default a device that proved the password once (with a verified
+	// device key) is remembered and may join again without it; see
+	// Devices. Reconnecting with a resume token never asks either way.
+	PasswordEveryJoin bool
+	// Devices remembers which devices proved the password (or a pairing
+	// code). nil keeps them in memory for the life of this share.
+	Devices Devices
+	// RequireDevice admits only devices that Devices already knows: a new
+	// device must prove the active pairing code from Pairing, after which
+	// it is known. It excludes Password and PasswordVerifier.
+	RequireDevice bool
+	Pairing       Pairer
+	MaxClients    int           // concurrent authenticated clients
+	Once          bool          // disable invites after the first successful join
+	Approve       bool          // ask on the host terminal before admitting a client
+	Expire        time.Duration // disable invites after this long (0 = never)
 	// TrustedDevices are device key fingerprints approved without asking
 	// (secure.DeviceFingerprint form). Answering "a" at the prompt adds a
 	// device to this set, in memory, for the rest of the session.
@@ -141,6 +154,7 @@ type Session struct {
 	router    *stdinRouter
 	approval  sync.Mutex
 	trusted   map[string]bool // device fingerprints approved automatically (guarded by approval)
+	devices   Devices         // devices that may skip the password; nil = ask every join
 	rawMode   bool
 	mirroring bool
 	logMu     sync.Mutex
@@ -199,6 +213,20 @@ func New(cfg Config) (*Session, error) {
 			return nil, err
 		}
 		s.pwSalt, s.pwIter, s.pwKey = v.Salt, v.Iter, v.Key
+	}
+	switch {
+	case cfg.RequireDevice && s.pwKey != nil:
+		return nil, errors.New("a share that admits only known devices has pairing codes, not a password")
+	case cfg.RequireDevice && cfg.PasswordEveryJoin:
+		return nil, errors.New("a share that admits only known devices cannot ask for a password every join")
+	case cfg.RequireDevice && (cfg.Devices == nil || cfg.Manual):
+		return nil, errors.New("admitting only known devices needs a device store (and nostr signaling)")
+	case cfg.PasswordEveryJoin || cfg.Manual:
+		// Ask every time (a manual share has one client anyway).
+	case cfg.Devices != nil:
+		s.devices = cfg.Devices
+	case s.pwKey != nil:
+		s.devices = newMemoryDevices()
 	}
 	s.host, _ = os.Hostname()
 	return s, nil
@@ -508,6 +536,7 @@ func (s *Session) maintain(ctx context.Context) {
 			return
 		case <-t.C:
 			s.dropIdle()
+			s.dropRevoked()
 			s.gcTickets()
 		}
 	}

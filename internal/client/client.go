@@ -27,6 +27,9 @@ type Options struct {
 	Relays []string // override relays (else link r= or defaults)
 	// Password is called when the host requires one.
 	Password func() (string, error)
+	// PairingCode is called when the host admits only paired devices and
+	// this one is new; nil falls back to Password.
+	PairingCode func() (string, error)
 	// ShowAnswer prints the manual-mode answer code for the user to send back.
 	ShowAnswer func(code string)
 	Logf       func(format string, args ...any)
@@ -85,6 +88,7 @@ type Conn struct {
 	Role, Cmd, Host string
 	SAS             string
 	Approval        string               // how the host admitted us: proto.Approval* or empty
+	Auth            string               // how we authenticated (proto.Auth* from "ready"; empty from older hosts)
 	Out             <-chan []byte        // terminal output
 	Ctl             <-chan proto.Control // control frames after ready
 	Closed, Failed  <-chan struct{}
@@ -434,7 +438,45 @@ func handshake(ctx context.Context, p *peerConn, opt Options, rs *resumeState) (
 
 	send := func(c proto.Control) error { return sendCtl(dc, c) }
 
+	// proof answers the hello's password (or pairing code) challenge.
+	proof := func(hello proto.Control) ([]byte, error) {
+		ask, what := opt.Password, "a password"
+		if hello.Secret == proto.SecretPairing {
+			what = "a pairing code (run `setu service pair` on the host)"
+			if opt.PairingCode != nil {
+				ask = opt.PairingCode
+			}
+		}
+		if ask == nil {
+			return nil, errors.New("host requires " + what)
+		}
+		pw, err := ask()
+		if err != nil {
+			return nil, err
+		}
+		if hello.Secret == proto.SecretPairing {
+			pw = secure.NormalizePairingCode(pw)
+		}
+		key, err := secure.PasswordKey(pw, hello.Salt, hello.Iter)
+		if err != nil {
+			return nil, err
+		}
+		return secure.AuthProof(key, hello.Nonce, localFP, remoteFP), nil
+	}
+	newAuth := func(hello proto.Control) (proto.Control, error) {
+		auth := proto.Control{T: proto.CtlAuth, Client: opt.Info}
+		if opt.DeviceKey != nil {
+			sig, err := opt.DeviceKey.Sign(hello.Nonce, localFP, remoteFP)
+			if err != nil {
+				return auth, err
+			}
+			auth.DeviceKey, auth.DeviceSig = opt.DeviceKey.Public(), sig
+		}
+		return auth, nil
+	}
+
 	// Handshake: hello -> auth -> ready.
+	var hello proto.Control
 	conn := &Conn{opt: opt, p: p, pc: pc, dc: dc, SAS: sas, Out: out, Ctl: ctl, Closed: closed, Failed: failed}
 	for conn.Role == "" {
 		select {
@@ -447,32 +489,39 @@ func handshake(ctx context.Context, p *peerConn, opt Options, rs *resumeState) (
 				if rs == nil {
 					opt.Logf("connected peer-to-peer. Verification code: %s (should match the host)", sas)
 				}
-				auth := proto.Control{T: proto.CtlAuth}
-				auth.Client = opt.Info
-				if opt.DeviceKey != nil {
-					sig, err := opt.DeviceKey.Sign(c.Nonce, localFP, remoteFP)
-					if err != nil {
-						return nil, err
-					}
-					auth.DeviceKey, auth.DeviceSig = opt.DeviceKey.Public(), sig
+				hello = c
+				auth, err := newAuth(c)
+				if err != nil {
+					return nil, err
 				}
-				if rs != nil {
+				switch {
+				case rs != nil:
 					// The resume token replaces the password proof.
 					pos := rs.pos
 					auth.Resume, auth.Pos = rs.token, &pos
-				} else if c.Auth == proto.AuthPassword {
-					if opt.Password == nil {
-						return nil, errors.New("host requires a password")
-					}
-					pw, err := opt.Password()
-					if err != nil {
+				case c.Auth == proto.AuthDevice && opt.DeviceKey == nil:
+					return nil, errors.New("this host admits only paired devices, and this client has no device key (do not use --no-remember)")
+				case c.Auth == proto.AuthPassword && c.DeviceAuth && opt.DeviceKey != nil:
+					// Try this device first: a host that remembers it does not
+					// need the password again, and asks for it (CtlSecret) if not.
+				case c.Auth == proto.AuthPassword:
+					if auth.Proof, err = proof(c); err != nil {
 						return nil, err
 					}
-					key, err := secure.PasswordKey(pw, c.Salt, c.Iter)
-					if err != nil {
-						return nil, err
-					}
-					auth.Proof = secure.AuthProof(key, c.Nonce, localFP, remoteFP)
+				}
+				if err := send(auth); err != nil {
+					return nil, err
+				}
+			case proto.CtlSecret:
+				if hello.Nonce == nil || rs != nil {
+					return nil, errors.New("host asked for a password out of turn")
+				}
+				auth, err := newAuth(hello)
+				if err != nil {
+					return nil, err
+				}
+				if auth.Proof, err = proof(hello); err != nil {
+					return nil, err
 				}
 				if err := send(auth); err != nil {
 					return nil, err
@@ -481,7 +530,7 @@ func handshake(ctx context.Context, p *peerConn, opt Options, rs *resumeState) (
 				if c.Kind == proto.KindDesktop {
 					return nil, errors.New("this invite shares a remote desktop: open the browser link instead of using setu join")
 				}
-				conn.Role, conn.Cmd, conn.Host, conn.Approval = c.Role, c.Cmd, c.Host, c.Approval
+				conn.Role, conn.Cmd, conn.Host, conn.Approval, conn.Auth = c.Role, c.Cmd, c.Host, c.Approval, c.Auth
 				conn.token, conn.Resumed = c.Resume, rs != nil && c.Resumed
 				if c.Pos != nil {
 					// Every output byte follows "ready", so recv counts from here.
@@ -504,6 +553,12 @@ func handshake(ctx context.Context, p *peerConn, opt Options, rs *resumeState) (
 
 	if conn.Approval == proto.ApprovalTrusted {
 		opt.Logf("the host recognised this device and approved it automatically")
+	}
+	switch conn.Auth {
+	case proto.AuthDevice:
+		opt.Logf("the host remembers this device: no password needed")
+	case proto.AuthPairing:
+		opt.Logf("this device is now paired with the host: it can join without a code from now on")
 	}
 	return conn, nil
 }

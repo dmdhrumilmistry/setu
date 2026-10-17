@@ -75,6 +75,12 @@ type peer struct {
 	idleWarned  atomic.Bool
 	idleClosing atomic.Bool
 
+	// askedSecret: the client offered only its device key, which the host
+	// did not know, and was asked for the password (CtlSecret) once.
+	askedSecret bool
+	// authBy is how the client got in (proto.Auth*), for "ready" and logs.
+	authBy string
+
 	// mustResume: admitted only because it named a resume ticket, so it
 	// must present that ticket's token instead of a normal login.
 	mustResume bool
@@ -173,10 +179,14 @@ func (p *peer) onOpen() {
 	p.state = stateAuthing
 	p.mu.Unlock()
 	hello := proto.Control{T: proto.CtlHello, V: proto.Version, Auth: proto.AuthNone, Nonce: p.nonce, Role: p.role}
-	if p.s.pwKey != nil {
-		hello.Auth = proto.AuthPassword
-		hello.Salt = p.s.pwSalt
-		hello.Iter = p.s.pwIter
+	if v, pairing := p.s.secret(); v != nil {
+		hello.Auth, hello.Salt, hello.Iter = proto.AuthPassword, v.Salt, v.Iter
+		hello.DeviceAuth = p.s.deviceAuth()
+		if pairing {
+			hello.Secret = proto.SecretPairing
+		}
+	} else if p.s.cfg.RequireDevice {
+		hello.Auth = proto.AuthDevice
 	}
 	p.sendControl(hello)
 }
@@ -226,16 +236,7 @@ func (p *peer) onMessage(msg webrtc.DataChannelMessage) {
 			p.resume(c)
 			return
 		}
-		if p.s.pwKey != nil {
-			want := secure.AuthProof(p.s.pwKey, p.nonce, p.localFP, p.remoteFP)
-			if !hmac.Equal(want, c.Proof) {
-				p.s.authFailed(p)
-				p.sendControl(proto.Control{T: proto.CtlError, Msg: "authentication failed"})
-				time.AfterFunc(200*time.Millisecond, func() { p.close("authentication failed") })
-				return
-			}
-		}
-		go p.activate(nil, nil)
+		p.login(c)
 	case proto.CtlPing:
 		if st != stateClosed {
 			p.pinger.Store(true)
@@ -256,11 +257,104 @@ func (p *peer) onMessage(msg webrtc.DataChannelMessage) {
 	}
 }
 
+// binding names the invite key the client joined with: its personal key's
+// name, or "*control" / "*view" for the shared links ('*' cannot start a
+// name). Remembered devices are tied to it.
+func (p *peer) binding() string {
+	if p.keyName != "" {
+		return p.keyName
+	}
+	return "*" + p.role
+}
+
+// login checks a new client's credentials: a device the host remembers, or
+// else the password (or pairing code), after which the device is
+// remembered. Without any secret configured, anyone with the invite gets in,
+// unless the host admits only known devices.
+func (p *peer) login(c proto.Control) {
+	s := p.s
+	p.mu.Lock()
+	fp := p.deviceFP
+	p.mu.Unlock()
+	binding := p.binding()
+	if s.knownDevice(fp, binding) {
+		p.authBy = proto.AuthDevice
+		go p.activate(nil, nil)
+		return
+	}
+	v, pairing := s.secret()
+	switch {
+	case v == nil && s.cfg.RequireDevice:
+		msg := "this device is not paired with the host. On the host, run `setu service pair " + s.cfg.Profile + "` and enter the code it shows"
+		if fp == "" {
+			msg = "this host admits only paired devices, and this client sent no device key"
+		}
+		s.audit.ClientRejected(p.auditClient(), "unknown device")
+		s.logf("client #%d refused: device %s is not paired", p.id, orNone(fp))
+		p.refuse(msg)
+		return
+	case v == nil:
+		p.authBy = proto.AuthNone
+		go p.activate(nil, nil)
+		return
+	case len(c.Proof) == 0 && fp != "" && s.deviceAuth() && !p.askedSecret:
+		// The client offered its device first (hello.DeviceAuth), and the
+		// host does not know it: ask for the secret on this connection.
+		p.askedSecret = true
+		p.mu.Lock()
+		p.state = stateAuthing
+		p.mu.Unlock()
+		p.sendControl(proto.Control{T: proto.CtlSecret})
+		return
+	}
+	if !hmac.Equal(secure.AuthProof(v.Key, p.nonce, p.localFP, p.remoteFP), c.Proof) {
+		s.authFailed(p)
+		p.refuse("authentication failed")
+		return
+	}
+	who := p.auditClient()
+	switch {
+	case pairing && fp == "":
+		p.refuse("pairing needs a device key, and this client sent none")
+		return
+	case pairing:
+		if err := s.cfg.Pairing.Pair(v, fp, binding, who); err != nil {
+			s.authFailed(p)
+			p.refuse("this pairing code was already used or has expired")
+			return
+		}
+		s.logf("client #%d paired device %s (%s); it can join without a code from now on", p.id, fp, who.ActorName())
+		p.authBy = proto.AuthPairing
+	default:
+		p.authBy = proto.AuthPassword
+		if fp != "" && s.devices != nil {
+			if err := s.devices.Remember(fp, binding, who); err != nil {
+				s.logf("WARNING: could not remember device %s: %v", fp, err)
+			}
+		}
+	}
+	go p.activate(nil, nil)
+}
+
+// refuse ends a handshake with an error the client shows.
+func (p *peer) refuse(msg string) {
+	p.sendControl(proto.Control{T: proto.CtlError, Msg: msg})
+	time.AfterFunc(200*time.Millisecond, func() { p.close(msg) })
+}
+
 // resume handles an "auth" that presents a resume token. The token stands
 // in for the password and the approval the client passed when it first
 // joined; a client that only got in by naming a ticket has no other way in.
 func (p *peer) resume(c proto.Control) {
 	t, old, err := p.s.claimTicket(p, c.Resume)
+	if err == nil && p.s.cfg.RequireDevice && !p.s.knownDevice(t.deviceFP, p.binding()) {
+		// The device was removed since it joined: the ticket dies with it.
+		p.s.revokeTicket(p)
+		if old != nil {
+			old.close("device removed from the host")
+		}
+		err = errResume
+	}
 	if err != nil {
 		if p.mustResume {
 			p.s.authFailed(p)
@@ -289,6 +383,7 @@ func (p *peer) activate(t *ticket, pos *int64) {
 		}
 	} else {
 		how = t.approval
+		p.authBy = t.authBy
 	}
 	s := p.s
 	c := p.auditClient()
@@ -328,7 +423,7 @@ func (p *peer) activate(t *ticket, pos *int64) {
 		from, resumed = *pos, true
 	}
 	ready := proto.Control{T: proto.CtlReady, V: proto.Version, Role: p.role, Cmd: s.commandLine(), Host: s.host, Cols: s.cols, Rows: s.rows,
-		Approval: how, Kind: s.kind(), OS: s.hostOS(), Upload: s.uploadsAllowed(p.role), Resume: token}
+		Approval: how, Auth: p.authBy, Kind: s.kind(), OS: s.hostOS(), Upload: s.uploadsAllowed(p.role), Resume: token}
 	if s.desk == nil {
 		ready.Pos, ready.Resumed = &from, resumed
 	}

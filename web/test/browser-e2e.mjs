@@ -164,6 +164,40 @@ try {
   if (await page.evaluate(() => sessionStorage.length) !== 0) throw new Error('session kept after Leave');
   console.log('OK: Leave forgot the session in this tab');
 
+  // Joining afresh from the same browser: the host remembers its device key
+  // from the password given above, so it does not ask again.
+  await page.goto(url);
+  await page.waitForSelector('#screen-term:not([hidden])', { timeout: 60000 });
+  if (!(await page.isHidden('#pw-form'))) throw new Error('a remembered device was asked for the password again');
+  await until(async () => /remembered device/.test(await page.textContent('#status')), 15000, 'remembered device status');
+  console.log('OK: a fresh join from a remembered device skipped the password');
+
+  // Swiping on the terminal scrolls its scrollback instead of pulling the
+  // page (which reloads it on phones).
+  await page.click('#term');
+  for (let i = 0; i < 80; i++) await page.keyboard.type(`line${i}\n`);
+  await until(async () => (await rows()).includes('got:line79'), 20000, 'scrollback filled');
+  await page.evaluate(() => { window.__notReloaded = true; });
+  const swipe = (dy) => page.evaluate((dy) => {
+    const el = document.getElementById('term');
+    const r = el.getBoundingClientRect();
+    const x = r.left + r.width / 2;
+    const touch = (y) => new Touch({ identifier: 1, target: el, clientX: x, clientY: y });
+    const fire = (type, y) => el.dispatchEvent(new TouchEvent(type, { touches: type === 'touchend' ? [] : [touch(y)], changedTouches: [touch(y)], bubbles: true, cancelable: true }));
+    const y0 = r.top + 40;
+    fire('touchstart', y0);
+    for (let i = 1; i <= 20; i++) fire('touchmove', y0 + (dy * i) / 20);
+    fire('touchend', y0 + dy);
+  }, dy);
+  await swipe(600);
+  await until(async () => !(await rows()).includes('got:line79'), 5000, 'swipe down scrolled back');
+  if (!(await page.evaluate(() => window.__notReloaded))) throw new Error('swipe reloaded the page');
+  await swipe(-5000);
+  await until(async () => (await rows()).includes('got:line79'), 5000, 'swipe up scrolled to the bottom');
+  console.log('OK: touch swipes scroll the terminal');
+  await page.click('#leave');
+  await page.waitForSelector('#screen-home:not([hidden])', { timeout: 15000 });
+
   // Device keys: the home page shows this browser's (remembered) device key,
   // and the host verified the same key when it joined above.
   const home = await ctx.newPage();

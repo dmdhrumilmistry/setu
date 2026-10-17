@@ -43,6 +43,10 @@ export async function deviceKey(remember) {
       const k = memoryKey || (await generate());
       await idb('readwrite', (s) => s.put({ privateKey: k.privateKey, publicRaw: k.publicRaw }, ID));
       memoryKey = k;
+      // Ask the browser not to evict the key under storage pressure or
+      // after a stretch without visits (Safari's 7-day rule): losing it
+      // means pairing or giving the password again.
+      navigator.storage?.persist?.().catch(() => {});
       return k;
     } catch {
       /* storage blocked: fall through to memory */

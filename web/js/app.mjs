@@ -175,6 +175,7 @@ async function onMessage(e) {
       if (m.msg === ERR_RESUME && state.resume) return resumeRejected();
       return fail('Host: ' + m.msg);
     case 'pong': return;
+    case 'secret': return state.askSecret?.();
     case 'exit':
       state.ended = true;
       stopReconnect();
@@ -262,17 +263,21 @@ async function onHello(m) {
     }
     return msg;
   };
-  if (state.resume) {
-    // Reconnecting: the resume token replaces the password and approval.
-    sendCtl(await withDevice({ t: 'auth', resume: C.b64Encode(state.resume), pos: state.pos ?? undefined, client }));
-    step('Resuming the session…');
-  } else if (m.auth === 'password') {
-    setStatus('password required', 'warn');
+  // askSecret shows the password (or pairing code) form; the answer is a
+  // proof bound to this connection, never the secret itself.
+  const pairing = m.secret === 'pairing';
+  state.askSecret = () => {
+    state.askSecret = null; // the host asks at most once per connection
+    setStatus(pairing ? 'pairing code required' : 'password required', 'warn');
+    if (pairing) step('This device is new to the host. Enter the pairing code shown by `setu service pair` on the host; it is needed only once.');
+    else if (m.device_auth && dev) step('The host does not know this device yet. Enter the password once; the host then remembers this device.');
+    $('pw').placeholder = pairing ? 'Pairing code (for example 7K2M-QX9D-4HRT)' : 'Session password';
+    $('pw').autocomplete = pairing ? 'one-time-code' : 'current-password';
     $('pw-form').hidden = false;
     $('pw').focus();
     $('pw-form').onsubmit = async (ev) => {
       ev.preventDefault();
-      const pw = $('pw').value;
+      const pw = pairing ? C.normalizePairingCode($('pw').value) : $('pw').value;
       $('pw').value = '';
       $('pw-form').hidden = true;
       setStatus('verifying…');
@@ -285,6 +290,20 @@ async function onHello(m) {
         fail(String(err.message || err));
       }
     };
+  };
+  if (state.resume) {
+    // Reconnecting: the resume token replaces the password and approval.
+    sendCtl(await withDevice({ t: 'auth', resume: C.b64Encode(state.resume), pos: state.pos ?? undefined, client }));
+    step('Resuming the session…');
+  } else if (m.auth === 'password' && m.device_auth && dev) {
+    // The host remembers devices that gave the password once: offer this
+    // device first. If the host does not know it, it asks ("secret").
+    sendCtl(await withDevice({ t: 'auth', client }));
+    step('Checking whether the host remembers this device…');
+  } else if (m.auth === 'password') {
+    state.askSecret();
+  } else if (m.auth === 'device' && !dev) {
+    fail('This host admits only paired devices, and this browser cannot keep a device key (private browsing, or "Remember this device" is off).');
   } else {
     sendCtl(await withDevice({ t: 'auth', client }));
     step('If the host requires approval, it is being asked now...');
@@ -307,9 +326,11 @@ function onReady(m) {
   $('leave').hidden = !state.invite;
   keepSession(state.invite, state.resume);
   sendVisibility();
-  const trusted = m.approval === 'trusted' ? ' · trusted device' : '';
+  state.askSecret = null;
+  const trusted = m.approval === 'trusted' ? ' · trusted device' : m.auth === 'device' ? ' · remembered device' : '';
   setStatus((m.role === 'control' ? 'connected · control' : 'connected · view only') + trusted, 'ok');
-  if (trusted) $('status').title = 'The host recognised this device and approved it automatically';
+  if (trusted) $('status').title = m.approval === 'trusted' ? 'The host recognised this device and approved it automatically' : 'The host remembers this device, so no password was needed';
+  if (m.auth === 'pairing') toast('This device is now paired: it can join without a code from now on.');
   $('title').textContent = `${m.cmd || 'terminal'} @ ${m.host || 'host'}`;
   document.title = `setu · ${m.cmd || 'terminal'}`;
   // Control clients may upload files when the host allows it.
@@ -552,8 +573,9 @@ window.addEventListener('pageshow', (e) => {
   }
 });
 
+// Ask before leaving a live session, including one that is reconnecting.
 function beforeUnload(e) {
-  if (state.ready) { e.preventDefault(); e.returnValue = ''; }
+  if (state.connected && !state.ended) { e.preventDefault(); e.returnValue = ''; }
 }
 // Keep the screen on while connected (browsers drop the lock in the background).
 function wakeLock() {
@@ -591,6 +613,7 @@ function setupTerminal() {
   refit();
   new ResizeObserver(refit).observe($('term'));
   if (window.visualViewport) window.visualViewport.addEventListener('resize', refit);
+  touchScroll($('term'), term);
   term.onResize(({ cols, rows }) => { if (state.role === 'control') sendCtl({ t: 'resize', cols, rows }); });
   term.onData((d) => {
     if (state.ctrlArmed && d.length === 1) {
@@ -601,6 +624,79 @@ function setupTerminal() {
     sendInput(d);
   });
   setupKeys();
+}
+
+// Touch scrolling. xterm.js ignores swipes, so on phones they reached the
+// page instead and a downward swipe triggered pull-to-refresh, reloading the
+// page. A vertical swipe now scrolls the scrollback, with momentum. In
+// full-screen programs (the alternate screen, or programs that read the
+// mouse) it sends wheel events instead, which xterm turns into mouse reports
+// or arrow keys exactly as for a mouse wheel. Taps and sideways drags are
+// left alone, so tapping still focuses the terminal and opens the keyboard.
+function touchScroll(el, term) {
+  let x0 = 0, y0 = 0, lastY = null, lastX = 0, lastT = 0, vel = 0, acc = 0, raf = 0, scrolling = false;
+  const scrollback = () => term.buffer.active.type === 'normal' && term.modes.mouseTrackingMode === 'none';
+  const scroll = (px) => {
+    const h = (term.element?.clientHeight || el.clientHeight) / term.rows || 16;
+    acc += px;
+    const lines = Math.trunc(acc / h);
+    if (!lines) return;
+    acc -= lines * h;
+    if (scrollback()) return term.scrollLines(lines);
+    const target = term.element?.querySelector('.xterm-screen') || el;
+    for (let i = 0; i < Math.abs(lines); i++) {
+      target.dispatchEvent(new WheelEvent('wheel', {
+        deltaY: Math.sign(lines), deltaMode: WheelEvent.DOM_DELTA_LINE,
+        clientX: lastX, clientY: lastY ?? y0, bubbles: true, cancelable: true,
+      }));
+    }
+  };
+  el.addEventListener('touchstart', (e) => {
+    cancelAnimationFrame(raf);
+    if (e.touches.length !== 1) { lastY = null; return; }
+    const t = e.touches[0];
+    x0 = lastX = t.clientX;
+    y0 = lastY = t.clientY;
+    lastT = e.timeStamp;
+    vel = acc = 0;
+    scrolling = false;
+  }, { passive: true });
+  el.addEventListener('touchmove', (e) => {
+    if (lastY === null || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    if (!scrolling) {
+      const dy = Math.abs(t.clientY - y0);
+      if (dy < 8 || dy < Math.abs(t.clientX - x0)) return; // a tap or a sideways drag
+      scrolling = true;
+    }
+    e.preventDefault();
+    const dy = t.clientY - lastY;
+    vel = 0.8 * (dy / Math.max(1, e.timeStamp - lastT)) + 0.2 * vel; // px per ms, smoothed
+    lastX = t.clientX;
+    lastY = t.clientY;
+    lastT = e.timeStamp;
+    scroll(-dy); // finger up: newer lines
+  }, { passive: false });
+  const end = (e) => {
+    const flung = scrolling && e.type === 'touchend' && e.timeStamp - lastT < 100;
+    lastY = null;
+    scrolling = false;
+    // Momentum only for the scrollback: in full-screen programs a glide
+    // would keep sending keys after the finger has left.
+    if (!flung || !scrollback()) return;
+    let v = vel, prev = performance.now();
+    const glide = (now) => {
+      const dt = now - prev;
+      prev = now;
+      v *= 0.995 ** dt;
+      if (Math.abs(v) < 0.05) return;
+      scroll(-v * dt);
+      raf = requestAnimationFrame(glide);
+    };
+    raf = requestAnimationFrame(glide);
+  };
+  el.addEventListener('touchend', end);
+  el.addEventListener('touchcancel', end);
 }
 
 const KEYS = {
@@ -787,6 +883,14 @@ function boot() {
     const v = $('invite').value;
     $('invite').value = '';
     start(v);
+  });
+  // A link opened in this tab while it shows the home page only changes the
+  // fragment, which does not load the page again: join with it.
+  window.addEventListener('hashchange', () => {
+    const f = location.hash.slice(1);
+    if (!f || (state.connected && !state.ended) || state.invite) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    start(f);
   });
   const frag = location.hash.slice(1);
   if (frag) {

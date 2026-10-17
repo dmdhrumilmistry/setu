@@ -85,6 +85,11 @@ const (
 	// so the host stops expecting pings and keeps the session resumable
 	// for longer once such a client's connection drops.
 	CtlVisibility = "visibility"
+	// CtlSecret (host -> client) answers an "auth" that offered only a
+	// device key (see Control.DeviceAuth) when the host does not know that
+	// device yet: send "auth" again, with the password (or pairing code)
+	// proof, on the same connection.
+	CtlSecret = "secret"
 )
 
 // ErrResume is the "error" message a host sends when a resume token is not
@@ -123,12 +128,26 @@ type DisplayInfo struct {
 const (
 	AuthNone     = "none"
 	AuthPassword = "password"
+	// AuthDevice: only devices the host already knows may join, and there
+	// is nothing to type. The client sends its device key.
+	AuthDevice = "device"
+	// AuthPairing (sent with "ready" only): a new device proved a one-time
+	// pairing code and is now known to the host.
+	AuthPairing = "pairing"
 )
+
+// SecretPairing (Control.Secret in "hello") means Auth=password asks for a
+// one-time pairing code, not a session password. Clients normalize what the
+// user types with secure.NormalizePairingCode before deriving the key.
+const SecretPairing = "pairing"
 
 // Control is the JSON control frame. Byte slices are base64 (std) encoded.
 type Control struct {
-	T     string `json:"t"`
-	V     int    `json:"v,omitempty"`
+	T string `json:"t"`
+	V int    `json:"v,omitempty"`
+	// Auth is the auth method: what the host asks for (in "hello"), or how
+	// the client got in (in "ready": AuthDevice for a remembered device,
+	// AuthPairing, AuthPassword or AuthNone).
 	Auth  string `json:"auth,omitempty"`
 	Salt  []byte `json:"salt,omitempty"`
 	Iter  int    `json:"iter,omitempty"`
@@ -169,6 +188,15 @@ type Control struct {
 	Resumed bool `json:"resumed,omitempty"`
 	// Hidden (sent with "visibility"): the client is in the background.
 	Hidden bool `json:"hidden,omitempty"`
+
+	// DeviceAuth (sent with "hello") means the host remembers devices that
+	// proved the password once: a client with a device key may send "auth"
+	// with just that key first, and is asked for the password (CtlSecret)
+	// only if the host does not know the device.
+	DeviceAuth bool `json:"device_auth,omitempty"`
+	// Secret (sent with "hello") says what Auth=password asks for:
+	// empty for the session password, SecretPairing for a pairing code.
+	Secret string `json:"secret,omitempty"`
 
 	// Approval tells the client how it was admitted (sent with "ready"):
 	// ApprovalTrusted, ApprovalPrompt, or empty when no approval applied.

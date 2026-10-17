@@ -36,6 +36,10 @@ unmanaged.
 | `MaxClients` | int | Cap on concurrent clients. An unset `--max-clients` becomes the cap, and a higher explicit value is refused. |
 | `MaxShareDuration` | duration | `setu share` must expire within this time. Without `--expire`, it gets this value. |
 | `MaxKeyValidity` | duration | Service keys must expire within this time. Profiles that exceed it are not served until their keys are rotated. |
+| `PasswordEveryJoin` | bool | Hosts ask for the password on every join. By default setu remembers a device by its device key once it has given the password (`setu share --password` and password-mode service profiles); with this set, no device is remembered. |
+| `RequireDevicePairing` | bool | Service profiles must admit only paired devices (`setu service add --auth device`, the default): each new device enters a one-time code from `setu service pair` once and is then recognised by its device key. Cannot be combined with `RequirePassword`. |
+| `MaxPairingTime` | duration | Pairing codes must expire within this time. |
+| `MaxDevicesPerProfile` | int | A service profile may admit at most this many devices. |
 | `AllowedCommands` | list | Only these programs may be shared. A bare name (`claude`) matches the program name on any OS; an absolute path matches exactly. Remote desktop counts as `@desktop`, so a list without it also refuses `setu desktop`. |
 | `AllowedRelays` | list | Signaling may only use these relays, and they become the default. |
 | `AllowedWebURLs` | list | Invite links may only point at these web client base URLs, for example a self-hosted copy. |

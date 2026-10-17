@@ -151,3 +151,9 @@ export function parseInvite(s) {
   if (!inv.secret && !inv.offer) throw new Error('invite has neither k= nor o=');
   return inv;
 }
+
+// normalizePairingCode mirrors secure.NormalizePairingCode: upper case,
+// separators dropped, O read as 0 and I/L as 1 (Crockford base32).
+export function normalizePairingCode(s) {
+  return String(s).toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1').replace(/[^0-9A-Z]/g, '');
+}

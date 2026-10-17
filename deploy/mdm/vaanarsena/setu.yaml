@@ -35,6 +35,9 @@ spec:
             MaxClients: 2
             MaxShareDuration: 8h
             MaxKeyValidity: 720h
+            PasswordEveryJoin: true
+            MaxPairingTime: 15m
+            MaxDevicesPerProfile: 5
             AllowedCommands: [claude, bash, pwsh]
             AuditEndpoint: https://otel.example.com:4318/v1/logs
             AuditHeaders: {Authorization: "Bearer REPLACE_WITH_INGEST_ONLY_TOKEN"}
@@ -137,6 +140,32 @@ spec:
                     <text id="MaxKeyValidity" valueName="MaxKeyValidity" required="true" />
                   </elements>
                 </policy>
+                <policy name="PasswordEveryJoin" class="Machine" displayName="$(string.PasswordEveryJoin)" explainText="$(string.PasswordEveryJoin_Help)" key="Software\Policies\setu" valueName="PasswordEveryJoin">
+                  <parentCategory ref="Setu" />
+                  <supportedOn ref="SUPPORTED_Setu" />
+                  <enabledValue><decimal value="1" /></enabledValue>
+                  <disabledValue><decimal value="0" /></disabledValue>
+                </policy>
+                <policy name="RequireDevicePairing" class="Machine" displayName="$(string.RequireDevicePairing)" explainText="$(string.RequireDevicePairing_Help)" key="Software\Policies\setu" valueName="RequireDevicePairing">
+                  <parentCategory ref="Setu" />
+                  <supportedOn ref="SUPPORTED_Setu" />
+                  <enabledValue><decimal value="1" /></enabledValue>
+                  <disabledValue><decimal value="0" /></disabledValue>
+                </policy>
+                <policy name="MaxPairingTime" class="Machine" displayName="$(string.MaxPairingTime)" explainText="$(string.MaxPairingTime_Help)" presentation="$(presentation.MaxPairingTime)" key="Software\Policies\setu">
+                  <parentCategory ref="Setu" />
+                  <supportedOn ref="SUPPORTED_Setu" />
+                  <elements>
+                    <text id="MaxPairingTime" valueName="MaxPairingTime" required="true" />
+                  </elements>
+                </policy>
+                <policy name="MaxDevicesPerProfile" class="Machine" displayName="$(string.MaxDevicesPerProfile)" explainText="$(string.MaxDevicesPerProfile_Help)" presentation="$(presentation.MaxDevicesPerProfile)" key="Software\Policies\setu">
+                  <parentCategory ref="Setu" />
+                  <supportedOn ref="SUPPORTED_Setu" />
+                  <elements>
+                    <decimal id="MaxDevicesPerProfile" valueName="MaxDevicesPerProfile" minValue="1" maxValue="1000" required="true" />
+                  </elements>
+                </policy>
                 <policy name="AllowedCommands" class="Machine" displayName="$(string.AllowedCommands)" explainText="$(string.AllowedCommands_Help)" presentation="$(presentation.AllowedCommands)" key="Software\Policies\setu\AllowedCommands">
                   <parentCategory ref="Setu" />
                   <supportedOn ref="SUPPORTED_Setu" />
@@ -206,6 +235,9 @@ spec:
         - {locUri: ./Device/Vendor/MSFT/Policy/Config/setu~Policy~Setu/MaxClients, op: Replace, format: chr, data: "<enabled/><data id=\"MaxClients\" value=\"2\"/>"}
         - {locUri: ./Device/Vendor/MSFT/Policy/Config/setu~Policy~Setu/MaxShareDuration, op: Replace, format: chr, data: "<enabled/><data id=\"MaxShareDuration\" value=\"8h\"/>"}
         - {locUri: ./Device/Vendor/MSFT/Policy/Config/setu~Policy~Setu/MaxKeyValidity, op: Replace, format: chr, data: "<enabled/><data id=\"MaxKeyValidity\" value=\"720h\"/>"}
+        - {locUri: ./Device/Vendor/MSFT/Policy/Config/setu~Policy~Setu/PasswordEveryJoin, op: Replace, format: chr, data: "<enabled/>"}
+        - {locUri: ./Device/Vendor/MSFT/Policy/Config/setu~Policy~Setu/MaxPairingTime, op: Replace, format: chr, data: "<enabled/><data id=\"MaxPairingTime\" value=\"15m\"/>"}
+        - {locUri: ./Device/Vendor/MSFT/Policy/Config/setu~Policy~Setu/MaxDevicesPerProfile, op: Replace, format: chr, data: "<enabled/><data id=\"MaxDevicesPerProfile\" value=\"5\"/>"}
         - {locUri: ./Device/Vendor/MSFT/Policy/Config/setu~Policy~Setu/AllowedCommands, op: Replace, format: chr, data: "<enabled/><data id=\"AllowedCommands\" value=\"1\uF000claude\uF0002\uF000bash\uF0003\uF000pwsh\"/>"}
         - {locUri: ./Device/Vendor/MSFT/Policy/Config/setu~Policy~Setu/Audit, op: Replace, format: chr, data: "<enabled/><data id=\"AuditEndpoint\" value=\"https://otel.example.com:4318/v1/logs\"/><data id=\"AuditRequired\" value=\"true\"/><data id=\"AuditInput\" value=\"lines\"/><data id=\"AuditCAFile\" value=\"\"/><data id=\"AuditCertFile\" value=\"\"/><data id=\"AuditKeyFile\" value=\"\"/><data id=\"AuditInsecure\" value=\"false\"/>"}
         - {locUri: ./Device/Vendor/MSFT/Policy/Config/setu~Policy~Setu/AuditHeaders, op: Replace, format: chr, data: "<enabled/><data id=\"AuditHeaders\" value=\"Authorization\uF000Bearer REPLACE_WITH_INGEST_ONLY_TOKEN\"/>"}
@@ -247,6 +279,9 @@ spec:
             "MaxClients": 2,
             "MaxShareDuration": "8h",
             "MaxKeyValidity": "720h",
+            "PasswordEveryJoin": true,
+            "MaxPairingTime": "15m",
+            "MaxDevicesPerProfile": 5,
             "AllowedCommands": ["claude", "bash", "pwsh"],
             "AuditEndpoint": "https://otel.example.com:4318/v1/logs",
             "AuditHeaders": {"Authorization": "Bearer REPLACE_WITH_INGEST_ONLY_TOKEN"},

@@ -80,3 +80,9 @@ test('device signature is bound to the connection', async () => {
   assert.equal(await verify(new Uint8Array(32), FPA, FPB), false);
   assert.equal(await verify(vecNonce, FPA, 'sha-256 FF'), false);
 });
+
+test('pairing codes normalize like secure.NormalizePairingCode', () => {
+  // Same cases as internal/secure/pairing_test.go.
+  assert.equal(C.normalizePairingCode('7k2m-qx9d 4hrt'), '7K2MQX9D4HRT');
+  assert.equal(C.normalizePairingCode('oil-OIL'), '011011');
+});

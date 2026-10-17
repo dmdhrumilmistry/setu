@@ -51,6 +51,10 @@ Every setting is optional; without a policy setu behaves as unmanaged.
 | `MaxClients` | int | Cap on concurrent clients. An unset `--max-clients` becomes the cap; a larger explicit value is refused. |
 | `MaxShareDuration` | duration | `setu share` must expire within this time; without `--expire` it gets this value. |
 | `MaxKeyValidity` | duration | Service keys must expire within this time; profiles that exceed it are not served until rotated. |
+| `PasswordEveryJoin` | bool | Ask for the password on every join; a device that gave it is never remembered (by default setu remembers it by its device key). |
+| `RequireDevicePairing` | bool | Service profiles admit only paired devices (`setu service add --auth device`): each enters a one-time code from `setu service pair` once. Excludes `RequirePassword`. |
+| `MaxPairingTime` | duration | Pairing codes must expire within this time. |
+| `MaxDevicesPerProfile` | int | Most devices one service profile may admit. |
 | `AllowedCommands` | list | Only these programs may be shared. A bare name (`claude`) matches the program name on any OS; an absolute path matches exactly. Remote desktop counts as `@desktop`, so a list without it also refuses `setu desktop`. |
 | `AllowedRelays` | list | Only these relays may be used; they also become the default. |
 | `AllowedWebURLs` | list | Invite links may only point at these web client URLs. |
@@ -75,6 +79,9 @@ Example policy:
   "MaxClients": 2,
   "MaxShareDuration": "8h",
   "MaxKeyValidity": "720h",
+  "PasswordEveryJoin": true,
+  "MaxPairingTime": "15m",
+  "MaxDevicesPerProfile": 5,
   "AllowedCommands": ["claude", "bash", "pwsh"],
   "AuditEndpoint": "https://otel.example.com:4318/v1/logs",
   "AuditHeaders": {"Authorization": "Bearer REPLACE_WITH_INGEST_ONLY_TOKEN"},

@@ -102,9 +102,12 @@ Only STUN is involved, and pasting the answer is itself the approval.
 ### Data channel (`"setu"`, reliable and ordered)
 
 ```
-host  → {t:"hello", v:1, auth:"none"|"password", salt, iter, nonce, role}
-client→ {t:"auth", proof?}      proof = HMAC(PBKDF2(pw,salt,iter), "setu/v1/auth\n"‖nonce‖fpA‖fpB)
-host  → {t:"ready", role, cmd, host, cols, rows}   then the replay buffer
+host  → {t:"hello", v:1, auth:"none"|"password"|"device", salt, iter, nonce, role, device_auth?, secret?}
+client→ {t:"auth", proof?, device_key?, device_sig?}
+        proof = HMAC(PBKDF2(pw,salt,iter), "setu/v1/auth\n"‖nonce‖fpA‖fpB)
+host  → {t:"secret"}            only if the client offered just a device key the host does not know
+client→ {t:"auth", proof, device_key, device_sig}
+host  → {t:"ready", role, cmd, host, cols, rows, auth}   then the replay buffer
 host  → binary PTY output        client → binary keystrokes (dropped for role=view)
 client→ {t:"resize", cols, rows} (control only)
 host  → {t:"exit", code} | {t:"error", msg}
@@ -112,6 +115,27 @@ host  → {t:"exit", code} | {t:"error", msg}
 
 `fpA` and `fpB` are the DTLS fingerprints from both SDPs. They feed the proof
 and the 6-digit **SAS** that both sides display.
+
+**Remembered devices.** `device_sig` is an ECDSA P-256 signature over
+`"setu/v1/device\n"‖nonce‖fpA‖fpB` by the client's device key, so it proves
+possession of that key on this connection only. When a client proves the
+password together with a device key, the host remembers the key's fingerprint,
+tied to the invite key it used (a personal key's name, or the shared control
+or view link). With `device_auth:true` in the hello, a client that has a device
+key first sends `auth` without a proof: a remembered device is admitted
+(`ready.auth:"device"`), and an unknown one gets `{t:"secret"}` and answers
+with the proof on the same connection, so a wrong guess costs a real
+attempt and nothing is revealed. `setu share` remembers devices in memory for
+the life of the share; the service keeps them in `devices.json`.
+`--password-every-join` (or the `PasswordEveryJoin` policy) turns it off.
+
+**Paired devices.** A service profile with `require_device` admits only known
+devices (`hello.auth:"device"` when no pairing code is pending). `setu service
+pair` creates a one-time 60-bit code whose PBKDF2 verifier is offered as the
+hello's challenge with `secret:"pairing"`; a client that proves it, with a
+device key, is added and the code is consumed atomically under the store's
+lock. Removing a device disconnects it within seconds and kills its resume
+ticket.
 
 ### Reconnecting
 

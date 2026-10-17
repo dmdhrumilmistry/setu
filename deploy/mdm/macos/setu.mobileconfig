@@ -34,6 +34,12 @@
       <string>8h</string>
       <key>MaxKeyValidity</key>
       <string>720h</string>
+      <key>PasswordEveryJoin</key>
+      <true/>
+      <key>MaxPairingTime</key>
+      <string>15m</string>
+      <key>MaxDevicesPerProfile</key>
+      <integer>5</integer>
       <key>AllowedCommands</key>
       <array>
         <string>claude</string>

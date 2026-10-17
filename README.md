@@ -71,7 +71,8 @@ to end the share.
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `--password` | off | Prompt for a session password (or set `SETU_PASSWORD`). |
+| `--password` | off | Prompt for a session password (or set `SETU_PASSWORD`). Each device is asked once, then remembered by its device key. |
+| `--password-every-join` | off | With `--password`: ask on every new join instead of once per device. |
 | `--view-link` | off | Also create a read-only invite. |
 | `--once` | off | The invite stops working after the first successful join. |
 | `--expire` | `0` | Stop accepting new clients after this duration. |
@@ -117,7 +118,10 @@ keys have not expired. If a profile's command exits, the service restarts it,
 so the profile's link keeps working across reboots.
 
 ```sh
-setu service add claude -- claude      # prompts for a password, prints the links once
+setu service add claude -- claude      # prints the link + a one-time pairing code, starts the service at login
+setu service pair claude               # a code for one more device (single use, 15 minutes)
+setu service device list claude        # the devices this profile admits
+setu service device remove claude 3f2a-91c0-77de-0b4e-a1c9   # cut one off immediately
 setu service add --desktop office-pc    # an always-on remote desktop of this machine
 setu service install                   # start at login: systemd user unit / launchd agent / Task Scheduler
 setu service list                      # profiles, state, expiry
@@ -142,8 +146,12 @@ stricter than `setu share`:
   audit records name them reliably. `--no-shared-key` leaves no shared,
   anonymous control link at all. You can also revoke one person without
   affecting anyone else.
-* A password (12+ characters) is required unless you pass `--no-password`.
-  The service stores only a PBKDF2 verifier, never the password.
+* Only paired devices get in by default (`--auth device`). Each device
+  enters a one-time pairing code once; after that it is recognised by its
+  device key, a non-extractable key that never leaves the browser (or
+  `setu join`'s owner-only key file), so a leaked link alone is useless.
+  `--auth password` uses a 12+ character password instead, asked once per
+  device. The service stores only PBKDF2 verifiers, never the secrets.
 * Keys expire after `--valid-for` (default 90 days). `rotate` renews them.
 * `--max-clients` defaults to 1. `--once` and `--approve` are not available,
   because nobody is at the host terminal to answer.

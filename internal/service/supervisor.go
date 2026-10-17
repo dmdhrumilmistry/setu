@@ -250,6 +250,11 @@ func (sv *Supervisor) serve(ctx context.Context, name string, p *Profile, al *au
 			return
 		}
 		cfg.Audit, cfg.Log = al, out
+		store := &deviceStore{dir: sv.Dir, profile: name, logf: out.printf, now: time.Now, pol: pol}
+		cfg.Devices = store
+		if p.RequireDevice {
+			cfg.Pairing = store
+		}
 		if sv.hostHook != nil {
 			sv.hostHook(&cfg)
 		}
@@ -293,15 +298,20 @@ func hostConfig(name string, p *Profile, pol *policy.Policy) (host.Config, error
 		relays = p.relays()
 	}
 	cfg := host.Config{
-		Command:          p.Command,
-		Dir:              p.Dir,
-		Profile:          name,
-		Relays:           relays,
-		ICE:              p.ICE(),
-		PasswordVerifier: p.Password,
-		MaxClients:       p.MaxClients,
+		Command:           p.Command,
+		Dir:               p.Dir,
+		Profile:           name,
+		Relays:            relays,
+		ICE:               p.ICE(),
+		PasswordVerifier:  p.Password,
+		PasswordEveryJoin: p.PasswordEveryJoin,
+		RequireDevice:     p.RequireDevice,
+		MaxClients:        p.MaxClients,
 	}
 	cfg.RecordDir = p.RecordDir
+	if pol != nil && pol.PasswordEveryJoin && p.Password != nil {
+		cfg.PasswordEveryJoin = true
+	}
 	if cfg.IdleTimeout, err = pol.IdleTimeout(time.Duration(p.IdleTimeout), false); err != nil {
 		return host.Config{}, err
 	}
@@ -343,6 +353,10 @@ func hostConfig(name string, p *Profile, pol *policy.Policy) (host.Config, error
 type prefixWriter struct {
 	l      *log.Logger
 	prefix string
+}
+
+func (w *prefixWriter) printf(format string, args ...any) {
+	w.l.Printf(w.prefix+format, args...)
 }
 
 func (w *prefixWriter) Write(b []byte) (int, error) {

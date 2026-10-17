@@ -90,6 +90,13 @@ password never crosses the network: the host sends a challenge and the joiner
 answers with a proof bound to that exact encrypted connection. After 5 wrong
 passwords the share refuses new joiners for 10 minutes, and after 20 the invite
 is disabled for good.</p>
+<p>Each device is asked <strong>once</strong>. A joiner whose browser (or <code>setu join</code>) has a
+device key, which is the default, is remembered by that key after it gives the
+password, so joining again later, from a new tab or after the session could
+not be resumed, does not ask again. The device key never leaves the device,
+so the link alone is still not enough for anyone else. Pass
+<code>--password-every-join</code> to ask on every new join anyway. Reconnecting after a
+dropped connection never asks either way.</p>
 <p>For scripts, set <code>SETU_PASSWORD</code> instead of being prompted. setu removes it from
 the environment before starting the shared command.</p>
 <h3 id="view-only-links">View-only links</h3>

@@ -29,10 +29,15 @@ import (
 const serviceUsage = `setu service - always-on shares with persistent links, started at login.
 
 Usage:
-  setu service add [flags] <name> [--] command [args...]   create a profile (prints its links once)
+  setu service add [flags] <name> [--] command [args...]   create a profile, print its link and a pairing code, start the service
   setu service add --desktop [flags] <name>               an always-on remote desktop profile
   setu service list                                       list profiles
   setu service link <name> [person]                       show a profile's links (+ QR)
+  setu service pair [--for 15m] <name> [person]           a one-time code that lets one more device join
+  setu service device list <name>                         the devices a profile admits
+  setu service device add [--name N] [--person P|--view] <name> <fingerprint>   admit a device without a code
+  setu service device remove <name> <fingerprint>|--all   stop admitting a device (it is disconnected at once)
+  setu service auth <name> device|password|none           change how new devices get in
   setu service key add [--view] <name> <person>           give one person their own link (audited by name)
   setu service key list <name>                            list the people holding personal keys
   setu service key remove <name> <person>                 revoke one person's link
@@ -46,7 +51,10 @@ Usage:
   setu service run [--dir D] [--log-file F]               run the supervisor in the foreground
 
 The running service picks up changes within a few seconds; no restart needed.
-Profiles need a password by default, because their links stay valid.
+Because their links stay valid, profiles admit only paired devices by default:
+each device enters a one-time pairing code once and is then recognised by its
+device key, which never leaves it. --auth password uses a password instead,
+asked once per device.
 `
 
 const servicePasswordMin = 12
@@ -66,6 +74,12 @@ func runService(args []string) (int, error) {
 		return serviceLink(rest)
 	case "key", "keys":
 		return serviceKey(rest)
+	case "pair":
+		return servicePair(rest)
+	case "device", "devices":
+		return serviceDevice(rest)
+	case "auth":
+		return serviceAuth(rest)
 	case "rotate":
 		return serviceRotate(rest)
 	case "enable", "disable":
@@ -94,6 +108,9 @@ type serviceState struct {
 	dir, path string
 	cfg       *service.Config
 	pol       *policy.Policy
+	// starting: the caller starts the service right after saving, so
+	// save does not tell the user to.
+	starting bool
 }
 
 func loadService() (*serviceState, error) {
@@ -129,7 +146,7 @@ func (s *serviceState) save(changed ...string) error {
 	}
 	if _, ok := service.RunningPID(service.LockPath(s.dir)); ok {
 		fmt.Fprintln(os.Stderr, "\nSaved. The running service applies this within a few seconds.")
-	} else {
+	} else if !s.starting {
 		fmt.Fprintln(os.Stderr, "\nSaved. The service is not running: start it with `setu service install` (or `setu service run`).")
 	}
 	return nil
@@ -199,8 +216,12 @@ func serviceAdd(args []string) (int, error) {
 	maxClients := fs.Int("max-clients", 1, "maximum concurrent clients")
 	validFor := fs.Duration("valid-for", 90*24*time.Hour, "keys stop working after this long; 'setu service rotate' renews them (0 = never)")
 	dir := fs.String("dir", "", "working directory for the command (default: the service's, usually your home)")
-	noPassword := fs.Bool("no-password", false, "allow joining with the link alone (not recommended for an always-on share)")
-	passwordStdin := fs.Bool("password-stdin", false, "read the password from the first line of stdin")
+	auth := fs.String("auth", "", "how new devices get in: device (each device pairs once with a one-time code; the default), password (asked once per device) or none (the link alone)")
+	noPassword := fs.Bool("no-password", false, "same as --auth none: the link alone grants access (not recommended for an always-on share)")
+	passwordStdin := fs.Bool("password-stdin", false, "--auth password, reading the password from the first line of stdin")
+	passwordEveryJoin := fs.Bool("password-every-join", false, "with --auth password: ask for it on every join, not once per device")
+	pairFor := fs.Duration("pair-for", defaultPairFor, "with --auth device: how long the first pairing code works")
+	noInstall := fs.Bool("no-install", false, "do not start the service, or register it to start at login")
 	fs.Var(&relays, "relay", "nostr relay URL(s) (default: built-in public relays)")
 	fs.Var(&stun, "stun", "STUN server URL(s) (default Google STUN)")
 	turn := fs.String("turn", "", "TURN server URL for strict NATs (credential from SETU_TURN_PASSWORD)")
@@ -265,6 +286,24 @@ func serviceAdd(args []string) (int, error) {
 	if *maxClients, err = st.pol.Clients(*maxClients, set["max-clients"]); err != nil {
 		return 1, err
 	}
+	mode, err := authMode(*auth, *noPassword, *passwordStdin || *passwordEveryJoin, st.pol)
+	if err != nil {
+		return 2, err
+	}
+	if *passwordEveryJoin && mode != service.AuthPassword {
+		return 2, errors.New("--password-every-join needs --auth password")
+	}
+	if err := checkPairFor(*pairFor); err != nil {
+		return 2, err
+	}
+	if mode == service.AuthDevices {
+		if !set["pair-for"] && st.pol.MaxPairingTime > 0 {
+			*pairFor = min(*pairFor, st.pol.MaxPairingTime.D())
+		}
+		if err := st.pol.CheckPairing(*pairFor); err != nil {
+			return 1, err
+		}
+	}
 	// Resolve the command now: the service's PATH may differ, and a fixed
 	// path cannot be hijacked by a directory added to PATH later.
 	if !*desktopMode {
@@ -319,10 +358,14 @@ func serviceAdd(args []string) (int, error) {
 			}
 		}
 	}
-	if !*noPassword {
+	switch mode {
+	case service.AuthDevices:
+		p.RequireDevice = true
+	case service.AuthPassword:
 		if p.Password, err = profilePassword(*passwordStdin, st.pol.MinPassword(servicePasswordMin)); err != nil {
 			return 1, err
 		}
+		p.PasswordEveryJoin = *passwordEveryJoin
 	}
 	if *noShared && len(people) == 0 {
 		return 1, errors.New("--no-shared-key needs at least one --person")
@@ -338,15 +381,104 @@ func serviceAdd(args []string) (int, error) {
 	if err := p.Validate(); err != nil {
 		return 1, err
 	}
+	// A profile of the same name may have been removed by hand: its
+	// devices must not carry over.
+	if err := service.UpdateDevices(st.dir, func(ds *service.DeviceState) error {
+		delete(ds.Profiles, name)
+		return nil
+	}); err != nil {
+		return 1, err
+	}
 	st.cfg.Profiles[name] = p
+	st.starting = !*noInstall
 	if err := st.save(name); err != nil {
 		return 1, err
 	}
 	printProfile(name, p, "")
+	if p.RequireDevice {
+		code, exp, err := newPairing(st.dir, name, *pairFor)
+		if err != nil {
+			return 1, err
+		}
+		printPairing(name, code, exp)
+	}
 	if *desktopMode {
 		printDesktopServiceNotes()
 	}
+	startService(st.dir, *noInstall)
 	return 0, nil
+}
+
+// defaultPairFor is how long a pairing code works by default: long enough
+// to pick up the other device, short enough not to linger.
+const defaultPairFor = 15 * time.Minute
+
+func checkPairFor(d time.Duration) error {
+	if d < time.Minute || d > 24*time.Hour {
+		return errors.New("a pairing code must work for between 1m and 24h")
+	}
+	return nil
+}
+
+// authMode resolves --auth (and the older --no-password / password flags)
+// to a profile auth mode. Paired devices are the default, unless the
+// managed policy requires a password.
+func authMode(auth string, noPassword, passwordFlags bool, pol *policy.Policy) (string, error) {
+	switch {
+	case auth == "" && noPassword:
+		auth = service.AuthNone
+	case auth == "" && pol != nil && pol.RequireDevicePairing:
+		auth = service.AuthDevices
+	case auth == "" && (passwordFlags || (pol != nil && pol.RequirePassword)):
+		auth = service.AuthPassword
+	case auth == "":
+		auth = service.AuthDevices
+	case noPassword && auth != service.AuthNone:
+		return "", fmt.Errorf("--no-password contradicts --auth %s", auth)
+	}
+	switch auth {
+	case service.AuthDevices, service.AuthPassword, service.AuthNone:
+		return auth, nil
+	}
+	return "", fmt.Errorf("--auth %q: want device, password or none", auth)
+}
+
+// newPairing replaces the profile's pairing code with a new one.
+func newPairing(dir, name string, d time.Duration) (code string, expires time.Time, err error) {
+	code, v, err := secure.NewPairingVerifier()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	expires = time.Now().Add(d)
+	err = service.UpdateDevices(dir, func(ds *service.DeviceState) error {
+		ds.Profile(name).Pairing = &service.Pairing{Verifier: v, ExpiresAt: expires.UTC()}
+		return nil
+	})
+	return code, expires, err
+}
+
+func printPairing(name, code string, expires time.Time) {
+	fmt.Fprintf(os.Stderr, "\n\x1b[1mPAIRING CODE  %s\x1b[0m  (one device, until %s)\n", code, expires.Local().Format("15:04"))
+	fmt.Fprintf(os.Stderr, "Open the link on the device you want to use and enter this code when it asks. From then on that\n"+
+		"device is recognised by its device key and never needs a code again. Pair another device with\n"+
+		"`setu service pair %s`; list or remove devices with `setu service device list %s`.\n", name, name)
+}
+
+// startService makes sure the supervisor runs, registering it to start at
+// login if it does not: a profile does nothing until then.
+func startService(dir string, skip bool) {
+	if _, ok := service.RunningPID(service.LockPath(dir)); ok {
+		return
+	}
+	if skip {
+		return // save already said how to start it
+	}
+	msg, err := installAutostart(dir, true)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\nCould not start the service: %v\nStart it with `setu service install` (or `setu service run`).\n", err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "\n%s\nIt starts at login from now on (undo with `setu service uninstall`).\n", msg)
 }
 
 // printDesktopServiceNotes says what each system needs before an
@@ -391,9 +523,14 @@ func printProfile(name string, p *service.Profile, person string) {
 		printLink(os.Stderr, title, l.URL)
 	}
 	var notes []string
-	if p.Password != nil {
-		notes = append(notes, "password required")
-	} else {
+	switch {
+	case p.RequireDevice:
+		notes = append(notes, "paired devices only (`setu service pair "+name+"` lets one more in)")
+	case p.Password != nil && p.PasswordEveryJoin:
+		notes = append(notes, "password required on every join")
+	case p.Password != nil:
+		notes = append(notes, "password required once per device")
+	default:
 		notes = append(notes, "\x1b[1;31mno password: the link alone grants a shell\x1b[0m")
 	}
 	if !p.ExpiresAt.IsZero() {
@@ -421,7 +558,11 @@ func serviceList() (int, error) {
 	}
 	now := time.Now()
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tSTATE\tPASSWORD\tCLIENTS\tEXPIRES\tCOMMAND")
+	devices, err := service.LoadDevices(st.dir)
+	if err != nil {
+		return 1, err
+	}
+	fmt.Fprintln(w, "NAME\tSTATE\tAUTH\tDEVICES\tCLIENTS\tEXPIRES\tCOMMAND")
 	for _, name := range st.cfg.Names() {
 		p := st.cfg.Profiles[name]
 		state := "enabled"
@@ -431,14 +572,15 @@ func serviceList() (int, error) {
 		case !p.Active(now):
 			state = "expired"
 		}
-		pw, exp := "no", "never"
-		if p.Password != nil {
-			pw = "yes"
-		}
+		exp := "never"
 		if !p.ExpiresAt.IsZero() {
 			exp = p.ExpiresAt.Local().Format("2006-01-02")
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\n", name, state, pw, p.MaxClients, exp, p.Label())
+		n := 0
+		if pd := devices.Profiles[name]; pd != nil {
+			n = len(pd.Devices)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%d\t%s\t%s\n", name, state, p.AuthMode(), n, p.MaxClients, exp, p.Label())
 	}
 	return 0, w.Flush()
 }
@@ -521,7 +663,14 @@ func serviceKey(args []string) (int, error) {
 		if err := st.save(); err != nil {
 			return 1, err
 		}
-		fmt.Fprintf(os.Stderr, "revoked %s's link to %s\n", rest[1], rest[0])
+		n := 0
+		if err := service.UpdateDevices(st.dir, func(ds *service.DeviceState) error {
+			n = ds.Profile(rest[0]).Forget(rest[1], "")
+			return nil
+		}); err != nil {
+			return 1, err
+		}
+		fmt.Fprintf(os.Stderr, "revoked %s's link to %s (and %d device(s) paired through it)\n", rest[1], rest[0], n)
 		return 0, nil
 	case "list", "ls":
 		if len(rest) != 1 {
@@ -566,7 +715,14 @@ func serviceRotate(args []string) (int, error) {
 		return 1, err
 	}
 	if *newPassword || *passwordStdin {
+		if p.RequireDevice {
+			return 1, fmt.Errorf("%s admits paired devices and has no password (see `setu service auth`)", name)
+		}
 		if p.Password, err = profilePassword(*passwordStdin, st.pol.MinPassword(servicePasswordMin)); err != nil {
+			return 1, err
+		}
+		// Devices that proved the old password must prove the new one.
+		if err := forgetDevices(st.dir, name, service.HowPassword); err != nil {
 			return 1, err
 		}
 	}
@@ -624,6 +780,12 @@ func serviceRemove(args []string) (int, error) {
 	}
 	delete(st.cfg.Profiles, name)
 	if err := st.save(); err != nil {
+		return 1, err
+	}
+	if err := service.UpdateDevices(st.dir, func(ds *service.DeviceState) error {
+		delete(ds.Profiles, name)
+		return nil
+	}); err != nil {
 		return 1, err
 	}
 	fmt.Fprintf(os.Stderr, "removed %s; its links no longer work\n", name)
@@ -704,24 +866,7 @@ func serviceInstall(args []string) (int, error) {
 	if err != nil {
 		return 1, err
 	}
-	if err := service.EnsureDir(dir); err != nil {
-		return 1, err
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		return 1, err
-	}
-	if exe, err = filepath.EvalSymlinks(exe); err != nil {
-		return 1, err
-	}
-	if strings.Contains(exe, "go-build") {
-		return 1, errors.New("this binary is temporary (go run); install from a built setu binary")
-	}
-	u := service.Unit{Exe: exe, Dir: dir, LogFile: service.LogPath(dir)}
-	if runtime.GOOS != "windows" {
-		u.Path = os.Getenv("PATH")
-	}
-	msg, err := service.Install(u, !*noStart)
+	msg, err := installAutostart(dir, !*noStart)
 	if err != nil {
 		return 1, err
 	}
@@ -730,6 +875,29 @@ func serviceInstall(args []string) (int, error) {
 		fmt.Println("\nNo profiles yet: add one with `setu service add <name> -- <command>`.")
 	}
 	return 0, nil
+}
+
+// installAutostart registers this setu binary to run the service at login,
+// and starts it now if start is set.
+func installAutostart(dir string, start bool) (string, error) {
+	if err := service.EnsureDir(dir); err != nil {
+		return "", err
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	if exe, err = filepath.EvalSymlinks(exe); err != nil {
+		return "", err
+	}
+	if strings.Contains(exe, "go-build") {
+		return "", errors.New("this binary is temporary (go run); install from a built setu binary")
+	}
+	u := service.Unit{Exe: exe, Dir: dir, LogFile: service.LogPath(dir)}
+	if runtime.GOOS != "windows" {
+		u.Path = os.Getenv("PATH")
+	}
+	return service.Install(u, start)
 }
 
 func serviceStatus() (int, error) {
