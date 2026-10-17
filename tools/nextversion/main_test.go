@@ -5,7 +5,7 @@ import "testing"
 func TestNext(t *testing.T) {
 	code := []string{"internal/host/peer.go"}
 	for _, c := range []struct {
-		name, last string
+		name, last  string
 		msgs, files []string
 		bump, want  string
 	}{
