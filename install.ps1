@@ -24,14 +24,31 @@ if (-not $base.StartsWith('https://')) { Fail 'SETU_BASE_URL must be an https://
 $cpu = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
 $arch = switch ($cpu) { 'AMD64' { 'amd64' } 'ARM64' { 'arm64' } default { Fail "no release for $cpu" } }
 
-$version = $env:SETU_VERSION
-if (-not $version) {
-    if ($env:SETU_BASE_URL) {
-        $version = (Invoke-WebRequest -UseBasicParsing "$base/latest").Content.Trim()
-    } else {
-        $version = (Invoke-RestMethod -UseBasicParsing 'https://api.github.com/repos/dmdhrumilmistry/setu/releases/latest').tag_name
+# The latest version, from <base>/latest: a redirect to .../tag/<version> on
+# GitHub (not the REST API, which allows only 60 requests an hour per IP and
+# fails behind shared addresses), or a text file holding it on a mirror.
+function Get-LatestVersion {
+    $req = [Net.HttpWebRequest]::Create("$base/latest")
+    $req.AllowAutoRedirect = $false
+    $req.UserAgent = 'setu-installer'
+    $resp = $null
+    try {
+        try { $resp = $req.GetResponse() } catch [Net.WebException] { $resp = $_.Exception.Response }
+        if (-not $resp) { Fail "cannot reach $base" }
+        $code = [int]$resp.StatusCode
+        if ($code -ge 300 -and $code -lt 400) { return ($resp.Headers['Location'] -split '/')[-1] }
+        if ($code -eq 200) {
+            $reader = New-Object IO.StreamReader($resp.GetResponseStream())
+            try { return $reader.ReadToEnd().Trim() } finally { $reader.Dispose() }
+        }
+        Fail "checking for the latest release: HTTP $code from $base/latest"
+    } finally {
+        if ($resp) { $resp.Dispose() }
     }
 }
+
+$version = $env:SETU_VERSION
+if (-not $version) { $version = Get-LatestVersion }
 if ($version -notmatch '^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { Fail "could not find the latest release (got '$version')" }
 
 $asset = "setu-$version-windows-$arch.exe"
