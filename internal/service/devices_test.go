@@ -96,3 +96,27 @@ func TestForget(t *testing.T) {
 		t.Errorf("forget by binding: %d", n)
 	}
 }
+
+func TestDeviceStoreForgetsIdleDevices(t *testing.T) {
+	d, now := newStore(t, nil)
+	d.idle = 24 * time.Hour
+	ctl := Binding("", proto.RoleControl)
+	if err := d.Remember("aaaa-bbbb-cccc-dddd-eeee", ctl, audit.Client{}); err != nil {
+		t.Fatal(err)
+	}
+	*now = now.Add(23 * time.Hour)
+	if !d.Known("aaaa-bbbb-cccc-dddd-eeee", ctl) {
+		t.Fatal("a recently used device was forgotten")
+	}
+	*now = now.Add(25 * time.Hour) // 25h after its last use (Known recorded it)
+	if d.Known("aaaa-bbbb-cccc-dddd-eeee", ctl) {
+		t.Fatal("an idle device was still admitted")
+	}
+	st, _ := LoadDevices(d.dir)
+	if len(st.Profiles[d.profile].Fingerprints()) != 0 {
+		t.Error("the idle device was not removed from devices.json")
+	}
+	if got := (&policy.Policy{MaxDeviceIdle: policy.Duration(time.Hour)}).DeviceIdle(0); got != time.Hour {
+		t.Errorf("MaxDeviceIdle does not cap a profile without a limit: %v", got)
+	}
+}

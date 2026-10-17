@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -446,6 +447,15 @@ func (p *peer) activate(t *ticket, pos *int64) {
 	}
 	s.audit.ClientConnected(c)
 	s.logf("client #%d connected via %s, role=%s: %s", p.id, p.label, p.role, c.Actor())
+	verb := "is watching"
+	if p.role == proto.RoleControl {
+		verb = "has control of"
+	}
+	title := "setu: " + c.ActorName() + " connected"
+	if p.authBy == proto.AuthPairing {
+		title = "setu: new device paired"
+	}
+	s.notify(title, fmt.Sprintf("%s %s %s. %s", c.ActorName(), verb, strings.ToLower(s.what()[:1])+s.what()[1:], c.Actor()))
 	if s.cfg.Once {
 		s.stopAccepting("--once: first client connected")
 	}

@@ -43,9 +43,12 @@ const configVersion = 1
 
 // Config is the whole service configuration.
 type Config struct {
-	Version  int                 `json:"version"`
-	Audit    audit.Config        `json:"audit"`
-	Profiles map[string]*Profile `json:"profiles"`
+	Version int          `json:"version"`
+	Audit   audit.Config `json:"audit"`
+	// AutoUpdate turns automatic updates by the service on or off; unset
+	// means on. A managed policy can override it.
+	AutoUpdate *bool               `json:"auto_update,omitempty"`
+	Profiles   map[string]*Profile `json:"profiles"`
 }
 
 // Profile is one persistent share. Its keys are secrets: whoever holds the
@@ -80,7 +83,13 @@ type Profile struct {
 	// PasswordEveryJoin asks for the password on every join, instead of
 	// once per device.
 	PasswordEveryJoin bool `json:"password_every_join,omitempty"`
-	MaxClients        int  `json:"max_clients"`
+	// DeviceIdle forgets a known device that has not joined for this long
+	// (0 = never), so a lost or retired device does not keep access.
+	DeviceIdle Duration `json:"device_idle,omitempty"`
+	// NoNotify turns off the desktop notification shown on this computer
+	// when someone connects.
+	NoNotify   bool `json:"no_notify,omitempty"`
+	MaxClients int  `json:"max_clients"`
 
 	// Keys stop working at ExpiresAt; rotating them restarts the clock
 	// with ValidFor.
@@ -418,6 +427,9 @@ func (p *Profile) Validate() error {
 		return errors.New("a profile uses either paired devices or a password, not both")
 	case p.PasswordEveryJoin && p.Password == nil:
 		return errors.New("password_every_join needs a password")
+	}
+	if p.DeviceIdle < 0 {
+		return errors.New("device idle limit must not be negative")
 	}
 	if p.IdleTimeout < 0 {
 		return errors.New("idle timeout must not be negative")

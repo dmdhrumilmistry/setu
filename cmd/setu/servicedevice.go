@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -58,7 +59,7 @@ func servicePair(args []string) (int, error) {
 		return 1, err
 	}
 	printProfile(name, p, person)
-	printPairing(name, code, exp)
+	printPairing(name, code, exp, p, person)
 	if _, ok := service.RunningPID(service.LockPath(st.dir)); !ok {
 		fmt.Fprintln(os.Stderr, "\nThe service is not running: start it with `setu service install` (or `setu service run`).")
 	}
@@ -247,6 +248,77 @@ func serviceAuth(args []string) (int, error) {
 	printProfile(name, p, "")
 	if mode == service.AuthDevices {
 		fmt.Fprintf(os.Stderr, "\nDevices already known keep working. Let a new one in with `setu service pair %s`.\n", name)
+	}
+	return 0, nil
+}
+
+// serviceSet changes a profile's settings in place (only the flags given).
+func serviceSet(args []string) (int, error) {
+	fs := flag.NewFlagSet("service set", flag.ExitOnError)
+	idleTimeout := fs.Duration("idle-timeout", 0, "disconnect control clients after this long without input (0 = never)")
+	maxClients := fs.Int("max-clients", 1, "maximum concurrent clients")
+	deviceIdle := fs.Duration("device-idle", 0, "forget a device that has not joined for this long (0 = never)")
+	validFor := fs.Duration("valid-for", 0, "how long keys last from the next `setu service rotate` (0 = never)")
+	alerts := fs.String("notify", "on", "desktop notification on this computer when someone connects: on or off")
+	fs.Usage = func() {
+		fmt.Fprint(os.Stderr, "Usage: setu service set [flags] <name>\n\nChanges only the settings you pass.\n\n")
+		fs.PrintDefaults()
+	}
+	// Accept the name before or after the flags (doctor prints it first).
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		args = append(args[1:], args[0])
+	}
+	_ = fs.Parse(args)
+	name, err := oneName(fs.Args(), "set")
+	if err != nil {
+		return 2, err
+	}
+	changed := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { changed[f.Name] = true })
+	if len(changed) == 0 {
+		fs.Usage()
+		return 2, nil
+	}
+	if changed["notify"] && *alerts != "on" && *alerts != "off" {
+		return 2, fmt.Errorf("--notify %q: want on or off", *alerts)
+	}
+	st, err := loadService()
+	if err != nil {
+		return 1, err
+	}
+	p, err := st.cfg.Get(name)
+	if err != nil {
+		return 1, err
+	}
+	if changed["idle-timeout"] {
+		if *idleTimeout, err = st.pol.IdleTimeout(*idleTimeout, true); err != nil {
+			return 1, err
+		}
+		p.IdleTimeout = service.Duration(*idleTimeout)
+	}
+	if changed["max-clients"] {
+		p.MaxClients = *maxClients
+	}
+	if changed["device-idle"] {
+		p.DeviceIdle = service.Duration(*deviceIdle)
+	}
+	if changed["valid-for"] {
+		p.ValidFor = service.Duration(*validFor)
+	}
+	if changed["notify"] {
+		p.NoNotify = *alerts == "off"
+	}
+	if err := p.Validate(); err != nil {
+		return 1, err
+	}
+	if err := st.save(name); err != nil {
+		return 1, err
+	}
+	if changed["idle-timeout"] || changed["max-clients"] || changed["device-idle"] || changed["notify"] {
+		fmt.Fprintf(os.Stderr, "%s restarts with the new settings; anyone connected reconnects to a fresh session.\n", name)
+	}
+	if changed["valid-for"] {
+		fmt.Fprintf(os.Stderr, "The new key lifetime starts with `setu service rotate %s`.\n", name)
 	}
 	return 0, nil
 }

@@ -146,6 +146,14 @@ an SSH private key.</p>
 <td>A device that proves the password with a verified device key is remembered (tied to the invite key it used), so it is not asked again: in memory for <code>setu share</code>, in the owner-only <code>devices.json</code> for the service. Every later join still needs the link <em>and</em> a fresh signature by that non-extractable key over the connection's nonce and DTLS fingerprints. <code>--password-every-join</code> and the <code>PasswordEveryJoin</code> policy turn this off, and changing a service password forgets devices remembered by the old one. Service profiles default to paired devices only: a new device proves a single-use, expiring 60-bit pairing code (<code>setu service pair</code>; only a PBKDF2 verifier is stored, wrong codes count toward the lockout). Removing a device disconnects it within seconds and invalidates its resume token. Policies can require pairing (<code>RequireDevicePairing</code>), cap code lifetime (<code>MaxPairingTime</code>) and the number of devices (<code>MaxDevicesPerProfile</code>).</td>
 </tr>
 <tr>
+<td>Alerts, device expiry, doctor</td>
+<td>The host shows a desktop notification whenever someone connects, a device pairs or logins keep failing (on for the service and for unattended shares; the text is passed to the notifier as arguments, never as script). Service devices unused for 90 days are forgotten (<code>--device-idle</code>, policy <code>MaxDeviceIdle</code>). <code>setu doctor</code> reports risky settings with the command that fixes each one, and <code>--json</code> output for compliance checks.</td>
+</tr>
+<tr>
+<td>Updates</td>
+<td><code>setu upgrade</code> and the service's automatic updates (on by default; policies <code>DisableUpdate</code>, <code>AutoUpdate</code>, <code>UpdateVersion</code>, <code>UpdateURL</code>) download over https, verify the release's <code>SHA256SUMS</code> and, in builds that carry the release key, its ed25519 signature (unsigned releases are then refused), run the new binary once, and swap it in with an atomic rename. Running shares keep their binary; the service restarts into the new one only when nobody is connected and no session can be resumed. Development builds are never updated automatically.</td>
+</tr>
+<tr>
 <td>Hygiene</td>
 <td><code>SETU_PASSWORD</code>, <code>SETU_TURN_PASSWORD</code> and audit collector headers are removed from the environment before the shared command starts. Link files and session directories are owner-only. Slow clients are disconnected after 8 MiB of backlog.</td>
 </tr>

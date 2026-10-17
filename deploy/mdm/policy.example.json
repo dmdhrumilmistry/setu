@@ -9,6 +9,8 @@
   "PasswordEveryJoin": true,
   "MaxPairingTime": "15m",
   "MaxDevicesPerProfile": 5,
+  "MaxDeviceIdle": "2160h",
+  "AutoUpdate": true,
   "AllowedCommands": ["claude", "bash", "pwsh"],
   "AuditEndpoint": "https://otel.example.com:4318/v1/logs",
   "AuditHeaders": {"Authorization": "Bearer REPLACE_WITH_INGEST_ONLY_TOKEN"},

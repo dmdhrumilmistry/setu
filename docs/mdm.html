@@ -91,6 +91,7 @@ policy</strong>; setu enforces it on every device. Users see the policy in force
 <li>require passwords (with a minimum length) and personal keys;</li>
 <li>cap concurrent clients, share duration and service key lifetime;</li>
 <li>allow only certain programs, relays and web client URLs;</li>
+<li>control how setu updates itself;</li>
 <li>force audit logging to the organization's collector, and add device
 attributes (such as an asset tag) to every record.</li>
 </ul>
@@ -224,6 +225,31 @@ attributes (such as an asset tag) to every record.</li>
 <td>Most devices one service profile may admit.</td>
 </tr>
 <tr>
+<td><code>MaxDeviceIdle</code></td>
+<td>duration</td>
+<td>Service profiles forget devices unused for this long, whatever the profile says.</td>
+</tr>
+<tr>
+<td><code>DisableUpdate</code></td>
+<td>bool</td>
+<td>The organization updates setu itself; <code>setu upgrade</code> and automatic updates are off. Excludes <code>AutoUpdate</code> and <code>UpdateVersion</code>.</td>
+</tr>
+<tr>
+<td><code>AutoUpdate</code></td>
+<td>bool</td>
+<td>The service installs updates automatically, and users cannot turn this off.</td>
+</tr>
+<tr>
+<td><code>UpdateVersion</code></td>
+<td>string</td>
+<td>Pin the release (such as <code>v1.4.0</code>) the service and <code>setu upgrade</code> install; it may be older, to roll back.</td>
+</tr>
+<tr>
+<td><code>UpdateURL</code></td>
+<td>string</td>
+<td>An <code>https://</code> release mirror with GitHub's layout (<code>&lt;base&gt;/latest</code>, <code>&lt;base&gt;/download/&lt;version&gt;/&lt;file&gt;</code>).</td>
+</tr>
+<tr>
 <td><code>AllowedCommands</code></td>
 <td>list</td>
 <td>Only these programs may be shared. A bare name (<code>claude</code>) matches the program name on any OS; an absolute path matches exactly. Remote desktop counts as <code>@desktop</code>, so a list without it also refuses <code>setu desktop</code>.</td>
@@ -293,6 +319,8 @@ Example policy:</p>
   &quot;PasswordEveryJoin&quot;: true,
   &quot;MaxPairingTime&quot;: &quot;15m&quot;,
   &quot;MaxDevicesPerProfile&quot;: 5,
+  &quot;MaxDeviceIdle&quot;: &quot;2160h&quot;,
+  &quot;AutoUpdate&quot;: true,
   &quot;AllowedCommands&quot;: [&quot;claude&quot;, &quot;bash&quot;, &quot;pwsh&quot;],
   &quot;AuditEndpoint&quot;: &quot;https://otel.example.com:4318/v1/logs&quot;,
   &quot;AuditHeaders&quot;: {&quot;Authorization&quot;: &quot;Bearer REPLACE_WITH_INGEST_ONLY_TOKEN&quot;},
@@ -300,6 +328,23 @@ Example policy:</p>
   &quot;ResourceAttributes&quot;: {&quot;deployment.environment&quot;: &quot;corp&quot;}
 }
 </code></pre>
+<h2 id="updates">Updates</h2>
+<p>The always-on service updates setu automatically by default. It checks for a
+new release about every 6 hours and verifies the download against the
+release's <code>SHA256SUMS</code>, and against the release signature when the build has a
+release key. It runs the new binary once before swapping it in atomically, and
+restarts only when nobody is connected and no session can be resumed.</p>
+<ul>
+<li><code>DisableUpdate</code>: for organizations that deploy setu themselves. <code>setu upgrade</code>
+is refused and the service never updates.</li>
+<li><code>UpdateVersion</code>: pin a version for the whole fleet, or roll back to an older
+one. The service and <code>setu upgrade</code> install exactly that version.</li>
+<li><code>UpdateURL</code>: fetch releases from an internal mirror instead of GitHub. The
+mirror needs GitHub's layout: <code>&lt;base&gt;/latest</code> and
+<code>&lt;base&gt;/download/&lt;version&gt;/&lt;file&gt;</code>.</li>
+<li><code>AutoUpdate</code>: forbid turning automatic updates off with
+<code>setu upgrade auto off</code>.</li>
+</ul>
 <h2 id="deploy-it">Deploy it</h2>
 <h3 id="microsoft-intune">Microsoft Intune</h3>
 <ol>
@@ -387,6 +432,7 @@ session.</p>
       <li class="l2"><a href="#what-a-policy-can-do">What a policy can do</a></li>
       <li class="l2"><a href="#where-setu-reads-it">Where setu reads it</a></li>
       <li class="l2"><a href="#settings">Settings</a></li>
+      <li class="l2"><a href="#updates">Updates</a></li>
       <li class="l2"><a href="#deploy-it">Deploy it</a></li>
       <li class="l3"><a href="#microsoft-intune">Microsoft Intune</a></li>
       <li class="l3"><a href="#group-policy">Group Policy</a></li>

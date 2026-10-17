@@ -37,6 +37,17 @@
       <string id="MaxPairingTime_Help">Pairing codes from "setu service pair" must expire within this duration, written like 5m or 15m.</string>
       <string id="MaxDevicesPerProfile">Maximum devices per service profile</string>
       <string id="MaxDevicesPerProfile_Help">The most devices a service profile may admit (paired or remembered). Remove a device before adding another.</string>
+      <string id="MaxDeviceIdle">Forget unused service devices</string>
+      <string id="MaxDeviceIdle_Help">Service profiles forget a paired or remembered device that has not connected for this long, written like 720h or 2160h, whatever the profile says. The device must pair or give the password again.</string>
+      <string id="Updates">Updates</string>
+      <string id="DisableUpdate">Disable setu updates</string>
+      <string id="DisableUpdate_Help">If enabled, your organization updates setu itself: "setu upgrade" is refused and the service never installs updates. Cannot be combined with "Install updates automatically" or "Pin the setu version".</string>
+      <string id="AutoUpdate">Install updates automatically</string>
+      <string id="AutoUpdate_Help">If enabled, the always-on service installs setu updates automatically and users cannot turn this off with "setu upgrade auto off". Automatic updates are on by default; this only stops users opting out.</string>
+      <string id="UpdateVersion">Pin the setu version</string>
+      <string id="UpdateVersion_Help">The release version the service and "setu upgrade" install, written like v1.4.0. It may be older than the installed version, to roll back.</string>
+      <string id="UpdateURL">Update mirror URL</string>
+      <string id="UpdateURL_Help">An https:// release mirror with GitHub's layout (&lt;base&gt;/latest and &lt;base&gt;/download/&lt;version&gt;/&lt;file&gt;), used instead of GitHub for updates.</string>
       <string id="AllowedCommands">Allowed commands</string>
       <string id="AllowedCommands_Help">Only these programs may be shared. Use a bare name (claude, bash, pwsh) to match the program name, or an absolute path to match exactly. If not configured, any program may be shared.</string>
       <string id="AllowedRelays">Allowed nostr relays</string>
@@ -73,6 +84,15 @@
       </presentation>
       <presentation id="MaxDevicesPerProfile">
         <decimalTextBox refId="MaxDevicesPerProfile" defaultValue="5">Maximum devices:</decimalTextBox>
+      </presentation>
+      <presentation id="MaxDeviceIdle">
+        <textBox refId="MaxDeviceIdle"><label>Duration (for example 2160h):</label><defaultValue>2160h</defaultValue></textBox>
+      </presentation>
+      <presentation id="UpdateVersion">
+        <textBox refId="UpdateVersion"><label>Version (for example v1.4.0):</label></textBox>
+      </presentation>
+      <presentation id="UpdateURL">
+        <textBox refId="UpdateURL"><label>Mirror base URL (https://):</label></textBox>
       </presentation>
       <presentation id="AllowedCommands">
         <listBox refId="AllowedCommands">Programs:</listBox>

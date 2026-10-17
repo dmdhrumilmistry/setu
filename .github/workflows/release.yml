@@ -26,6 +26,17 @@ jobs:
               -o "dist/setu-${GITHUB_REF_NAME}-${os}-${arch}${ext}" ./cmd/setu
           done
           cd dist && sha256sum * > SHA256SUMS
+      - name: sign SHA256SUMS (setu upgrade verifies it when the build has the release key)
+        env:
+          SETU_RELEASE_SIGNING_KEY: ${{ secrets.SETU_RELEASE_SIGNING_KEY }}
+        run: |
+          if [ -n "$SETU_RELEASE_SIGNING_KEY" ]; then
+            go run ./tools/releasesign sign dist/SHA256SUMS
+          elif grep -q '^var ReleaseKeys = \[\]string{}' internal/update/update.go; then
+            echo "::warning::no SETU_RELEASE_SIGNING_KEY secret: this release is unsigned"
+          else
+            echo "::error::builds verify release signatures, but SETU_RELEASE_SIGNING_KEY is not set"; exit 1
+          fi
       - name: publish
         env:
           GH_TOKEN: ${{ github.token }}

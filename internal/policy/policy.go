@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -69,6 +70,19 @@ type Policy struct {
 	RequireDevicePairing bool     `json:"RequireDevicePairing,omitempty"`
 	MaxPairingTime       Duration `json:"MaxPairingTime,omitempty"`
 	MaxDevicesPerProfile int      `json:"MaxDevicesPerProfile,omitempty"`
+	// MaxDeviceIdle forgets service devices unused for this long, whatever
+	// the profile says.
+	MaxDeviceIdle Duration `json:"MaxDeviceIdle,omitempty"`
+
+	// Updates. DisableUpdate leaves updating setu to the organization (no
+	// `setu upgrade`, no automatic updates). AutoUpdate makes the service
+	// install updates automatically, whatever the user chose. UpdateVersion
+	// pins the version to install (it may be older than the current one).
+	// UpdateURL is a release mirror with GitHub's layout.
+	DisableUpdate bool   `json:"DisableUpdate,omitempty"`
+	AutoUpdate    bool   `json:"AutoUpdate,omitempty"`
+	UpdateVersion string `json:"UpdateVersion,omitempty"`
+	UpdateURL     string `json:"UpdateURL,omitempty"`
 
 	// Allow lists (empty = anything).
 	AllowedCommands []string `json:"AllowedCommands,omitempty"` // program names or absolute paths
@@ -178,8 +192,17 @@ func (p *Policy) validate() error {
 		return fmt.Errorf("managed policy %s: %s", p.source, fmt.Sprintf(f, a...))
 	}
 	if p.MinPasswordLength < 0 || p.MaxClients < 0 || p.MaxShareDuration < 0 || p.MaxKeyValidity < 0 || p.MaxIdleTime < 0 ||
-		p.MaxPairingTime < 0 || p.MaxDevicesPerProfile < 0 {
+		p.MaxPairingTime < 0 || p.MaxDevicesPerProfile < 0 || p.MaxDeviceIdle < 0 {
 		return bad("limits must not be negative")
+	}
+	if p.DisableUpdate && (p.AutoUpdate || p.UpdateVersion != "") {
+		return bad("DisableUpdate excludes AutoUpdate and UpdateVersion")
+	}
+	if p.UpdateVersion != "" && !updateVersionRE.MatchString(p.UpdateVersion) {
+		return bad("UpdateVersion %q: want a release version like v1.4.0", p.UpdateVersion)
+	}
+	if p.UpdateURL != "" && !strings.HasPrefix(p.UpdateURL, "https://") {
+		return bad("UpdateURL %q: want an https:// URL", p.UpdateURL)
 	}
 	if p.RequirePassword && p.RequireDevicePairing {
 		return bad("RequirePassword and RequireDevicePairing exclude each other (paired service profiles have no password)")
@@ -351,6 +374,25 @@ func (p *Policy) DeviceRoom(n int) error {
 		return violation("MaxDevicesPerProfile", "a profile may admit at most %d device(s); remove one first", p.MaxDevicesPerProfile)
 	}
 	return nil
+}
+
+var updateVersionRE = regexp.MustCompile(`^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$`)
+
+// CheckUpdate refuses updating setu when the organization manages it.
+func (p *Policy) CheckUpdate() error {
+	if p != nil && p.DisableUpdate {
+		return violation("DisableUpdate", "your organization updates setu; `setu upgrade` is turned off")
+	}
+	return nil
+}
+
+// DeviceIdle is how long a service device may go unused before it is
+// forgotten: the profile's setting, capped by MaxDeviceIdle (0 = never).
+func (p *Policy) DeviceIdle(profile time.Duration) time.Duration {
+	if p == nil || p.MaxDeviceIdle <= 0 || (profile > 0 && profile <= p.MaxDeviceIdle.D()) {
+		return profile
+	}
+	return p.MaxDeviceIdle.D()
 }
 
 // MinPassword is the minimum password length, at least floor.

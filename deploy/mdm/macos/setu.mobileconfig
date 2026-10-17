@@ -40,6 +40,10 @@
       <string>15m</string>
       <key>MaxDevicesPerProfile</key>
       <integer>5</integer>
+      <key>MaxDeviceIdle</key>
+      <string>2160h</string>
+      <key>AutoUpdate</key>
+      <true/>
       <key>AllowedCommands</key>
       <array>
         <string>claude</string>

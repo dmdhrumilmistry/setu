@@ -45,6 +45,7 @@ setu share [flags] [--] [command [args...]]
 | `-d`, `--background` | off | Serve in the background and return to the shell (see `setu ps`). |
 | `--headless` | off | Do not attach this terminal; just serve clients. |
 | `--qr` | on | Print a QR code of the browser link. |
+| `--notify MODE` | `auto` | Desktop notification on this computer when someone connects, a device pairs, or logins keep failing: `auto` (when this terminal is not attached, as with `-d` or `--headless`), `on` or `off`. |
 | `--link-file PATH` | none | Also write the invite link(s) to PATH (mode 0600). |
 | `--record FILE` | none | Record the terminal's output to this new file (asciicast v2, mode 0600). `setu share` only. See [Record a session](sharing.md#record-a-session). |
 | `--upload-dir PATH` | `~/Downloads/setu` | Where files that control clients upload are saved (see [Uploading files](joining.md#uploading-files)). |
@@ -109,6 +110,7 @@ the terminal), plus:
 | Flag | Default | Meaning |
 | --- | --- | --- |
 | `--display N` | `-1` (primary) | Display to share, by number (0 = first). Control clients can switch displays from the browser. |
+| `--notify MODE` | `auto` | As for `setu share`; since the desktop never attaches the terminal, `auto` means on. |
 | `--fps N` | 20 | Maximum frames per second, 1 to 60. |
 
 Press Ctrl-C to end the share.
@@ -134,6 +136,7 @@ Ids can be abbreviated to any unique prefix.
 | `setu service device add [--name N] [--person P \| --view] <name> <fingerprint>` | Admit a device without a code. |
 | `setu service device remove <name> <fingerprint>` / `--all` | Stop admitting a device; it is disconnected at once. |
 | `setu service auth [--password-stdin] [--password-every-join] <name> device\|password\|none` | Change how new devices get in. |
+| `setu service set [flags] <name>` | Change settings in place: `--idle-timeout`, `--max-clients`, `--device-idle`, `--valid-for` (from the next rotate), `--notify on\|off`. Only the flags you pass change. |
 | `setu service list` | List profiles. |
 | `setu service link <name> [person]` | Show a profile's links (+ QR), or one person's. |
 | `setu service key add [--view] <name> <person>` | Give one person their own link. |
@@ -164,6 +167,8 @@ Ids can be abbreviated to any unique prefix.
 | `--no-password` | off | Same as `--auth none`. |
 | `--password-stdin` | off | `--auth password`, reading the password from the first line of stdin. |
 | `--no-install` | off | Do not start the service or register it to start at login. |
+| `--device-idle DURATION` | `2160h` (90 days) | Forget a device that has not joined for this long, so a lost or retired one loses access; `0` means never. |
+| `--no-notify` | off | No desktop notification on this computer when someone connects. |
 | `--relay URL` | public relays | Nostr relay URL(s). |
 | `--stun URL` | Google STUN | STUN server URL(s). |
 | `--turn URL` | none | TURN server (credential from `SETU_TURN_PASSWORD`). |
@@ -215,6 +220,38 @@ setu device reset    # replace the key; hosts that trusted the old one will ask 
 The private key is stored owner-only at `<config dir>/setu/device.key`. Give the
 fingerprint to a host to use with `setu share --approve --trust-device`. See
 [Approve joiners and trust devices](sharing.md#approve-joiners-and-trust-devices).
+
+## setu doctor
+
+```sh
+setu doctor              # check this computer's setu setup; every problem comes with the command that fixes it
+setu doctor --json       # the same as JSON, for scripts and MDM compliance checks
+setu doctor --offline    # skip the check for a newer release
+```
+
+It checks the managed policy, whether setu is up to date, whether the service
+runs and starts at login, every profile (how new devices get in, shared links,
+key expiry, idle timeouts, device expiry, policy violations), devices that
+have not joined for a month, and the permissions of this device's key. It
+exits with status 1 if anything fails, 0 otherwise (warnings included).
+
+## setu upgrade
+
+```sh
+setu upgrade                    # install the latest release (or the version your organization pins)
+setu upgrade --check            # only say whether one is available
+setu upgrade --version v1.4.0   # install this release (also to roll back)
+setu upgrade auto status        # automatic updates by the service: on by default
+setu upgrade auto off           # ...or on
+```
+
+| Flag | Meaning |
+| --- | --- |
+| `--check` | Only report whether an update is available. |
+| `--version VERSION` | Install this release instead of the latest. |
+| `--force` | Also replace a development build (one built from source, without a release version). |
+
+See [Updates](install.md#updates) for how updates are verified and applied.
 
 ## setu policy
 

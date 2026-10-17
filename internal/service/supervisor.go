@@ -9,11 +9,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dmdhrumilmistry/setu/internal/audit"
 	"github.com/dmdhrumilmistry/setu/internal/daemon"
 	"github.com/dmdhrumilmistry/setu/internal/host"
+	"github.com/dmdhrumilmistry/setu/internal/notify"
 	"github.com/dmdhrumilmistry/setu/internal/policy"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
 )
@@ -30,6 +32,9 @@ const (
 type Supervisor struct {
 	Dir     string
 	Version string
+	// Release is this binary's release version (v1.4.0), for automatic
+	// updates; anything else (a development build) is never auto-updated.
+	Release string
 	Log     *log.Logger
 
 	running  map[string]*runner
@@ -39,15 +44,25 @@ type Supervisor struct {
 
 	logged, seen map[string]bool // problem messages: already logged / seen this round
 
+	notify     func(title, body string)       // desktop notifications (nil: none available)
 	hostHook   func(*host.Config)             // tests: adjust each session's config
 	loadPolicy func() (*policy.Policy, error) // tests: replaces policy.Load
 	every      time.Duration                  // tests: replaces reconcileInterval
+
+	upd updater
 }
 
 type runner struct {
-	fp     string
-	cancel context.CancelFunc
-	done   chan struct{}
+	fp      string
+	cancel  context.CancelFunc
+	done    chan struct{}
+	session atomic.Pointer[host.Session] // the running share, between restarts
+}
+
+// idle reports whether the profile's share has nobody to interrupt.
+func (r *runner) idle() bool {
+	s := r.session.Load()
+	return s == nil || s.Idle()
 }
 
 // Run serves profiles until ctx ends. It holds the directory's lock, so only
@@ -65,7 +80,13 @@ func (sv *Supervisor) Run(ctx context.Context) error {
 	}
 	defer release()
 	sv.running, sv.logged = map[string]*runner{}, map[string]bool{}
+	if sv.notify == nil {
+		if f := notify.Desktop(); f != nil {
+			sv.notify = f
+		}
+	}
 	sv.Log.Printf("setu service %s started (pid %d), config %s", sv.Version, os.Getpid(), ConfigPath(sv.Dir))
+	sv.upd.start(sv)
 
 	var lastStat string
 	lastReconcile := time.Time{}
@@ -77,16 +98,24 @@ func (sv *Supervisor) Run(ctx context.Context) error {
 			lastStat, lastReconcile = st, time.Now()
 			sv.reconcile(ctx)
 		}
+		restart := sv.upd.tick(ctx, sv)
 		select {
 		case <-ctx.Done():
-			sv.stopAll()
-			if err := sv.audit.Shutdown(context.Background()); err != nil {
-				sv.Log.Printf("audit flush: %v", err)
-			}
-			sv.Log.Printf("setu service stopped")
-			return nil
 		case <-tick.C:
+			if !restart {
+				continue
+			}
 		}
+		sv.stopAll()
+		if err := sv.audit.Shutdown(context.Background()); err != nil {
+			sv.Log.Printf("audit flush: %v", err)
+		}
+		if ctx.Err() == nil && restart {
+			sv.Log.Printf("setu service restarting into the updated binary (nobody was connected)")
+			return ErrUpdated
+		}
+		sv.Log.Printf("setu service stopped")
+		return nil
 	}
 }
 
@@ -121,6 +150,7 @@ func (sv *Supervisor) reconcile(ctx context.Context) {
 		sv.logOnce("config error (keeping current shares): %v", err)
 		return
 	}
+	sv.upd.autoPref = cfg.AutoUpdate == nil || *cfg.AutoUpdate
 
 	// The managed (MDM) policy is re-read on every pass, so a policy pushed
 	// to the device applies within seconds. An unreadable policy, or one
@@ -131,6 +161,7 @@ func (sv *Supervisor) reconcile(ctx context.Context) {
 	}
 	pol, err := loadPolicy()
 	if err == nil {
+		sv.upd.pol = pol
 		err = pol.CheckService()
 	}
 	if err != nil {
@@ -197,7 +228,7 @@ func (sv *Supervisor) reconcile(ctx context.Context) {
 		sv.running[name] = r
 		go func(name string, p *Profile, al *audit.Logger) {
 			defer close(r.done)
-			sv.serve(rctx, name, p, al, pol)
+			sv.serve(rctx, r, name, p, al, pol)
 		}(name, cfg.Profiles[name], sv.audit)
 	}
 }
@@ -235,7 +266,7 @@ func (sv *Supervisor) stopAll() {
 
 // serve runs one profile's command, restarting it with backoff whenever it
 // exits, until ctx ends or the keys expire.
-func (sv *Supervisor) serve(ctx context.Context, name string, p *Profile, al *audit.Logger, pol *policy.Policy) {
+func (sv *Supervisor) serve(ctx context.Context, r *runner, name string, p *Profile, al *audit.Logger, pol *policy.Policy) {
 	if !p.ExpiresAt.IsZero() {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithDeadline(ctx, p.ExpiresAt)
@@ -250,7 +281,10 @@ func (sv *Supervisor) serve(ctx context.Context, name string, p *Profile, al *au
 			return
 		}
 		cfg.Audit, cfg.Log = al, out
-		store := &deviceStore{dir: sv.Dir, profile: name, logf: out.printf, now: time.Now, pol: pol}
+		if !p.NoNotify {
+			cfg.Notify = sv.notify
+		}
+		store := &deviceStore{dir: sv.Dir, profile: name, logf: out.printf, now: time.Now, pol: pol, idle: pol.DeviceIdle(time.Duration(p.DeviceIdle))}
 		cfg.Devices = store
 		if p.RequireDevice {
 			cfg.Pairing = store
@@ -261,6 +295,7 @@ func (sv *Supervisor) serve(ctx context.Context, name string, p *Profile, al *au
 		start := time.Now()
 		s, err := host.New(cfg)
 		if err == nil {
+			r.session.Store(s)
 			sv.Log.Printf("profile %s: serving %q", name, p.Label())
 			var code int
 			code, err = s.Run(ctx)

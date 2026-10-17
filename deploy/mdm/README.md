@@ -40,6 +40,11 @@ unmanaged.
 | `RequireDevicePairing` | bool | Service profiles must admit only paired devices (`setu service add --auth device`, the default): each new device enters a one-time code from `setu service pair` once and is then recognised by its device key. Cannot be combined with `RequirePassword`. |
 | `MaxPairingTime` | duration | Pairing codes must expire within this time. |
 | `MaxDevicesPerProfile` | int | A service profile may admit at most this many devices. |
+| `MaxDeviceIdle` | duration | Service profiles forget a paired or remembered device that has not connected for this long, whatever the profile says. |
+| `DisableUpdate` | bool | The organization updates setu itself: `setu upgrade` is refused and the service never installs updates. Cannot be combined with `AutoUpdate` or `UpdateVersion`. |
+| `AutoUpdate` | bool | The always-on service installs updates automatically. They are on by default; this stops users turning them off with `setu upgrade auto off`. |
+| `UpdateVersion` | string | Pin the release (for example `v1.4.0`) that the service and `setu upgrade` install. It may be older than the installed one, to roll back. |
+| `UpdateURL` | string | An `https://` release mirror with GitHub's layout (`<base>/latest`, `<base>/download/<version>/<file>`). |
 | `AllowedCommands` | list | Only these programs may be shared. A bare name (`claude`) matches the program name on any OS; an absolute path matches exactly. Remote desktop counts as `@desktop`, so a list without it also refuses `setu desktop`. |
 | `AllowedRelays` | list | Signaling may only use these relays, and they become the default. |
 | `AllowedWebURLs` | list | Invite links may only point at these web client base URLs, for example a self-hosted copy. |
