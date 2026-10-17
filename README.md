@@ -197,7 +197,13 @@ go build -o setu ./cmd/setu && SETU_LOCAL_RELAY=1 node web/test/browser-e2e.mjs 
 web/vendor/update.sh                      # re-vendor xterm.js / noble-curves
 cd tools/docsgen && go run .              # regenerate docs/*.html after editing docs/src
 cd tools/docsgen && go run . -check       # what CI runs: stale output, broken links, undocumented CLI flags
+go run ./tools/nextversion                # the release the next green commit on main would cut
 ```
+
+Releases are automatic: once CI passes on `main`, any change to the setu
+binary is tagged (the version follows the commit messages), built for every
+platform, signed, attested and published, and installed copies update
+themselves. Add `[skip release]` to a commit message to hold one back.
 
 The docs site is Markdown under [`docs/src`](docs/src), rendered to the
 committed HTML in `docs/` by [`tools/docsgen`](tools/docsgen). Preview it with

@@ -1,17 +1,48 @@
 name: release
 
+# Builds, signs and publishes the release binaries for a tag.
+#
+# Started by auto-release (after CI passes on main), by pushing a v* tag by
+# hand, or from the Actions tab for an existing tag. Installed copies of setu
+# update themselves from these releases, so a release is published only if
+# its SHA256SUMS signature verifies against the key built into setu and the
+# new binary runs and reports the right version.
 on:
   push:
     tags: ['v*']
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build and publish (for example v0.2.0)
+        required: true
 
 permissions:
-  contents: write
+  contents: write    # create the release
+  id-token: write    # build provenance attestations
+  attestations: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
+      - name: check the tag
+        run: |
+          echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' || { echo "::error::$TAG is not a release tag like v1.2.3"; exit 1; }
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -22,22 +53,36 @@ jobs:
           for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
             os=${t%/*}; arch=${t#*/}; ext=""; [ "$os" = windows ] && ext=.exe
             GOOS=$os GOARCH=$arch CGO_ENABLED=0 go build -trimpath \
-              -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" \
-              -o "dist/setu-${GITHUB_REF_NAME}-${os}-${arch}${ext}" ./cmd/setu
+              -ldflags "-s -w -X main.version=${TAG}" \
+              -o "dist/setu-${TAG}-${os}-${arch}${ext}" ./cmd/setu
           done
           cd dist && sha256sum * > SHA256SUMS
-      - name: sign SHA256SUMS (setu upgrade verifies it when the build has the release key)
+      - name: the binary runs and reports its version
+        run: |
+          out=$(./dist/setu-${TAG}-linux-amd64 version)
+          echo "$out"
+          case "$out" in *"$TAG"*) ;; *) echo "::error::the binary reports '$out', not $TAG"; exit 1 ;; esac
+      - name: sign SHA256SUMS (setu upgrade and the service verify it)
         env:
           SETU_RELEASE_SIGNING_KEY: ${{ secrets.SETU_RELEASE_SIGNING_KEY }}
         run: |
           if [ -n "$SETU_RELEASE_SIGNING_KEY" ]; then
             go run ./tools/releasesign sign dist/SHA256SUMS
+            go run ./tools/releasesign verify dist/SHA256SUMS
           elif grep -q '^var ReleaseKeys = \[\]string{}' internal/update/update.go; then
             echo "::warning::no SETU_RELEASE_SIGNING_KEY secret: this release is unsigned"
           else
-            echo "::error::builds verify release signatures, but SETU_RELEASE_SIGNING_KEY is not set"; exit 1
+            echo "::error::setu verifies release signatures, but SETU_RELEASE_SIGNING_KEY is not set"; exit 1
           fi
+      - name: build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: 'dist/setu-*'
       - name: publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::release $TAG already exists; delete it first to publish it again"; exit 1
+          fi
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "setu $TAG"

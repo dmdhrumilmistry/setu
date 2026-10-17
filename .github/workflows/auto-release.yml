@@ -1,0 +1,81 @@
+name: auto-release
+
+# Cuts a release automatically once CI has passed on main, so binaries (and
+# the updates installed copies pick up) never lag behind the code. Only a
+# commit that changed something in the setu binary is released; the version
+# follows the commit messages (tools/nextversion). "[skip release]" in the
+# newest commit message skips one.
+#
+# From the Actions tab, "Run workflow" releases the newest commit on main
+# now, with an automatic or a chosen bump.
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+
+permissions:
+  contents: read
+
+# One release at a time, in order.
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    # Only commits pushed to main whose CI run succeeded.
+    # (A fork's pull request can have a branch called main: require a push to
+    # this repository.)
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the tag
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: decide the version
+        id: next
+        env:
+          BUMP: ${{ inputs.bump || 'auto' }}
+        run: go run ./tools/nextversion -bump "$BUMP" >> "$GITHUB_OUTPUT"
+      - name: tag the commit
+        if: steps.next.outputs.tag != ''
+        env:
+          TAG: ${{ steps.next.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "setu $TAG"
+          git push origin "refs/tags/$TAG"
+          echo "::notice::tagged $TAG"
+
+  release:
+    needs: tag
+    if: needs.tag.outputs.tag != ''
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
+    secrets: inherit

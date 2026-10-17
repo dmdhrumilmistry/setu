@@ -259,6 +259,19 @@ func (s Source) Fetch(ctx context.Context, version, dir string) (string, error) 
 	return f.Name(), nil
 }
 
+// VerifySums checks a SHA256SUMS signature against this build's release
+// keys (the release workflow uses it before publishing).
+func VerifySums(sums, sig []byte) error {
+	keys, err := Source{}.keys()
+	if err != nil {
+		return err
+	}
+	if len(keys) == 0 {
+		return errors.New("this build has no release keys")
+	}
+	return verify(keys, sums, sig)
+}
+
 // verify checks an ed25519 signature (raw or base64) of sums.
 func verify(keys []ed25519.PublicKey, sums, sig []byte) error {
 	if b, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(sig))); err == nil {
