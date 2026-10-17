@@ -16,6 +16,7 @@ import (
 // does: without the password, past --once and --max-clients 1, and getting
 // only the output it missed.
 func TestResume(t *testing.T) {
+	t.Parallel()
 	r := relaytest.New()
 	defer r.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -94,6 +95,7 @@ func TestResume(t *testing.T) {
 
 // TestResumeView keeps a view-only client view-only across a reconnect.
 func TestResumeView(t *testing.T) {
+	t.Parallel()
 	r := relaytest.New()
 	defer r.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -118,6 +120,7 @@ func TestResumeView(t *testing.T) {
 // TestResumeAfterIdleTimeout: a client the host disconnected for being idle
 // cannot come straight back with its resume token.
 func TestResumeAfterIdleTimeout(t *testing.T) {
+	t.Parallel()
 	r := relaytest.New()
 	defer r.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

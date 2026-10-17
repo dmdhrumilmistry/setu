@@ -76,6 +76,7 @@ func dialAndEcho(ctx context.Context, t *testing.T, key, relay, password, line s
 }
 
 func TestSupervisor(t *testing.T) {
+	t.Parallel()
 	r := relaytest.New()
 	defer r.Close()
 	dir := t.TempDir()
@@ -151,6 +152,7 @@ func TestSupervisor(t *testing.T) {
 // a policy the profile violates stops it, and an unreadable policy stops
 // everything (fail closed).
 func TestSupervisorPolicy(t *testing.T) {
+	t.Parallel()
 	r := relaytest.New()
 	defer r.Close()
 	dir := t.TempDir()
@@ -216,6 +218,7 @@ func TestSupervisorPolicy(t *testing.T) {
 }
 
 func TestSupervisorAuditFailsClosed(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	cfg := &Config{Profiles: map[string]*Profile{}}
 	cfg.Audit.Endpoint = "http://127.0.0.1:1/v1/logs" // nothing listens here

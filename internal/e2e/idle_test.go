@@ -16,6 +16,7 @@ import (
 // one that keeps typing stays, and so does a view-only client, which only
 // watches.
 func TestIdleTimeout(t *testing.T) {
+	t.Parallel()
 	r := relaytest.New()
 	defer r.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)

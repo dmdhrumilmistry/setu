@@ -125,6 +125,7 @@ func waitFor(t *testing.T, c *client.Conn, want string) {
 }
 
 func TestControlAndView(t *testing.T) {
+	t.Parallel()
 	r := relaytest.New()
 	defer r.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -175,6 +176,7 @@ func TestControlAndView(t *testing.T) {
 }
 
 func TestPassword(t *testing.T) {
+	t.Parallel()
 	r := relaytest.New()
 	defer r.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -193,6 +195,7 @@ func TestPassword(t *testing.T) {
 }
 
 func TestPasswordVerifier(t *testing.T) {
+	t.Parallel()
 	r := relaytest.New()
 	defer r.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -214,6 +217,7 @@ func TestPasswordVerifier(t *testing.T) {
 }
 
 func TestAudit(t *testing.T) {
+	t.Parallel()
 	r := relaytest.New()
 	defer r.Close()
 	col := audittest.New(t)
@@ -275,6 +279,7 @@ func TestAudit(t *testing.T) {
 // TestAuditPersonalKey checks that a command typed through a personal link
 // is recorded with who typed it, when, and what it was.
 func TestAuditPersonalKey(t *testing.T) {
+	t.Parallel()
 	r := relaytest.New()
 	defer r.Close()
 	col := audittest.New(t)
@@ -379,6 +384,7 @@ func hasAttr(r *logspb.LogRecord, key string) bool {
 // TestAuditEchoOff checks that a line typed at a password prompt (canonical
 // mode, echo off) never reaches the collector.
 func TestAuditEchoOff(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("ConPTY does not expose the terminal mode")
 	}
@@ -424,6 +430,7 @@ func dialDevice(ctx context.Context, t *testing.T, inv string, key *secure.Devic
 // TestTrustedDevices: with --approve and no prompt, only trusted device keys
 // get in, and the audit log records the verified key and how it was admitted.
 func TestTrustedDevices(t *testing.T) {
+	t.Parallel()
 	r := relaytest.New()
 	defer r.Close()
 	col := audittest.New(t)
@@ -472,6 +479,7 @@ func TestTrustedDevices(t *testing.T) {
 // TestApproveAlways: answering "a" trusts the device for the rest of the
 // session, so it is not asked about again; other devices still are.
 func TestApproveAlways(t *testing.T) {
+	t.Parallel()
 	r := relaytest.New()
 	defer r.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -520,6 +528,7 @@ func TestApproveAlways(t *testing.T) {
 }
 
 func TestOnceAndWrongSecret(t *testing.T) {
+	t.Parallel()
 	r := relaytest.New()
 	defer r.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -547,6 +556,7 @@ func TestOnceAndWrongSecret(t *testing.T) {
 }
 
 func TestManual(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	offers := make(chan string, 1)

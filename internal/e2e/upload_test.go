@@ -114,6 +114,7 @@ func (c *deskClient) upload(name string, data []byte, announce int64, stopAfter 
 }
 
 func TestUpload(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	col := audittest.New(t)
@@ -193,6 +194,7 @@ func TestUpload(t *testing.T) {
 }
 
 func TestUploadDisabled(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	c := startUploadHost(t, ctx, "", nil)
