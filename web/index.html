@@ -32,8 +32,8 @@
         <button type="submit">Join</button>
       </form>
       <h2>Start a share</h2>
-      <pre><code># install (Go 1.27+), or grab a release binary
-go install github.com/dmdhrumilmistry/setu/cmd/setu@latest
+      <pre><code># install (Linux, macOS); on Windows PowerShell: irm https://raw.githubusercontent.com/dmdhrumilmistry/setu/main/install.ps1 | iex
+curl -fsSL https://dmdhrumilmistry.github.io/setu/install.sh | sh
 
 # share Claude Code (or any command), then open the printed link / scan the QR
 setu share --password -- claude

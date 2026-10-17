@@ -3,6 +3,14 @@
 This takes about two minutes: share a terminal from your computer and open it on
 your phone.
 
+## 0. Install
+
+```sh
+curl -fsSL https://dmdhrumilmistry.github.io/setu/install.sh | sh
+```
+
+On Windows, in PowerShell: `irm https://raw.githubusercontent.com/dmdhrumilmistry/setu/main/install.ps1 | iex`. See [Install](install.md) for other ways.
+
 ## 1. Share
 
 On the computer you want to share from:

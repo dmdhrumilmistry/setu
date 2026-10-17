@@ -80,6 +80,48 @@
 <p>setu is a single static binary. You need it on the machine you share from and
 on any machine you want to join from a terminal. Joining from a browser needs
 nothing installed.</p>
+<h2 id="one-line">One line</h2>
+<p>Linux and macOS:</p>
+<pre><code class="language-sh">curl -fsSL https://dmdhrumilmistry.github.io/setu/install.sh | sh
+</code></pre>
+<p>Windows (PowerShell):</p>
+<pre><code class="language-powershell">irm https://raw.githubusercontent.com/dmdhrumilmistry/setu/main/install.ps1 | iex
+</code></pre>
+<p>The installer picks the right release for your system, checks it against the
+release's <code>SHA256SUMS</code> and, where OpenSSL 3 is available, the signature of that
+file, makes sure it runs, and installs it without administrator rights: to
+<code>~/.local/bin</code> (or <code>/usr/local/bin</code> when run as root) on Linux and macOS, and
+to <code>%LOCALAPPDATA%\Programs\setu</code> on Windows, which it adds to your <code>PATH</code>.
+Because the binary stays writable by you, setu keeps itself up to date (see
+<a href="#updates">Updates</a>). Read the scripts first if you like:
+<a href="https://github.com/dmdhrumilmistry/setu/blob/main/install.sh">install.sh</a>,
+<a href="https://github.com/dmdhrumilmistry/setu/blob/main/install.ps1">install.ps1</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SETU_VERSION</code></td>
+<td>Install this release (for example <code>v0.1.0</code>) instead of the latest.</td>
+</tr>
+<tr>
+<td><code>SETU_INSTALL_DIR</code></td>
+<td>Install into this directory.</td>
+</tr>
+<tr>
+<td><code>SETU_BASE_URL</code></td>
+<td>Download from a release mirror with GitHub's layout.</td>
+</tr>
+<tr>
+<td><code>SETU_REQUIRE_SIGNATURE=1</code></td>
+<td>(install.sh) Fail instead of warning when the signature cannot be checked.</td>
+</tr>
+</tbody>
+</table>
 <h2 id="with-go">With Go</h2>
 <pre><code class="language-sh">go install github.com/dmdhrumilmistry/setu/cmd/setu@latest
 </code></pre>
@@ -165,6 +207,7 @@ that block peer-to-peer UDP, add a TURN server; see
   <aside class="toc" aria-label="On this page">
     <p class="toc-title">On this page</p>
     <ul>
+      <li class="l2"><a href="#one-line">One line</a></li>
       <li class="l2"><a href="#with-go">With Go</a></li>
       <li class="l2"><a href="#release-binaries">Release binaries</a></li>
       <li class="l2"><a href="#from-source">From source</a></li>
