@@ -102,6 +102,11 @@ sha256sum --ignore-missing -c SHA256SUMS
 chmod +x setu-&lt;version&gt;-linux-amd64
 sudo mv setu-&lt;version&gt;-linux-amd64 /usr/local/bin/setu
 </code></pre>
+<p>Every release is signed (<code>SHA256SUMS.sig</code>, checked by <code>setu upgrade</code>) and
+carries a build provenance attestation, so you can check that a binary was
+built from this repository by its release workflow:</p>
+<pre><code class="language-sh">gh attestation verify setu-&lt;version&gt;-linux-amd64 --repo dmdhrumilmistry/setu
+</code></pre>
 <p>On macOS, a downloaded binary may be quarantined; clear it with
 <code>xattr -d com.apple.quarantine /usr/local/bin/setu</code>.</p>
 <h2 id="from-source">From source</h2>

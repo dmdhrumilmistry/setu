@@ -3,6 +3,7 @@
 //
 //	go run ./tools/releasesign gen            write release-signing.key (0600), print the public key
 //	go run ./tools/releasesign sign SHA256SUMS sign with the key in $SETU_RELEASE_SIGNING_KEY
+//	go run ./tools/releasesign verify SHA256SUMS check SHA256SUMS.sig against update.ReleaseKeys
 //
 // Store the private key only as the SETU_RELEASE_SIGNING_KEY secret of the
 // GitHub repository (gh secret set SETU_RELEASE_SIGNING_KEY < release-signing.key),
@@ -18,6 +19,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/dmdhrumilmistry/setu/internal/update"
 )
 
 func main() {
@@ -58,6 +61,22 @@ func run(args []string) error {
 		}
 		sig := ed25519.Sign(ed25519.NewKeyFromSeed(seed), msg)
 		return os.WriteFile(args[1]+".sig", []byte(base64.StdEncoding.EncodeToString(sig)+"\n"), 0o644)
+	case len(args) == 2 && args[0] == "verify":
+		// What installed setu binaries will check: a release signed with a
+		// key they do not know would be refused by every one of them.
+		msg, err := os.ReadFile(args[1])
+		if err != nil {
+			return err
+		}
+		sig, err := os.ReadFile(args[1] + ".sig")
+		if err != nil {
+			return err
+		}
+		if err := update.VerifySums(msg, sig); err != nil {
+			return err
+		}
+		fmt.Println("signature verifies against the release key built into setu")
+		return nil
 	}
-	return errors.New("usage: releasesign gen | releasesign sign FILE")
+	return errors.New("usage: releasesign gen | releasesign sign FILE | releasesign verify FILE")
 }

@@ -39,6 +39,25 @@ fails if any CLI flag is missing from the docs, so a new flag needs a row in
 `docs/src/cli.md` (and the relevant guide). `web/vendor/` is pinned and
 checksummed (`SHA256SUMS`); change it only through `web/vendor/update.sh`.
 
+## Releases
+
+Releases are automatic. When CI passes on `main`, `auto-release.yml` runs
+`tools/nextversion`. If anything that goes into the binary changed since the
+last tag (Go code under `cmd/` or `internal/` other than tests, `go.mod` or
+`go.sum`), it tags the commit. The version is bumped from the commit
+messages: `feat` → minor, `type!:` or `BREAKING CHANGE:` → major (minor
+before v1), anything else → patch. Then `release.yml` builds every platform,
+smoke-tests the binary, signs SHA256SUMS with the `SETU_RELEASE_SIGNING_KEY`
+secret, verifies the signature against `update.ReleaseKeys`, attests build
+provenance and publishes the release. Put `[skip release]` in a commit
+message to skip one; "Run workflow" on auto-release releases `main` by hand.
+Installed copies update themselves from these releases, so never publish one
+by another route.
+
+```sh
+go run ./tools/nextversion          # what the next release would be, and why
+```
+
 ## Architecture
 
 **Join flow** (`docs/DESIGN.md` has the wire format):

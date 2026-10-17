@@ -38,6 +38,14 @@ chmod +x setu-<version>-linux-amd64
 sudo mv setu-<version>-linux-amd64 /usr/local/bin/setu
 ```
 
+Every release is signed (`SHA256SUMS.sig`, checked by `setu upgrade`) and
+carries a build provenance attestation, so you can check that a binary was
+built from this repository by its release workflow:
+
+```sh
+gh attestation verify setu-<version>-linux-amd64 --repo dmdhrumilmistry/setu
+```
+
 On macOS, a downloaded binary may be quarantined; clear it with
 `xattr -d com.apple.quarantine /usr/local/bin/setu`.
 
