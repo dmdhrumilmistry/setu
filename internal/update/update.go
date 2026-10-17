@@ -46,7 +46,9 @@ const DefaultBaseURL = "https://github.com/dmdhrumilmistry/setu/releases"
 // ReleaseKeys are the base64 ed25519 public keys allowed to sign releases
 // (SHA256SUMS.sig). When any is set, unsigned releases are refused; with none,
 // a release is trusted on its checksums fetched over https.
-var ReleaseKeys = []string{}
+var ReleaseKeys = []string{
+	"4n/cWcdrCUpMYyqHsyEICBUzL+PkN2qWplBXIQPMnMo=", // SETU_RELEASE_SIGNING_KEY, created 2026-10-17
+}
 
 const (
 	maxBinary = 256 << 20

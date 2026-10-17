@@ -131,3 +131,13 @@ func TestCheckBaseURL(t *testing.T) {
 		}
 	}
 }
+
+func TestReleaseKeysParse(t *testing.T) {
+	k, err := Source{}.keys()
+	if err != nil || len(k) == 0 {
+		t.Fatalf("built-in release keys: %v (%d)", err, len(k))
+	}
+	if !(Source{}).Signed() {
+		t.Error("builds with a release key must require signatures")
+	}
+}
