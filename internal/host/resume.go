@@ -40,7 +40,8 @@ type ticket struct {
 	keyName  string
 	deviceFP string
 	approval string
-	firstID  int // the client id the ticket was first issued to
+	authBy   string // how the client first got in (proto.Auth*)
+	firstID  int    // the client id the ticket was first issued to
 	// lastInput is the last input of the connection that held the ticket
 	// (unix nanos), so a reconnect does not reset the idle timeout.
 	lastInput int64
@@ -104,7 +105,7 @@ func (s *Session) issueTicket(p *peer, t *ticket, approval string) []byte {
 		if len(s.tickets) >= maxTickets {
 			return nil // resuming is a convenience; never grow without bound
 		}
-		t = &ticket{role: p.role, keyName: p.keyName, deviceFP: p.deviceFP, approval: approval, firstID: p.id}
+		t = &ticket{role: p.role, keyName: p.keyName, deviceFP: p.deviceFP, approval: approval, authBy: p.authBy, firstID: p.id}
 	} else {
 		delete(s.tickets, t.id)
 	}

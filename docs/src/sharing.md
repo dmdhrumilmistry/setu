@@ -21,6 +21,14 @@ answers with a proof bound to that exact encrypted connection. After 5 wrong
 passwords the share refuses new joiners for 10 minutes, and after 20 the invite
 is disabled for good.
 
+Each device is asked **once**. A joiner whose browser (or `setu join`) has a
+device key, which is the default, is remembered by that key after it gives the
+password, so joining again later, from a new tab or after the session could
+not be resumed, does not ask again. The device key never leaves the device,
+so the link alone is still not enough for anyone else. Pass
+`--password-every-join` to ask on every new join anyway. Reconnecting after a
+dropped connection never asks either way.
+
 For scripts, set `SETU_PASSWORD` instead of being prompted. setu removes it from
 the environment before starting the shared command.
 

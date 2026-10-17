@@ -94,9 +94,14 @@ what.</p>
 <pre><code class="language-sh">setu service add --person alice --person bob --no-shared-key \
   --dir ~/projects/app claude -- claude
 </code></pre>
-<p>setu asks for a profile password (12 characters or more), resolves <code>claude</code> to
-an absolute path, and prints each person's link and QR code once. Send each
+<p>setu resolves <code>claude</code> to an absolute path, prints each person's link and QR
+code once, prints a one-time <strong>pairing code</strong>, and starts the service (it also
+registers it to start at login, so there is nothing else to set up). Send each
 person only their own link.</p>
+<p>By default a profile admits only <strong>paired devices</strong>: open the link on your
+phone or laptop, enter the pairing code once, and from then on that device is
+recognised by its device key and never asks for anything again. See
+<a href="#devices-and-pairing">Devices and pairing</a>.</p>
 <table>
 <thead>
 <tr>
@@ -137,14 +142,34 @@ person only their own link.</p>
 <td>Working directory for the command.</td>
 </tr>
 <tr>
+<td><code>--auth MODE</code></td>
+<td><code>device</code></td>
+<td>How new devices get in: <code>device</code> (pair once with a one-time code), <code>password</code> (a 12+ character password, asked once per device) or <code>none</code> (the link alone; not recommended).</td>
+</tr>
+<tr>
+<td><code>--pair-for 15m</code></td>
+<td><code>15m</code></td>
+<td>With <code>--auth device</code>: how long the first pairing code works.</td>
+</tr>
+<tr>
+<td><code>--password-every-join</code></td>
+<td>off</td>
+<td>With <code>--auth password</code>: ask for the password on every join instead of once per device.</td>
+</tr>
+<tr>
 <td><code>--no-password</code></td>
 <td>off</td>
-<td>Allow joining with the link alone. Not recommended.</td>
+<td>Same as <code>--auth none</code>.</td>
 </tr>
 <tr>
 <td><code>--password-stdin</code></td>
 <td>off</td>
-<td>Read the password from stdin (or set <code>SETU_PASSWORD</code>).</td>
+<td><code>--auth password</code>, reading the password from stdin (or set <code>SETU_PASSWORD</code>).</td>
+</tr>
+<tr>
+<td><code>--no-install</code></td>
+<td>off</td>
+<td>Do not start the service or register it to start at login.</td>
 </tr>
 <tr>
 <td><code>--relay</code>, <code>--stun</code>, <code>--turn</code>, <code>--turn-user</code>, <code>--web-url</code></td>
@@ -154,7 +179,41 @@ person only their own link.</p>
 </tbody>
 </table>
 <p>Profile names use 1 to 32 lowercase letters, digits, <code>-</code> or <code>_</code>. The service
-stores only a PBKDF2 verifier of the password, never the password itself.</p>
+stores only PBKDF2 verifiers of passwords and pairing codes, never the secrets
+themselves.</p>
+<h2 id="devices-and-pairing">Devices and pairing</h2>
+<p>A link is something you can lose; a device key is not something anyone can
+copy. Every browser and <code>setu join</code> signs each connection with its own P-256
+device key (in the browser a non-extractable WebCrypto key in IndexedDB, which
+even the page cannot read), so the service can tell your devices apart from
+someone who merely obtained the link.</p>
+<pre><code class="language-sh">setu service pair claude                   # a new code for one more device (valid 15 minutes)
+setu service pair --for 1h claude alice    # ...showing only Alice's link
+setu service device list claude            # fingerprint, name, link, how, added, last seen
+setu service device add --name tablet claude 3f2a-91c0-77de-0b4e-a1c9   # admit a device without a code
+setu service device remove claude 3f2a-91c0-77de-0b4e-a1c9               # disconnected within seconds
+setu service device remove --all claude
+setu service auth claude password          # switch to a password (asked once per device)
+setu service auth claude device            # back to paired devices; known devices keep working
+</code></pre>
+<ul>
+<li>A pairing code is 12 random characters (60 bits), works for <strong>one</strong> device,
+expires (15 minutes by default), and is checked with the same
+challenge-response as a password, so it never crosses the network. Wrong
+codes count toward the lockout (5 failures lock the profile for 10 minutes).</li>
+<li>A paired device is tied to the link it paired through: a device paired via
+the view link cannot use the control link, and removing a person's key
+(<code>setu service key remove</code>) also removes their devices.</li>
+<li>Removing a device disconnects it at once and invalidates its reconnect token.</li>
+<li>A device's fingerprint is shown on the web client's home page, and by
+<code>setu device</code> on the command line, so you can add one without a code.</li>
+<li>In <code>password</code> mode, a device that gives the password is remembered the same
+way (<code>--password-every-join</code> turns that off). Changing the password
+(<code>setu service rotate --password</code>, <code>setu service auth NAME password</code>) forgets
+every device remembered by the old one.</li>
+</ul>
+<p>Devices live in <code>devices.json</code> next to <code>config.json</code> (owner-only). Changes
+apply to the running service immediately, without restarting the command.</p>
 <h2 id="always-on-remote-desktop">Always-on remote desktop</h2>
 <p>A profile can share the whole desktop instead of a command, so you can reach
 a machine any time it is logged in:</p>
@@ -193,6 +252,8 @@ service retries with a growing delay, like a command that exits.</p>
 client that sends no input for that long is disconnected (after a warning),
 so a browser tab left open does not stay connected to your machine.</p>
 <h2 id="start-it-at-login">Start it at login</h2>
+<p><code>setu service add</code> does this for you the first time (unless you pass
+<code>--no-install</code>). To do it by hand:</p>
 <pre><code class="language-sh">setu service install
 </code></pre>
 <table>
@@ -280,13 +341,15 @@ the current settings; <code>--off</code> disables auditing. See <a href="audit.h
 </tbody>
 </table>
 <p>The directory holds <code>config.json</code> (profiles, keys, password verifiers and audit
-settings), <code>supervisor.pid</code> (the single-instance lock) and <code>service.log</code>.
+settings), <code>devices.json</code> (the devices each profile admits and pending pairing
+code verifiers), <code>supervisor.pid</code> (the single-instance lock) and <code>service.log</code>.
 <code>config.json</code> contains secrets: setu refuses to load it if other users can read
 it (<code>chmod 600</code> fixes that). On Windows it lives in non-roaming
 <code>%LOCALAPPDATA%</code>. Set <code>SETU_SERVICE_DIR</code> to use another directory.</p>
 <h2 id="safety-rules-the-service-applies">Safety rules the service applies</h2>
 <ul>
-<li>Passwords are required by default and must be 12+ characters.</li>
+<li>Only paired devices get in by default; pairing codes are single use and
+expire. Passwords, if you choose them, must be 12+ characters.</li>
 <li>Keys expire (90 days by default).</li>
 <li>At most one client by default.</li>
 <li><code>--once</code> and <code>--approve</code> are not available: nobody is at the host to answer.</li>
@@ -312,6 +375,7 @@ profile against it before serving.</li>
     <ul>
       <li class="l2"><a href="#concepts">Concepts</a></li>
       <li class="l2"><a href="#create-a-profile">Create a profile</a></li>
+      <li class="l2"><a href="#devices-and-pairing">Devices and pairing</a></li>
       <li class="l2"><a href="#always-on-remote-desktop">Always-on remote desktop</a></li>
       <li class="l2"><a href="#start-it-at-login">Start it at login</a></li>
       <li class="l2"><a href="#manage-profiles">Manage profiles</a></li>

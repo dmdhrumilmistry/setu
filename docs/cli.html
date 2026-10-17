@@ -107,7 +107,12 @@ can be turned off explicitly, for example <code>--qr=false</code>.</p>
 <tr>
 <td><code>--password</code></td>
 <td>off</td>
-<td>Require a password (prompted, or from <code>SETU_PASSWORD</code>).</td>
+<td>Require a password (prompted, or from <code>SETU_PASSWORD</code>). Each device is asked once, then remembered by its device key for the rest of the share.</td>
+</tr>
+<tr>
+<td><code>--password-every-join</code></td>
+<td>off</td>
+<td>With <code>--password</code>: ask on every new join instead of once per device. Reconnecting never asks.</td>
 </tr>
 <tr>
 <td><code>--password-stdin</code></td>
@@ -412,7 +417,27 @@ the terminal), plus:</p>
 <tbody>
 <tr>
 <td><code>setu service add [flags] &lt;name&gt; [--] command...</code></td>
-<td>Create a profile and print its links once.</td>
+<td>Create a profile, print its links and a pairing code once, and start the service.</td>
+</tr>
+<tr>
+<td><code>setu service pair [--for 15m] &lt;name&gt; [person]</code></td>
+<td>A one-time code that lets one more device join.</td>
+</tr>
+<tr>
+<td><code>setu service device list &lt;name&gt;</code></td>
+<td>The devices a profile admits.</td>
+</tr>
+<tr>
+<td><code>setu service device add [--name N] [--person P | --view] &lt;name&gt; &lt;fingerprint&gt;</code></td>
+<td>Admit a device without a code.</td>
+</tr>
+<tr>
+<td><code>setu service device remove &lt;name&gt; &lt;fingerprint&gt;</code> / <code>--all</code></td>
+<td>Stop admitting a device; it is disconnected at once.</td>
+</tr>
+<tr>
+<td><code>setu service auth [--password-stdin] [--password-every-join] &lt;name&gt; device|password|none</code></td>
+<td>Change how new devices get in.</td>
 </tr>
 <tr>
 <td><code>setu service list</code></td>
@@ -509,14 +534,34 @@ the terminal), plus:</p>
 <td>Working directory for the command.</td>
 </tr>
 <tr>
+<td><code>--auth MODE</code></td>
+<td><code>device</code></td>
+<td><code>device</code> (paired devices only), <code>password</code> (asked once per device) or <code>none</code>.</td>
+</tr>
+<tr>
+<td><code>--pair-for DURATION</code></td>
+<td><code>15m</code></td>
+<td>With <code>--auth device</code>: how long the first pairing code works.</td>
+</tr>
+<tr>
+<td><code>--password-every-join</code></td>
+<td>off</td>
+<td>With <code>--auth password</code>: ask on every join.</td>
+</tr>
+<tr>
 <td><code>--no-password</code></td>
 <td>off</td>
-<td>Allow joining with the link alone.</td>
+<td>Same as <code>--auth none</code>.</td>
 </tr>
 <tr>
 <td><code>--password-stdin</code></td>
 <td>off</td>
-<td>Read the password from the first line of stdin.</td>
+<td><code>--auth password</code>, reading the password from the first line of stdin.</td>
+</tr>
+<tr>
+<td><code>--no-install</code></td>
+<td>off</td>
+<td>Do not start the service or register it to start at login.</td>
 </tr>
 <tr>
 <td><code>--relay URL</code></td>
@@ -703,6 +748,11 @@ values hidden), or &quot;no managed policy on this device&quot;. See
 <td><code>SETU_PASSWORD</code></td>
 <td>share, join, service add/rotate</td>
 <td>Password instead of a prompt. Removed before the shared command starts.</td>
+</tr>
+<tr>
+<td><code>SETU_PAIRING_CODE</code></td>
+<td>join</td>
+<td>Pairing code instead of a prompt, for a device that is new to a service profile.</td>
 </tr>
 <tr>
 <td><code>SETU_TURN_PASSWORD</code></td>

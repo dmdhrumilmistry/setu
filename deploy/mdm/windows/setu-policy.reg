@@ -12,6 +12,9 @@ Windows Registry Editor Version 5.00
 "MaxClients"=dword:00000002
 "MaxShareDuration"="8h"
 "MaxKeyValidity"="720h"
+"PasswordEveryJoin"=dword:00000001
+"MaxPairingTime"="15m"
+"MaxDevicesPerProfile"=dword:00000005
 "AuditEndpoint"="https://otel.example.com:4318/v1/logs"
 "AuditRequired"=dword:00000001
 "AuditInput"="lines"

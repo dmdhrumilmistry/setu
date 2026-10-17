@@ -224,15 +224,36 @@ client ──answer{sid,sdp,ts}─────────▶ p=room_id         
 joiner turns it into an answer code, and the host user pastes that code back.
 Only STUN is involved, and pasting the answer is itself the approval.</p>
 <h3 id="data-channel-setu-reliable-and-ordered">Data channel (<code>&quot;setu&quot;</code>, reliable and ordered)</h3>
-<pre><code>host  → {t:&quot;hello&quot;, v:1, auth:&quot;none&quot;|&quot;password&quot;, salt, iter, nonce, role}
-client→ {t:&quot;auth&quot;, proof?}      proof = HMAC(PBKDF2(pw,salt,iter), &quot;setu/v1/auth\n&quot;‖nonce‖fpA‖fpB)
-host  → {t:&quot;ready&quot;, role, cmd, host, cols, rows}   then the replay buffer
+<pre><code>host  → {t:&quot;hello&quot;, v:1, auth:&quot;none&quot;|&quot;password&quot;|&quot;device&quot;, salt, iter, nonce, role, device_auth?, secret?}
+client→ {t:&quot;auth&quot;, proof?, device_key?, device_sig?}
+        proof = HMAC(PBKDF2(pw,salt,iter), &quot;setu/v1/auth\n&quot;‖nonce‖fpA‖fpB)
+host  → {t:&quot;secret&quot;}            only if the client offered just a device key the host does not know
+client→ {t:&quot;auth&quot;, proof, device_key, device_sig}
+host  → {t:&quot;ready&quot;, role, cmd, host, cols, rows, auth}   then the replay buffer
 host  → binary PTY output        client → binary keystrokes (dropped for role=view)
 client→ {t:&quot;resize&quot;, cols, rows} (control only)
 host  → {t:&quot;exit&quot;, code} | {t:&quot;error&quot;, msg}
 </code></pre>
 <p><code>fpA</code> and <code>fpB</code> are the DTLS fingerprints from both SDPs. They feed the proof
 and the 6-digit <strong>SAS</strong> that both sides display.</p>
+<p><strong>Remembered devices.</strong> <code>device_sig</code> is an ECDSA P-256 signature over
+<code>&quot;setu/v1/device\n&quot;‖nonce‖fpA‖fpB</code> by the client's device key, so it proves
+possession of that key on this connection only. When a client proves the
+password together with a device key, the host remembers the key's fingerprint,
+tied to the invite key it used (a personal key's name, or the shared control
+or view link). With <code>device_auth:true</code> in the hello, a client that has a device
+key first sends <code>auth</code> without a proof: a remembered device is admitted
+(<code>ready.auth:&quot;device&quot;</code>), and an unknown one gets <code>{t:&quot;secret&quot;}</code> and answers
+with the proof on the same connection, so a wrong guess costs a real
+attempt and nothing is revealed. <code>setu share</code> remembers devices in memory for
+the life of the share; the service keeps them in <code>devices.json</code>.
+<code>--password-every-join</code> (or the <code>PasswordEveryJoin</code> policy) turns it off.</p>
+<p><strong>Paired devices.</strong> A service profile with <code>require_device</code> admits only known
+devices (<code>hello.auth:&quot;device&quot;</code> when no pairing code is pending). <code>setu service pair</code> creates a one-time 60-bit code whose PBKDF2 verifier is offered as the
+hello's challenge with <code>secret:&quot;pairing&quot;</code>; a client that proves it, with a
+device key, is added and the code is consumed atomically under the store's
+lock. Removing a device disconnects it within seconds and kills its resume
+ticket.</p>
 <h3 id="reconnecting">Reconnecting</h3>
 <p>Hosts that support it add <code>resume</code> (a random 32-byte token) and <code>pos</code> to
 <code>ready</code>. <code>pos</code> is the position, in bytes since the command started, of the

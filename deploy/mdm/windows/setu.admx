@@ -89,6 +89,32 @@
         <text id="MaxKeyValidity" valueName="MaxKeyValidity" required="true" />
       </elements>
     </policy>
+    <policy name="PasswordEveryJoin" class="Machine" displayName="$(string.PasswordEveryJoin)" explainText="$(string.PasswordEveryJoin_Help)" key="Software\Policies\setu" valueName="PasswordEveryJoin">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="RequireDevicePairing" class="Machine" displayName="$(string.RequireDevicePairing)" explainText="$(string.RequireDevicePairing_Help)" key="Software\Policies\setu" valueName="RequireDevicePairing">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="MaxPairingTime" class="Machine" displayName="$(string.MaxPairingTime)" explainText="$(string.MaxPairingTime_Help)" presentation="$(presentation.MaxPairingTime)" key="Software\Policies\setu">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <elements>
+        <text id="MaxPairingTime" valueName="MaxPairingTime" required="true" />
+      </elements>
+    </policy>
+    <policy name="MaxDevicesPerProfile" class="Machine" displayName="$(string.MaxDevicesPerProfile)" explainText="$(string.MaxDevicesPerProfile_Help)" presentation="$(presentation.MaxDevicesPerProfile)" key="Software\Policies\setu">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <elements>
+        <decimal id="MaxDevicesPerProfile" valueName="MaxDevicesPerProfile" minValue="1" maxValue="1000" required="true" />
+      </elements>
+    </policy>
     <policy name="AllowedCommands" class="Machine" displayName="$(string.AllowedCommands)" explainText="$(string.AllowedCommands_Help)" presentation="$(presentation.AllowedCommands)" key="Software\Policies\setu\AllowedCommands">
       <parentCategory ref="Setu" />
       <supportedOn ref="SUPPORTED_Setu" />

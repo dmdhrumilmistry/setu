@@ -27,7 +27,8 @@ setu share [flags] [--] [command [args...]]
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `--password` | off | Require a password (prompted, or from `SETU_PASSWORD`). |
+| `--password` | off | Require a password (prompted, or from `SETU_PASSWORD`). Each device is asked once, then remembered by its device key for the rest of the share. |
+| `--password-every-join` | off | With `--password`: ask on every new join instead of once per device. Reconnecting never asks. |
 | `--password-stdin` | off | Read the password from the first line of stdin. |
 | `--view-link` | off | Also create a read-only invite. |
 | `--once` | off | The invite stops working after the first successful join. |
@@ -127,7 +128,12 @@ Ids can be abbreviated to any unique prefix.
 
 | Command | Meaning |
 | --- | --- |
-| `setu service add [flags] <name> [--] command...` | Create a profile and print its links once. |
+| `setu service add [flags] <name> [--] command...` | Create a profile, print its links and a pairing code once, and start the service. |
+| `setu service pair [--for 15m] <name> [person]` | A one-time code that lets one more device join. |
+| `setu service device list <name>` | The devices a profile admits. |
+| `setu service device add [--name N] [--person P \| --view] <name> <fingerprint>` | Admit a device without a code. |
+| `setu service device remove <name> <fingerprint>` / `--all` | Stop admitting a device; it is disconnected at once. |
+| `setu service auth [--password-stdin] [--password-every-join] <name> device\|password\|none` | Change how new devices get in. |
 | `setu service list` | List profiles. |
 | `setu service link <name> [person]` | Show a profile's links (+ QR), or one person's. |
 | `setu service key add [--view] <name> <person>` | Give one person their own link. |
@@ -152,8 +158,12 @@ Ids can be abbreviated to any unique prefix.
 | `--valid-for DURATION` | `2160h` | Keys stop working after this long; `0` means never. |
 | `--max-clients N` | 1 | Maximum concurrent clients. |
 | `--dir PATH` | the service's | Working directory for the command. |
-| `--no-password` | off | Allow joining with the link alone. |
-| `--password-stdin` | off | Read the password from the first line of stdin. |
+| `--auth MODE` | `device` | `device` (paired devices only), `password` (asked once per device) or `none`. |
+| `--pair-for DURATION` | `15m` | With `--auth device`: how long the first pairing code works. |
+| `--password-every-join` | off | With `--auth password`: ask on every join. |
+| `--no-password` | off | Same as `--auth none`. |
+| `--password-stdin` | off | `--auth password`, reading the password from the first line of stdin. |
+| `--no-install` | off | Do not start the service or register it to start at login. |
 | `--relay URL` | public relays | Nostr relay URL(s). |
 | `--stun URL` | Google STUN | STUN server URL(s). |
 | `--turn URL` | none | TURN server (credential from `SETU_TURN_PASSWORD`). |
@@ -217,6 +227,7 @@ values hidden), or "no managed policy on this device". See
 | Variable | Used by | Meaning |
 | --- | --- | --- |
 | `SETU_PASSWORD` | share, join, service add/rotate | Password instead of a prompt. Removed before the shared command starts. |
+| `SETU_PAIRING_CODE` | join | Pairing code instead of a prompt, for a device that is new to a service profile. |
 | `SETU_TURN_PASSWORD` | share, service add | TURN credential. |
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`, `OTEL_EXPORTER_OTLP_ENDPOINT` | share `--audit`, service audit | Collector URL when no endpoint flag is given. |
 | `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | share, service audit | Collector headers, `Name=value,Name2=value2`, values percent-encoded. |

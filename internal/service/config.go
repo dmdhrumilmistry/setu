@@ -6,6 +6,7 @@
 // State lives in one directory, readable only by the user:
 //
 //	config.json     profiles, their keys and password verifiers, audit settings
+//	devices.json    devices each profile admits, and pending pairing codes
 //	supervisor.pid  lock held by the running supervisor
 //	service.log     supervisor log (macOS and Windows; systemd uses the journal)
 //
@@ -69,9 +70,17 @@ type Profile struct {
 	ViewKey    string `json:"view_key,omitempty"`
 	// PersonalKeys gives each person their own link, keyed by their name,
 	// so audit records say who connected and typed each command.
-	PersonalKeys map[string]*PersonalKey  `json:"personal_keys,omitempty"`
-	Password     *secure.PasswordVerifier `json:"password,omitempty"`
-	MaxClients   int                      `json:"max_clients"`
+	PersonalKeys map[string]*PersonalKey `json:"personal_keys,omitempty"`
+	// RequireDevice admits only devices listed for the profile in
+	// devices.json; a new device joins once with a pairing code (`setu
+	// service pair`). It is the default for new profiles, and excludes a
+	// password.
+	RequireDevice bool                     `json:"require_device,omitempty"`
+	Password      *secure.PasswordVerifier `json:"password,omitempty"`
+	// PasswordEveryJoin asks for the password on every join, instead of
+	// once per device.
+	PasswordEveryJoin bool `json:"password_every_join,omitempty"`
+	MaxClients        int  `json:"max_clients"`
 
 	// Keys stop working at ExpiresAt; rotating them restarts the clock
 	// with ValidFor.
@@ -208,6 +217,11 @@ func Save(path string, c *Config) error {
 	if err != nil {
 		return err
 	}
+	return writePrivate(path, b)
+}
+
+// writePrivate replaces path atomically with an owner-only file.
+func writePrivate(path string, b []byte) error {
 	if err := EnsureDir(filepath.Dir(path)); err != nil {
 		return err
 	}
@@ -399,6 +413,12 @@ func (p *Profile) Validate() error {
 			return err
 		}
 	}
+	switch {
+	case p.RequireDevice && p.Password != nil:
+		return errors.New("a profile uses either paired devices or a password, not both")
+	case p.PasswordEveryJoin && p.Password == nil:
+		return errors.New("password_every_join needs a password")
+	}
 	if p.IdleTimeout < 0 {
 		return errors.New("idle timeout must not be negative")
 	}
@@ -448,6 +468,9 @@ func (p *Profile) CheckPolicy(pol *policy.Policy, now time.Time) error {
 	if _, err := pol.Clients(p.MaxClients, true); err != nil {
 		return err
 	}
+	if pol.RequireDevicePairing && !p.RequireDevice {
+		return &policy.Violation{Key: "RequireDevicePairing", Msg: "profiles must admit only paired devices (setu service auth NAME device)"}
+	}
 	if pol.RequirePersonalKeys && p.ControlKey != "" {
 		return &policy.Violation{Key: "RequirePersonalKeys", Msg: "shared control links are not allowed; give each person their own key"}
 	}
@@ -490,6 +513,25 @@ func (p *Profile) relays() []string {
 	}
 	return nostr.DefaultRelays
 }
+
+// AuthMode describes how new devices get in: AuthDevices, AuthPassword or
+// AuthNone.
+func (p *Profile) AuthMode() string {
+	switch {
+	case p.RequireDevice:
+		return AuthDevices
+	case p.Password != nil:
+		return AuthPassword
+	}
+	return AuthNone
+}
+
+// Profile auth modes (`setu service add --auth`).
+const (
+	AuthDevices  = "device"   // paired devices only
+	AuthPassword = "password" // a password, asked once per device
+	AuthNone     = "none"     // the link alone
+)
 
 // Link is one invite link of a profile.
 type Link struct {

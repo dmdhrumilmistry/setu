@@ -140,7 +140,8 @@ func serve(sub string, args []string) (int, error) {
 	var relays, stun listFlag
 	manual := fs.Bool("manual", false, "copy/paste signaling: no relays, you paste the answer code back here")
 	viewLink := fs.Bool("view-link", false, "also create a read-only invite link")
-	password := fs.Bool("password", false, "require a password (prompted; or set SETU_PASSWORD)")
+	password := fs.Bool("password", false, "require a password (prompted; or set SETU_PASSWORD). Each device is asked once: it is remembered by its device key for the rest of the share")
+	passwordEveryJoin := fs.Bool("password-every-join", false, "with --password: ask for it on every new join, instead of once per device (reconnecting never asks)")
 	maxClients := fs.Int("max-clients", 2, "maximum concurrent clients")
 	once := fs.Bool("once", false, "invite becomes invalid after the first successful join")
 	approve := fs.Bool("approve", false, "ask on this terminal before admitting each client (answer a to always approve that device)")
@@ -243,6 +244,9 @@ func serve(sub string, args []string) (int, error) {
 	}
 	if pol.RequirePassword {
 		*password = true // prompt (or use SETU_PASSWORD) even without --password
+	}
+	if pol.PasswordEveryJoin {
+		*passwordEveryJoin = true // never remember devices
 	}
 
 	if background {
@@ -353,21 +357,22 @@ func serve(sub string, args []string) (int, error) {
 		relays = nostr.DefaultRelays
 	}
 	cfg := host.Config{
-		Command:        command,
-		Manual:         *manual,
-		Relays:         relays,
-		ICE:            ice,
-		Password:       pw,
-		MaxClients:     *maxClients,
-		Once:           *once,
-		Approve:        *approve,
-		TrustedDevices: trustDevices,
-		NoPrompt:       noPrompt,
-		Expire:         *expire,
-		IdleTimeout:    *idleTimeout,
-		Mirror:         mirror,
-		Verbose:        *verbose,
-		Audit:          auditLog,
+		Command:           command,
+		Manual:            *manual,
+		Relays:            relays,
+		ICE:               ice,
+		Password:          pw,
+		MaxClients:        *maxClients,
+		PasswordEveryJoin: *passwordEveryJoin,
+		Once:              *once,
+		Approve:           *approve,
+		TrustedDevices:    trustDevices,
+		NoPrompt:          noPrompt,
+		Expire:            *expire,
+		IdleTimeout:       *idleTimeout,
+		Mirror:            mirror,
+		Verbose:           *verbose,
+		Audit:             auditLog,
 	}
 	if desktopMode {
 		cfg.Command = nil
@@ -447,8 +452,11 @@ func serve(sub string, args []string) (int, error) {
 			show(viewTitle, cfg.ViewSecret)
 		}
 		var notes []string
-		if pw != "" {
-			notes = append(notes, "password required")
+		switch {
+		case pw != "" && *passwordEveryJoin:
+			notes = append(notes, "password required on every join")
+		case pw != "":
+			notes = append(notes, "password required once per device")
 		}
 		if *once {
 			notes = append(notes, "single use")
@@ -574,6 +582,18 @@ func runJoin(args []string) (int, error) {
 			pw, err := tty.ReadPassword(os.Stdin)
 			fmt.Fprintln(os.Stderr)
 			return pw, err
+		},
+		PairingCode: func() (string, error) {
+			if code := os.Getenv("SETU_PAIRING_CODE"); code != "" {
+				return code, nil
+			}
+			if !tty.IsTerminal(os.Stdin) {
+				return "", errors.New("this device is not paired with the host: set SETU_PAIRING_CODE to the code from `setu service pair`")
+			}
+			fmt.Fprint(os.Stderr, "This device is new to the host. Pairing code (from `setu service pair` on the host): ")
+			code, err := tty.ReadPassword(os.Stdin)
+			fmt.Fprintln(os.Stderr)
+			return code, err
 		},
 		ShowAnswer: func(code string) {
 			fmt.Fprintf(os.Stderr, "\nSend this answer code back to the host (they paste it into `setu share --manual`):\n\n%s\n\nWaiting for the host…\n", code)

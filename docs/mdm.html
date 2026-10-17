@@ -204,6 +204,26 @@ attributes (such as an asset tag) to every record.</li>
 <td>Service keys must expire within this time; profiles that exceed it are not served until rotated.</td>
 </tr>
 <tr>
+<td><code>PasswordEveryJoin</code></td>
+<td>bool</td>
+<td>Ask for the password on every join; a device that gave it is never remembered (by default setu remembers it by its device key).</td>
+</tr>
+<tr>
+<td><code>RequireDevicePairing</code></td>
+<td>bool</td>
+<td>Service profiles admit only paired devices (<code>setu service add --auth device</code>): each enters a one-time code from <code>setu service pair</code> once. Excludes <code>RequirePassword</code>.</td>
+</tr>
+<tr>
+<td><code>MaxPairingTime</code></td>
+<td>duration</td>
+<td>Pairing codes must expire within this time.</td>
+</tr>
+<tr>
+<td><code>MaxDevicesPerProfile</code></td>
+<td>int</td>
+<td>Most devices one service profile may admit.</td>
+</tr>
+<tr>
 <td><code>AllowedCommands</code></td>
 <td>list</td>
 <td>Only these programs may be shared. A bare name (<code>claude</code>) matches the program name on any OS; an absolute path matches exactly. Remote desktop counts as <code>@desktop</code>, so a list without it also refuses <code>setu desktop</code>.</td>
@@ -270,6 +290,9 @@ Example policy:</p>
   &quot;MaxClients&quot;: 2,
   &quot;MaxShareDuration&quot;: &quot;8h&quot;,
   &quot;MaxKeyValidity&quot;: &quot;720h&quot;,
+  &quot;PasswordEveryJoin&quot;: true,
+  &quot;MaxPairingTime&quot;: &quot;15m&quot;,
+  &quot;MaxDevicesPerProfile&quot;: 5,
   &quot;AllowedCommands&quot;: [&quot;claude&quot;, &quot;bash&quot;, &quot;pwsh&quot;],
   &quot;AuditEndpoint&quot;: &quot;https://otel.example.com:4318/v1/logs&quot;,
   &quot;AuditHeaders&quot;: {&quot;Authorization&quot;: &quot;Bearer REPLACE_WITH_INGEST_ONLY_TOKEN&quot;},

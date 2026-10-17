@@ -29,6 +29,14 @@
       <string id="MaxIdleTime_Help">Control clients are disconnected after this long without input (typing, mouse, clipboard, uploads), written like 15m or 1h. Watching does not count as input, and view-only clients are not affected. Shares and service profiles without an idle timeout get this value.</string>
       <string id="MaxKeyValidity">Maximum service key validity</string>
       <string id="MaxKeyValidity_Help">Service profile keys must expire within this duration, written like 168h or 720h. Profiles that exceed it are not served until their keys are rotated.</string>
+      <string id="PasswordEveryJoin">Ask for the password on every join</string>
+      <string id="PasswordEveryJoin_Help">If enabled, shares and password-protected service profiles ask for the password every time a client joins. A device that gave the right password is never remembered. If disabled or not configured, setu remembers a device by its device key once it has given the password.</string>
+      <string id="RequireDevicePairing">Require device pairing for service profiles</string>
+      <string id="RequireDevicePairing_Help">If enabled, service profiles may admit only paired devices ("setu service add --auth device"). Each new device enters a one-time pairing code from "setu service pair" once and is then recognised by its device key. Cannot be combined with "Require a session password".</string>
+      <string id="MaxPairingTime">Maximum pairing code lifetime</string>
+      <string id="MaxPairingTime_Help">Pairing codes from "setu service pair" must expire within this duration, written like 5m or 15m.</string>
+      <string id="MaxDevicesPerProfile">Maximum devices per service profile</string>
+      <string id="MaxDevicesPerProfile_Help">The most devices a service profile may admit (paired or remembered). Remove a device before adding another.</string>
       <string id="AllowedCommands">Allowed commands</string>
       <string id="AllowedCommands_Help">Only these programs may be shared. Use a bare name (claude, bash, pwsh) to match the program name, or an absolute path to match exactly. If not configured, any program may be shared.</string>
       <string id="AllowedRelays">Allowed nostr relays</string>
@@ -59,6 +67,12 @@
       </presentation>
       <presentation id="MaxKeyValidity">
         <textBox refId="MaxKeyValidity"><label>Duration (for example 720h):</label><defaultValue>720h</defaultValue></textBox>
+      </presentation>
+      <presentation id="MaxPairingTime">
+        <textBox refId="MaxPairingTime"><label>Duration (for example 15m):</label><defaultValue>15m</defaultValue></textBox>
+      </presentation>
+      <presentation id="MaxDevicesPerProfile">
+        <decimalTextBox refId="MaxDevicesPerProfile" defaultValue="5">Maximum devices:</decimalTextBox>
       </presentation>
       <presentation id="AllowedCommands">
         <listBox refId="AllowedCommands">Programs:</listBox>

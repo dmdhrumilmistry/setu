@@ -60,6 +60,16 @@ type Policy struct {
 	// MaxIdleTime disconnects control clients after this long without input.
 	MaxIdleTime Duration `json:"MaxIdleTime,omitempty"`
 
+	// Devices. PasswordEveryJoin asks for the password on every join: a
+	// device that proved it is never remembered. RequireDevicePairing makes
+	// service profiles admit only paired devices. MaxPairingTime caps how
+	// long a pairing code works, MaxDevicesPerProfile how many devices one
+	// service profile may admit.
+	PasswordEveryJoin    bool     `json:"PasswordEveryJoin,omitempty"`
+	RequireDevicePairing bool     `json:"RequireDevicePairing,omitempty"`
+	MaxPairingTime       Duration `json:"MaxPairingTime,omitempty"`
+	MaxDevicesPerProfile int      `json:"MaxDevicesPerProfile,omitempty"`
+
 	// Allow lists (empty = anything).
 	AllowedCommands []string `json:"AllowedCommands,omitempty"` // program names or absolute paths
 	AllowedRelays   []string `json:"AllowedRelays,omitempty"`
@@ -167,8 +177,12 @@ func (p *Policy) validate() error {
 	bad := func(f string, a ...any) error {
 		return fmt.Errorf("managed policy %s: %s", p.source, fmt.Sprintf(f, a...))
 	}
-	if p.MinPasswordLength < 0 || p.MaxClients < 0 || p.MaxShareDuration < 0 || p.MaxKeyValidity < 0 || p.MaxIdleTime < 0 {
+	if p.MinPasswordLength < 0 || p.MaxClients < 0 || p.MaxShareDuration < 0 || p.MaxKeyValidity < 0 || p.MaxIdleTime < 0 ||
+		p.MaxPairingTime < 0 || p.MaxDevicesPerProfile < 0 {
 		return bad("limits must not be negative")
+	}
+	if p.RequirePassword && p.RequireDevicePairing {
+		return bad("RequirePassword and RequireDevicePairing exclude each other (paired service profiles have no password)")
 	}
 	switch p.AuditInput {
 	case "", "lines", "off":
@@ -320,6 +334,23 @@ func (p *Policy) CheckWebURL(u string) error {
 		return nil
 	}
 	return violation("AllowedWebURLs", "web client %s is not allowed (allowed: %s)", u, strings.Join(p.AllowedWebURLs, ", "))
+}
+
+// CheckPairing checks how long a new pairing code would work.
+func (p *Policy) CheckPairing(d time.Duration) error {
+	if p != nil && p.MaxPairingTime > 0 && d > p.MaxPairingTime.D() {
+		return violation("MaxPairingTime", "pairing codes must expire within %s", p.MaxPairingTime.D())
+	}
+	return nil
+}
+
+// DeviceRoom reports whether a service profile that admits n devices may
+// admit one more.
+func (p *Policy) DeviceRoom(n int) error {
+	if p != nil && p.MaxDevicesPerProfile > 0 && n >= p.MaxDevicesPerProfile {
+		return violation("MaxDevicesPerProfile", "a profile may admit at most %d device(s); remove one first", p.MaxDevicesPerProfile)
+	}
+	return nil
 }
 
 // MinPassword is the minimum password length, at least floor.

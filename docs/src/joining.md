@@ -8,7 +8,7 @@ terminal with `setu join`.
 Open the invite link (or scan the QR code). The page:
 
 1. connects to the host through the relays named in the link,
-2. asks for the session password if the host set one,
+2. asks for the session password (or a service profile's pairing code) the first time this device joins, if the host set one,
 3. shows the **verification code**: compare it with the code the host
    terminal prints for your connection,
 4. opens the terminal.
@@ -68,7 +68,9 @@ setu join 'k=...'
 ```
 
 Always quote the link. If the host set a password, setu prompts for it (or reads
-`SETU_PASSWORD`). Type `<Enter> ~ .` to detach; `~~` sends a literal tilde at
+`SETU_PASSWORD`) the first time this device joins; the host then remembers the
+device. A service profile that admits only paired devices asks a new device
+for a pairing code once (or reads `SETU_PAIRING_CODE`). Type `<Enter> ~ .` to detach; `~~` sends a literal tilde at
 the start of a line.
 
 | Flag | Effect |
