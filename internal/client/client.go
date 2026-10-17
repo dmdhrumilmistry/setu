@@ -155,6 +155,10 @@ func Dial(ctx context.Context, invite string, opt Options) (*Conn, error) {
 
 func dial(ctx context.Context, invite string, opt Options, rs *resumeState) (*Conn, error) {
 	inv, err := link.Parse(invite)
+	if err == nil && inv.Pairing != "" {
+		code := inv.Pairing // a pairing link: pair without asking
+		opt.PairingCode = func() (string, error) { return code, nil }
+	}
 	if err != nil {
 		return nil, err
 	}

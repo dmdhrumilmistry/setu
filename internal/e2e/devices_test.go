@@ -11,6 +11,7 @@ import (
 	"github.com/dmdhrumilmistry/setu/internal/audit"
 	"github.com/dmdhrumilmistry/setu/internal/client"
 	"github.com/dmdhrumilmistry/setu/internal/host"
+	"github.com/dmdhrumilmistry/setu/internal/link"
 	"github.com/dmdhrumilmistry/setu/internal/nostr/relaytest"
 	"github.com/dmdhrumilmistry/setu/internal/proto"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
@@ -196,5 +197,55 @@ func TestRequireDevice(t *testing.T) {
 	}
 	if _, err := dialSecret(ctx, t, ctl, phone, "", &asked); err == nil {
 		t.Error("a removed device joined again")
+	}
+}
+
+// TestPairingLinkAndAlerts: a pairing link (p=) pairs without typing the
+// code, and the host is notified of the pairing and of later connections.
+func TestPairingLinkAndAlerts(t *testing.T) {
+	t.Parallel()
+	r := relaytest.New()
+	defer r.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	code, v, err := secure.NewPairingVerifier()
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &pairStore{known: map[string]string{}, pairing: v}
+	var mu sync.Mutex
+	var titles []string
+	ctl, _ := startHost(t, ctx, r.URL(), func(c *host.Config) {
+		c.RequireDevice, c.Devices, c.Pairing, c.Profile = true, store, store, "claude"
+		c.Notify = func(title, body string) {
+			mu.Lock()
+			defer mu.Unlock()
+			titles = append(titles, title)
+		}
+	})
+	inv, err := link.Parse(ctl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inv.Pairing = code
+	phone, _ := secure.NewDeviceKey()
+	asked := 0
+	c, err := dialSecret(ctx, t, link.Build("", inv), phone, "", &asked)
+	if err != nil {
+		t.Fatalf("pairing link: %v", err)
+	}
+	if asked != 0 || c.Auth != proto.AuthPairing {
+		t.Errorf("pairing link: asked %d times, auth %q", asked, c.Auth)
+	}
+	c.Close()
+	time.Sleep(300 * time.Millisecond)
+	if c, err = dialSecret(ctx, t, ctl, phone, "", &asked); err != nil {
+		t.Fatal(err)
+	}
+	c.Close()
+	mu.Lock()
+	defer mu.Unlock()
+	if len(titles) != 2 || titles[0] != "setu: new device paired" || !strings.Contains(titles[1], "connected") {
+		t.Errorf("notifications %q", titles)
 	}
 }

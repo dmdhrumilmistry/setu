@@ -47,7 +47,8 @@ test('code round trip', async () => {
 });
 
 test('parseInvite', () => {
-  assert.deepEqual(C.parseInvite('https://x/#k=abc&r=wss%3A%2F%2Fa%2Cwss%3A%2F%2Fb'), { secret: 'abc', offer: '', relays: ['wss://a', 'wss://b'] });
+  assert.deepEqual(C.parseInvite('https://x/#k=abc&r=wss%3A%2F%2Fa%2Cwss%3A%2F%2Fb'), { secret: 'abc', offer: '', pairing: '', relays: ['wss://a', 'wss://b'] });
+  assert.equal(C.parseInvite('https://x/#k=abc&p=7K2M-QX9D-4HRT').pairing, '7K2M-QX9D-4HRT'); // link.Build's p=
   assert.deepEqual(C.parseInvite('CODE'), { offer: 'CODE' });
   assert.throws(() => C.parseInvite('https://x/#z=1'));
 });

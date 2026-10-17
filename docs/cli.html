@@ -182,6 +182,11 @@ can be turned off explicitly, for example <code>--qr=false</code>.</p>
 <td>Print a QR code of the browser link.</td>
 </tr>
 <tr>
+<td><code>--notify MODE</code></td>
+<td><code>auto</code></td>
+<td>Desktop notification on this computer when someone connects, a device pairs, or logins keep failing: <code>auto</code> (when this terminal is not attached, as with <code>-d</code> or <code>--headless</code>), <code>on</code> or <code>off</code>.</td>
+</tr>
+<tr>
 <td><code>--link-file PATH</code></td>
 <td>none</td>
 <td>Also write the invite link(s) to PATH (mode 0600).</td>
@@ -371,6 +376,11 @@ the terminal), plus:</p>
 <td>Display to share, by number (0 = first). Control clients can switch displays from the browser.</td>
 </tr>
 <tr>
+<td><code>--notify MODE</code></td>
+<td><code>auto</code></td>
+<td>As for <code>setu share</code>; since the desktop never attaches the terminal, <code>auto</code> means on.</td>
+</tr>
+<tr>
 <td><code>--fps N</code></td>
 <td>20</td>
 <td>Maximum frames per second, 1 to 60.</td>
@@ -438,6 +448,10 @@ the terminal), plus:</p>
 <tr>
 <td><code>setu service auth [--password-stdin] [--password-every-join] &lt;name&gt; device|password|none</code></td>
 <td>Change how new devices get in.</td>
+</tr>
+<tr>
+<td><code>setu service set [flags] &lt;name&gt;</code></td>
+<td>Change settings in place: <code>--idle-timeout</code>, <code>--max-clients</code>, <code>--device-idle</code>, <code>--valid-for</code> (from the next rotate), <code>--notify on|off</code>. Only the flags you pass change.</td>
 </tr>
 <tr>
 <td><code>setu service list</code></td>
@@ -562,6 +576,16 @@ the terminal), plus:</p>
 <td><code>--no-install</code></td>
 <td>off</td>
 <td>Do not start the service or register it to start at login.</td>
+</tr>
+<tr>
+<td><code>--device-idle DURATION</code></td>
+<td><code>2160h</code> (90 days)</td>
+<td>Forget a device that has not joined for this long, so a lost or retired one loses access; <code>0</code> means never.</td>
+</tr>
+<tr>
+<td><code>--no-notify</code></td>
+<td>off</td>
+<td>No desktop notification on this computer when someone connects.</td>
 </tr>
 <tr>
 <td><code>--relay URL</code></td>
@@ -730,6 +754,46 @@ setu device reset    # replace the key; hosts that trusted the old one will ask 
 <p>The private key is stored owner-only at <code>&lt;config dir&gt;/setu/device.key</code>. Give the
 fingerprint to a host to use with <code>setu share --approve --trust-device</code>. See
 <a href="sharing.html#approve-joiners-and-trust-devices">Approve joiners and trust devices</a>.</p>
+<h2 id="setu-doctor">setu doctor</h2>
+<pre><code class="language-sh">setu doctor              # check this computer's setu setup; every problem comes with the command that fixes it
+setu doctor --json       # the same as JSON, for scripts and MDM compliance checks
+setu doctor --offline    # skip the check for a newer release
+</code></pre>
+<p>It checks the managed policy, whether setu is up to date, whether the service
+runs and starts at login, every profile (how new devices get in, shared links,
+key expiry, idle timeouts, device expiry, policy violations), devices that
+have not joined for a month, and the permissions of this device's key. It
+exits with status 1 if anything fails, 0 otherwise (warnings included).</p>
+<h2 id="setu-upgrade">setu upgrade</h2>
+<pre><code class="language-sh">setu upgrade                    # install the latest release (or the version your organization pins)
+setu upgrade --check            # only say whether one is available
+setu upgrade --version v1.4.0   # install this release (also to roll back)
+setu upgrade auto status        # automatic updates by the service: on by default
+setu upgrade auto off           # ...or on
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--check</code></td>
+<td>Only report whether an update is available.</td>
+</tr>
+<tr>
+<td><code>--version VERSION</code></td>
+<td>Install this release instead of the latest.</td>
+</tr>
+<tr>
+<td><code>--force</code></td>
+<td>Also replace a development build (one built from source, without a release version).</td>
+</tr>
+</tbody>
+</table>
+<p>See <a href="install.html#updates">Updates</a> for how updates are verified and applied.</p>
 <h2 id="setu-policy">setu policy</h2>
 <p>Prints where the managed policy came from, its hash and its settings (header
 values hidden), or &quot;no managed policy on this device&quot;. See
@@ -805,6 +869,8 @@ values hidden), or &quot;no managed policy on this device&quot;. See
       <li class="l3"><a href="#setu-service-audit">setu service audit</a></li>
       <li class="l3"><a href="#setu-service-install-and-run">setu service install and run</a></li>
       <li class="l2"><a href="#setu-device">setu device</a></li>
+      <li class="l2"><a href="#setu-doctor">setu doctor</a></li>
+      <li class="l2"><a href="#setu-upgrade">setu upgrade</a></li>
       <li class="l2"><a href="#setu-policy">setu policy</a></li>
       <li class="l2"><a href="#environment-variables">Environment variables</a></li>
     </ul>

@@ -18,6 +18,7 @@ Ready-made templates are in
 * require passwords (with a minimum length) and personal keys;
 * cap concurrent clients, share duration and service key lifetime;
 * allow only certain programs, relays and web client URLs;
+* control how setu updates itself;
 * force audit logging to the organization's collector, and add device
   attributes (such as an asset tag) to every record.
 
@@ -55,6 +56,11 @@ Every setting is optional; without a policy setu behaves as unmanaged.
 | `RequireDevicePairing` | bool | Service profiles admit only paired devices (`setu service add --auth device`): each enters a one-time code from `setu service pair` once. Excludes `RequirePassword`. |
 | `MaxPairingTime` | duration | Pairing codes must expire within this time. |
 | `MaxDevicesPerProfile` | int | Most devices one service profile may admit. |
+| `MaxDeviceIdle` | duration | Service profiles forget devices unused for this long, whatever the profile says. |
+| `DisableUpdate` | bool | The organization updates setu itself; `setu upgrade` and automatic updates are off. Excludes `AutoUpdate` and `UpdateVersion`. |
+| `AutoUpdate` | bool | The service installs updates automatically, and users cannot turn this off. |
+| `UpdateVersion` | string | Pin the release (such as `v1.4.0`) the service and `setu upgrade` install; it may be older, to roll back. |
+| `UpdateURL` | string | An `https://` release mirror with GitHub's layout (`<base>/latest`, `<base>/download/<version>/<file>`). |
 | `AllowedCommands` | list | Only these programs may be shared. A bare name (`claude`) matches the program name on any OS; an absolute path matches exactly. Remote desktop counts as `@desktop`, so a list without it also refuses `setu desktop`. |
 | `AllowedRelays` | list | Only these relays may be used; they also become the default. |
 | `AllowedWebURLs` | list | Invite links may only point at these web client URLs. |
@@ -82,6 +88,8 @@ Example policy:
   "PasswordEveryJoin": true,
   "MaxPairingTime": "15m",
   "MaxDevicesPerProfile": 5,
+  "MaxDeviceIdle": "2160h",
+  "AutoUpdate": true,
   "AllowedCommands": ["claude", "bash", "pwsh"],
   "AuditEndpoint": "https://otel.example.com:4318/v1/logs",
   "AuditHeaders": {"Authorization": "Bearer REPLACE_WITH_INGEST_ONLY_TOKEN"},
@@ -89,6 +97,24 @@ Example policy:
   "ResourceAttributes": {"deployment.environment": "corp"}
 }
 ```
+
+## Updates
+
+The always-on service updates setu automatically by default. It checks for a
+new release about every 6 hours and verifies the download against the
+release's `SHA256SUMS`, and against the release signature when the build has a
+release key. It runs the new binary once before swapping it in atomically, and
+restarts only when nobody is connected and no session can be resumed.
+
+* `DisableUpdate`: for organizations that deploy setu themselves. `setu upgrade`
+  is refused and the service never updates.
+* `UpdateVersion`: pin a version for the whole fleet, or roll back to an older
+  one. The service and `setu upgrade` install exactly that version.
+* `UpdateURL`: fetch releases from an internal mirror instead of GitHub. The
+  mirror needs GitHub's layout: `<base>/latest` and
+  `<base>/download/<version>/<file>`.
+* `AutoUpdate`: forbid turning automatic updates off with
+  `setu upgrade auto off`.
 
 ## Deploy it
 

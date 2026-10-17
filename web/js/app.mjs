@@ -268,6 +268,14 @@ async function onHello(m) {
   const pairing = m.secret === 'pairing';
   state.askSecret = () => {
     state.askSecret = null; // the host asks at most once per connection
+    if (pairing && state.pairingCode) {
+      // A pairing link carries its one-time code: pair without typing. The
+      // code is used once and then dropped from memory.
+      $('pw').value = state.pairingCode;
+      state.pairingCode = '';
+      step('Pairing this device with the code from the link…');
+      queueMicrotask(() => $('pw-form').requestSubmit());
+    }
     setStatus(pairing ? 'pairing code required' : 'password required', 'warn');
     if (pairing) step('This device is new to the host. Enter the pairing code shown by `setu service pair` on the host; it is needed only once.');
     else if (m.device_auth && dev) step('The host does not know this device yet. Enter the password once; the host then remembers this device.');
@@ -828,7 +836,8 @@ async function start(input) {
   try {
     const inv = input === null ? state.invite : C.parseInvite(input);
     if (inv.secret) {
-      state.invite = inv;
+      if (inv.pairing) state.pairingCode = inv.pairing; // memory only, never kept across reloads
+      state.invite = { secret: inv.secret, relays: inv.relays };
       await joinNostr(inv, gen);
     } else {
       state.invite = null; // manual offers are single use

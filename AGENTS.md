@@ -81,6 +81,16 @@ separate step after auth.
   must also be added to every template in `deploy/mdm/` (ADMX/ADML, `.reg`,
   `.mobileconfig`, VaanarSena YAML, example JSON) and to `docs/src/mdm.md`.
   `internal/policy/deploy_test.go` enforces the consistency.
+- `internal/update`: `setu upgrade` and the service's automatic updates:
+  fetch, verify (SHA256SUMS, plus an ed25519 signature once `ReleaseKeys` is
+  set; `tools/releasesign` signs in `release.yml`), self-test, atomic swap.
+  The supervisor (`internal/service/autoupdate.go`) re-execs into a replaced
+  binary only when every profile's `host.Session.Idle()` has held for 2
+  minutes, so an update never cuts a session off.
+- `internal/notify`: desktop notifications on the host (connections,
+  pairings, lockouts). Text goes to the notifier as argv/env, never as script.
+- `setu doctor` (`cmd/setu/doctor.go`, profile checks in
+  `internal/service/doctor.go`): every finding carries the command that fixes it.
 - `internal/audit`: OpenTelemetry (OTLP/HTTP) audit records, keystroke-to-
   command reconstruction and secret redaction.
 - `internal/desktop`: screen capture and input per OS (X11, macOS, Windows).

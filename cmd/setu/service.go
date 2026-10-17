@@ -24,6 +24,7 @@ import (
 	"github.com/dmdhrumilmistry/setu/internal/secure"
 	"github.com/dmdhrumilmistry/setu/internal/service"
 	"github.com/dmdhrumilmistry/setu/internal/tty"
+	"github.com/dmdhrumilmistry/setu/internal/update"
 )
 
 const serviceUsage = `setu service - always-on shares with persistent links, started at login.
@@ -38,6 +39,7 @@ Usage:
   setu service device add [--name N] [--person P|--view] <name> <fingerprint>   admit a device without a code
   setu service device remove <name> <fingerprint>|--all   stop admitting a device (it is disconnected at once)
   setu service auth <name> device|password|none           change how new devices get in
+  setu service set [flags] <name>                         change a setting (--idle-timeout, --device-idle, --notify, ...)
   setu service key add [--view] <name> <person>           give one person their own link (audited by name)
   setu service key list <name>                            list the people holding personal keys
   setu service key remove <name> <person>                 revoke one person's link
@@ -80,6 +82,8 @@ func runService(args []string) (int, error) {
 		return serviceDevice(rest)
 	case "auth":
 		return serviceAuth(rest)
+	case "set":
+		return serviceSet(rest)
 	case "rotate":
 		return serviceRotate(rest)
 	case "enable", "disable":
@@ -222,6 +226,8 @@ func serviceAdd(args []string) (int, error) {
 	passwordEveryJoin := fs.Bool("password-every-join", false, "with --auth password: ask for it on every join, not once per device")
 	pairFor := fs.Duration("pair-for", defaultPairFor, "with --auth device: how long the first pairing code works")
 	noInstall := fs.Bool("no-install", false, "do not start the service, or register it to start at login")
+	noNotify := fs.Bool("no-notify", false, "no desktop notification on this computer when someone connects")
+	deviceIdle := fs.Duration("device-idle", defaultDeviceIdle, "forget a device that has not joined for this long, so a lost or retired one loses access (0 = never)")
 	fs.Var(&relays, "relay", "nostr relay URL(s) (default: built-in public relays)")
 	fs.Var(&stun, "stun", "STUN server URL(s) (default Google STUN)")
 	turn := fs.String("turn", "", "TURN server URL for strict NATs (credential from SETU_TURN_PASSWORD)")
@@ -342,6 +348,8 @@ func serviceAdd(args []string) (int, error) {
 		NoUpload:     *noUpload,
 		IdleTimeout:  service.Duration(*idleTimeout),
 		RecordDir:    *recordDir,
+		DeviceIdle:   service.Duration(*deviceIdle),
+		NoNotify:     *noNotify,
 		Created:      now.UTC(),
 	}
 	if *desktopMode {
@@ -400,7 +408,7 @@ func serviceAdd(args []string) (int, error) {
 		if err != nil {
 			return 1, err
 		}
-		printPairing(name, code, exp)
+		printPairing(name, code, exp, p, "")
 	}
 	if *desktopMode {
 		printDesktopServiceNotes()
@@ -408,6 +416,10 @@ func serviceAdd(args []string) (int, error) {
 	startService(st.dir, *noInstall)
 	return 0, nil
 }
+
+// defaultDeviceIdle is how long a device may go unused before a profile
+// forgets it.
+const defaultDeviceIdle = 90 * 24 * time.Hour
 
 // defaultPairFor is how long a pairing code works by default: long enough
 // to pick up the other device, short enough not to linger.
@@ -457,9 +469,27 @@ func newPairing(dir, name string, d time.Duration) (code string, expires time.Ti
 	return code, expires, err
 }
 
-func printPairing(name, code string, expires time.Time) {
-	fmt.Fprintf(os.Stderr, "\n\x1b[1mPAIRING CODE  %s\x1b[0m  (one device, until %s)\n", code, expires.Local().Format("15:04"))
-	fmt.Fprintf(os.Stderr, "Open the link on the device you want to use and enter this code when it asks. From then on that\n"+
+// printPairing shows a new pairing code, and a pairing link that carries it
+// (person's control link, or the shared one), so a phone pairs with one scan.
+func printPairing(name, code string, expires time.Time, p *service.Profile, person string) {
+	until := expires.Local().Format("15:04")
+	key := p.ControlKey
+	if k := p.PersonalKeys[person]; k != nil {
+		key = k.Key
+	} else if key == "" {
+		for _, who := range p.People() {
+			if k := p.PersonalKeys[who]; k.Role == proto.RoleControl {
+				key = k.Key
+				break
+			}
+		}
+	}
+	if key != "" {
+		l := link.Build(p.WebURL, link.Invite{Secret: key, Relays: p.Relays, Pairing: code})
+		printLink(os.Stderr, "\x1b[1;32mPAIRING link\x1b[0m - scan it on the device you want to use; works once, until "+until+":", l)
+	}
+	fmt.Fprintf(os.Stderr, "\n\x1b[1mPAIRING CODE  %s\x1b[0m  (one device, until %s)\n", code, until)
+	fmt.Fprintf(os.Stderr, "Scan the pairing link, or open the normal link and type this code when it asks. From then on that\n"+
 		"device is recognised by its device key and never needs a code again. Pair another device with\n"+
 		"`setu service pair %s`; list or remove devices with `setu service device list %s`.\n", name, name)
 }
@@ -961,8 +991,17 @@ func serviceRun(args []string) (int, error) {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	sv := &service.Supervisor{Dir: *dir, Version: versionString(), Log: log.New(out, "", log.LstdFlags)}
-	if err := sv.Run(ctx); err != nil {
+	sv := &service.Supervisor{Dir: *dir, Version: versionString(), Release: version, Log: log.New(out, "", log.LstdFlags)}
+	err := sv.Run(ctx)
+	if errors.Is(err, service.ErrUpdated) {
+		exe, xerr := update.Executable()
+		if xerr == nil {
+			xerr = reexec(exe, os.Args[1:])
+		}
+		fmt.Fprintln(out, "setu service: could not restart into the update:", xerr)
+		return 1, xerr // the service manager restarts it
+	}
+	if err != nil {
 		fmt.Fprintln(out, "setu service:", err)
 		return 1, err
 	}

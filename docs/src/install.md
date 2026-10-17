@@ -52,6 +52,30 @@ go build -o setu ./cmd/setu      # setu.exe on Windows
 Cross-compile with `GOOS` and `GOARCH`, for example
 `GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build ./cmd/setu`.
 
+## Updates
+
+setu keeps itself up to date. The always-on service checks for a new release
+about every 6 hours and installs it by itself; you can also run
+`setu upgrade` at any time. Updating never interrupts anyone:
+
+* The download is checked against the release's `SHA256SUMS` (and, in builds
+  that carry the release signing key, against an ed25519 signature of it),
+  then run once to make sure it starts and reports the right version.
+* Only then is it swapped in, with a single rename: the file is never half
+  written, and a failed update leaves the old binary in place.
+* Shares that are already running keep the version they started with until
+  they end.
+* The service switches to the new version only when nobody has been
+  connected for two minutes and no session can still be resumed.
+
+`setu upgrade auto off` turns automatic updates off (`on` turns them back on,
+`status` shows the state). A development build (built from source) is never
+updated automatically; `setu upgrade --force` replaces it with the latest
+release. If setu was installed by an administrator in a directory you cannot
+write to, they update it. Organizations can pin a version, use an internal
+mirror, require automatic updates or turn them off with
+[managed policy](mdm.md).
+
 ## Platform notes
 
 **Windows.** Hosting uses the ConPTY pseudo console, so it needs Windows 10

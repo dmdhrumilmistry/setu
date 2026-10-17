@@ -30,8 +30,9 @@ code once, prints a one-time **pairing code**, and starts the service (it also
 registers it to start at login, so there is nothing else to set up). Send each
 person only their own link.
 
-By default a profile admits only **paired devices**: open the link on your
-phone or laptop, enter the pairing code once, and from then on that device is
+By default a profile admits only **paired devices**: scan the **pairing link**
+QR code with your phone (it carries the one-time code), or open the normal
+link and type the code once, and from then on that device is
 recognised by its device key and never asks for anything again. See
 [Devices and pairing](#devices-and-pairing).
 
@@ -74,6 +75,10 @@ setu service auth claude password          # switch to a password (asked once pe
 setu service auth claude device            # back to paired devices; known devices keep working
 ```
 
+* `setu service pair` prints a pairing link with a QR code, which carries the
+  code so a phone pairs with one scan, and the code itself for devices that
+  already have the link. Treat the pairing link like a password until it is
+  used: it works once and expires.
 * A pairing code is 12 random characters (60 bits), works for **one** device,
   expires (15 minutes by default), and is checked with the same
   challenge-response as a password, so it never crosses the network. Wrong
@@ -82,6 +87,13 @@ setu service auth claude device            # back to paired devices; known devic
   the view link cannot use the control link, and removing a person's key
   (`setu service key remove`) also removes their devices.
 * Removing a device disconnects it at once and invalidates its reconnect token.
+* A device that has not joined for 90 days is forgotten (`--device-idle` on
+  `add`, or `setu service set NAME --device-idle 720h`; `0` keeps devices
+  forever), so a lost or retired device does not keep access.
+* Whenever someone connects or a device pairs, this computer shows a desktop
+  notification naming who it is, from where, and the verification code, so
+  access you did not expect does not go unnoticed. Turn it off with
+  `setu service set NAME --notify off`.
 * A device's fingerprint is shown on the web client's home page, and by
   `setu device` on the command line, so you can add one without a code.
 * In `password` mode, a device that gives the password is remembered the same
@@ -170,6 +182,32 @@ setu service remove claude                 # delete the profile and its keys
 
 When keys expire the profile stops being served and `setu service list` shows
 it as `expired`; `setu service rotate` issues fresh keys with a new expiry.
+
+## Check your setup
+
+```sh
+setu doctor
+```
+
+`setu doctor` reviews the service and every profile and prints each problem
+with the command that fixes it: a profile anyone with the link can use, shared
+control links, keys that never expire or expire soon, no idle timeout, devices
+that never expire or have not been used for a month, a service that is not
+running or will not start after a reboot, automatic updates turned off, and an
+outdated setu. `setu doctor --json` gives the same for scripts and compliance
+checks.
+
+Change a setting without recreating the profile:
+
+```sh
+setu service set claude --idle-timeout 30m --device-idle 720h
+setu service set claude --max-clients 2 --notify off
+```
+
+## Updates
+
+The service keeps setu up to date by itself and switches to a new version only
+when nobody is connected; see [Updates](install.md#updates).
 
 ## Audit the service
 

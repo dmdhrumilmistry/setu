@@ -1,311 +1,192 @@
-# setu
+<p align="center">
+  <img src="docs/assets/logo.svg" width="96" height="96" alt="setu logo: a bridge">
+</p>
 
-**Share your terminal peer-to-peer, from anywhere, without running a server.**
-Built for driving Claude Code and other AI agents on your machine from your
-phone or another computer.
+<h1 align="center">setu</h1>
 
-**Documentation: https://dmdhrumilmistry.github.io/setu/docs/**
+<p align="center">
+  <strong>Your terminal, on any device. No server in the middle.</strong><br>
+  Drive Claude Code (or any shell) on your computer from your phone, peer-to-peer and end-to-end encrypted.
+</p>
+
+<p align="center">
+  <a href="https://github.com/dmdhrumilmistry/setu/actions/workflows/ci.yml"><img src="https://github.com/dmdhrumilmistry/setu/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/dmdhrumilmistry/setu/releases"><img src="https://img.shields.io/github/v/release/dmdhrumilmistry/setu?sort=semver" alt="Latest release"></a>
+  <img src="https://img.shields.io/github/go-mod/go-version/dmdhrumilmistry/setu" alt="Go version">
+  <img src="https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-0b1220" alt="Linux, macOS and Windows">
+  <a href="https://dmdhrumilmistry.github.io/setu/docs/"><img src="https://img.shields.io/badge/docs-read-38bdf8" alt="Documentation"></a>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#always-on-access-from-your-phone">Always-on access</a> ·
+  <a href="#secure-by-default">Security</a> ·
+  <a href="https://dmdhrumilmistry.github.io/setu/docs/">Documentation</a>
+</p>
+
+---
+
+*Setu* (सेतु) means *bridge*. It connects a browser or another terminal
+straight to a terminal on your computer, so you can start a long Claude Code
+task at your desk and keep steering it from the couch, the train or another
+machine.
 
 ```
-$ setu share --password -- claude
+$ setu share -- claude
 
-CONTROL link — anyone holding it can type into this terminal. Keep it secret:
+CONTROL link - anyone holding it can type into this terminal. Keep it secret:
   browser:  https://dmdhrumilmistry.github.io/setu/#k=Pqv4WrBl…
-  terminal: setu join 'k=Pqv4WrBl…'
   ▄▄▄▄▄▄▄ ▄ ▄▄ ▄▄▄▄▄▄▄
   █ ▄▄▄ █ ▀█▄█ █ ▄▄▄ █      ← scan with your phone
   …
 ```
 
-Open the link or scan the QR code and you are in the same terminal session.
+## Why setu
 
-* **No central server.** The terminal stream is a direct WebRTC connection.
-  Peers find each other through public [nostr](https://nostr.com) relays,
-  which only ever see encrypted messages, and Google's STUN servers. You can
-  also use `--manual` to copy and paste the connection details with no relays
-  at all.
-* **Survives network changes.** If the connection drops (a phone switching
-  between Wi-Fi and mobile data, a laptop waking up), the browser and
-  `setu join` reconnect by themselves. They don't ask for the password again,
-  and the terminal continues where it left off.
-* **Browser or CLI.** There is a static web client hosted on GitHub Pages
-  (xterm.js, a mobile key bar, a compose box for long prompts), and
-  `setu join` for terminals.
-* **Security-first.** The link is a 256-bit key that is never sent to any
-  server. setu adds end-to-end DTLS, a verification code, and optional
-  passwords, view-only links, single-use links, expiry and approval
-  prompts. See [SECURITY.md](SECURITY.md).
-
-## Install
-
-```sh
-go install github.com/dmdhrumilmistry/setu/cmd/setu@latest   # Go 1.27.2+
-```
-
-Release binaries for Linux, macOS and Windows are on the
-[releases page](https://github.com/dmdhrumilmistry/setu/releases).
-Sharing and joining work on Linux, macOS and Windows. On Windows, hosting uses
-the ConPTY pseudo console, so it needs Windows 10 1809 / Server 2019 or newer,
-and the default shell is PowerShell. `.cmd` shims like npm's `claude` work too.
-
-## Usage
-
-### Share
-
-```sh
-setu share                                 # share $SHELL
-setu share -- claude                       # share Claude Code
-setu share --password --once -- claude     # password + single-use link
-setu share --view-link -- claude           # also print a read-only link for spectators
-setu share --approve -- bash               # confirm each joiner on this terminal (y/N)
-setu share --expire 30m --max-clients 1    # stop accepting new joins after 30 minutes
-setu share --headless --link-file ~/.setu-link -- claude   # no local attach (e.g. under tmux/nohup)
-setu share --manual                        # no relays: copy/paste offer & answer
-setu share --record run.cast -- claude      # record the session (asciicast) to replay later
-setu share -d --password -- claude         # run in the background and get your shell back
-```
-
-By default the host terminal is attached to the session too: you see what the
-remote side does and can type alongside it. Type **`<Enter> ~ .`** on the host
-to end the share.
-
-| Flag | Default | Meaning |
-| --- | --- | --- |
-| `--password` | off | Prompt for a session password (or set `SETU_PASSWORD`). Each device is asked once, then remembered by its device key. |
-| `--password-every-join` | off | With `--password`: ask on every new join instead of once per device. |
-| `--view-link` | off | Also create a read-only invite. |
-| `--once` | off | The invite stops working after the first successful join. |
-| `--expire` | `0` | Stop accepting new clients after this duration. |
-| `--max-clients` | `2` | Maximum concurrent clients. |
-| `--approve` | off | Ask on the host for every joiner: `y` once, `a` always for that device, `N` no. |
-| `--trust-device` | none | Device key fingerprint (`setu device`, or the web client's home page) approved without asking. With `--approve` in the background, only these devices may join. |
-| `--manual` | off | Copy/paste signaling instead of nostr. |
-| `--relay` | 4 public relays | Nostr relay URL(s) to use. |
-| `--stun` | Google STUN | STUN server URL(s). |
-| `--turn`, `--turn-user` | — | TURN relay for strict NATs (credential in `SETU_TURN_PASSWORD`). |
-| `--web-url` | GitHub Pages | Base URL of the web client (set your own if you self-host). |
-| `--headless` | off | Don't attach the local terminal. |
-| `--qr` | on | Print a QR code of the browser link. |
-| `--link-file` | — | Write invite link(s) to a 0600 file. |
-| `-d`, `--background` | off | Detach: serve in the background and return to the shell. |
-
-### Background shares
-
-`setu share -d …` starts the share as a detached background process. It prints
-the links and QR code, then gives you your prompt back. The share keeps running
-after you close the terminal (on Windows, after you close the window).
-
-```sh
-setu share -d --password -- claude   # prompts for the password, then detaches
-setu ps                              # list background shares
-setu link <id>                       # print the links / QR code again
-setu logs <id>                       # who connected, with verification codes
-setu stop <id>                       # end one share (or: setu stop --all)
-```
-
-Each background share keeps its state in `~/.config/setu/sessions/<id>/`
-(`%AppData%\setu\sessions\<id>\` on Windows), readable only by you. That
-state includes the invite links. The directory is removed when the share
-ends. The password is passed to the background process through a pipe, never
-on the command line or in the environment. `--manual` and `--approve` need an
-attached terminal, so they cannot be combined with `-d`.
-
-### Always-on shares (`setu service`)
-
-A *profile* is a command plus a persistent invite key. The setu service runs
-in the background, starts at login and serves every enabled profile whose
-keys have not expired. If a profile's command exits, the service restarts it,
-so the profile's link keeps working across reboots.
-
-```sh
-setu service add claude -- claude      # prints the link + a one-time pairing code, starts the service at login
-setu service pair claude               # a code for one more device (single use, 15 minutes)
-setu service device list claude        # the devices this profile admits
-setu service device remove claude 3f2a-91c0-77de-0b4e-a1c9   # cut one off immediately
-setu service add --desktop office-pc    # an always-on remote desktop of this machine
-setu service install                   # start at login: systemd user unit / launchd agent / Task Scheduler
-setu service list                      # profiles, state, expiry
-setu service link claude               # show the links (+ QR) again
-setu service key add claude alice      # Alice's own link: the audit log names her
-setu service key list claude
-setu service key remove claude alice   # revoke only Alice's link
-setu service rotate claude             # new keys for everyone; the old links stop working immediately
-setu service disable claude            # stop serving without deleting (enable to resume)
-setu service remove claude
-setu service status                    # autostart, supervisor and audit state
-setu service uninstall
-```
-
-The running service picks up changes within a few seconds, so you don't need
-to restart it. Because these links live for a long time, profiles are
-stricter than `setu share`:
-
-* Give each person their own key (`--person alice` on `add`, or
-  `setu service key add`). The service tells people apart by which key
-  decrypted their join request, never by anything the client claims, so
-  audit records name them reliably. `--no-shared-key` leaves no shared,
-  anonymous control link at all. You can also revoke one person without
-  affecting anyone else.
-* Only paired devices get in by default (`--auth device`). Each device
-  enters a one-time pairing code once; after that it is recognised by its
-  device key, a non-extractable key that never leaves the browser (or
-  `setu join`'s owner-only key file), so a leaked link alone is useless.
-  `--auth password` uses a 12+ character password instead, asked once per
-  device. The service stores only PBKDF2 verifiers, never the secrets.
-* Keys expire after `--valid-for` (default 90 days). `rotate` renews them.
-* `--max-clients` defaults to 1. `--once` and `--approve` are not available,
-  because nobody is at the host terminal to answer.
-* The command is resolved to an absolute path when you add the profile, so a
-  directory added to `PATH` later cannot substitute another program.
-
-State lives in `~/.config/setu/service/` (`%LOCALAPPDATA%\setu\service\` on
-Windows, which does not roam). `config.json` holds the keys, so it must be
-mode 0600. setu refuses to load it otherwise. Only one supervisor can serve a
-state directory at a time.
-
-### Remote desktop (`setu desktop`)
-
-```sh
-setu desktop --password              # share this computer's screen, mouse, keyboard and clipboard
-setu desktop --password --view-link  # also a watch-only link
-setu desktop -d --password           # in the background (setu ps / setu stop)
-```
-
-The same links, passwords, approval, audit log and background mode as
-`setu share`, viewed in any browser: fit or 1:1 scaling, monitor switching,
-quality presets, special key combinations, touch gestures on phones,
-fullscreen with keyboard capture, and text clipboard sync both ways (Ctrl+V
-on the remote screen pastes your local clipboard there; copies on the remote
-computer arrive in your clipboard), and file upload (drop files on the screen or
-the terminal; they land in `~/Downloads/setu` on the host). Only the tiles that changed are sent, and
-each browser acknowledges frames, so slow links get fewer frames instead of
-lag. Hosts: Windows, macOS 12+, and Linux or BSD with an X11 session (Wayland is
-not supported yet). Shortcuts follow your own keyboard: between a Mac and a PC,
-Ctrl and Cmd are swapped, so Ctrl+C on a PC copies on a Mac host and Cmd+C on a
-Mac copies on a Windows or Linux host. `--display N` picks a monitor and `--fps N` caps the
-frame rate. Organizations can disable it with the `DisableDesktop` policy.
-See the [remote desktop guide](https://dmdhrumilmistry.github.io/setu/docs/desktop.html).
-
-### Audit logging (OpenTelemetry)
-
-setu can send an audit trail to an OpenTelemetry collector as OTLP/HTTP log
-records. You can route those records from the collector to Loki,
-Elasticsearch, Splunk, Datadog or any other OTLP backend.
-
-```sh
-export OTEL_EXPORTER_OTLP_HEADERS='Authorization=Bearer%20<token>'   # credentials: env only, never flags
-setu share --audit-endpoint https://otel.example.com:4318 --audit-required -- claude
-
-setu service audit --endpoint https://otel.example.com:4318          # for the service (sends a test record first)
-```
-
-| Event (`event.name`) | When |
+|  |  |
 | --- | --- |
-| `setu.session.start` / `setu.session.end` | A share starts or ends (command, password on/off, exit code) |
-| `setu.client.connect` / `setu.client.disconnect` | A client joins or leaves (role, verification code, DTLS fingerprint, `client.address`) |
-| `setu.client.rejected` / `setu.client.auth_failure` / `setu.client.approval` | Admission decisions |
-| `setu.command` | A line someone submitted, attributed to the client (or `via=local` for the host terminal) |
-| `setu.input.control` | ^C, ^D or ^Z |
+| 🔒 **Private by design** | Your keystrokes travel over a direct, DTLS-encrypted WebRTC connection. The public relays that introduce the two ends only ever see ciphertext. There is no setu server and no account. |
+| 📱 **Made for phones** | Open the link or scan the QR code: a full terminal in the browser, with a key bar (Esc, Tab, Ctrl, arrows), a compose box for long prompts and touch scrolling. Nothing to install on the phone. |
+| 🔁 **Survives real life** | Switching between Wi-Fi and mobile data, locking the phone or reloading the tab resumes the same session, without the password again. |
+| 🗝️ **Devices, not passwords** | Each browser has its own non-extractable device key. Pair a device once and it gets in by itself from then on; a leaked link alone is useless. |
+| ♾️ **Always on** | `setu service` keeps your links working across reboots, starts at login and keeps itself up to date. |
+| 🖥️ **Remote desktop too** | `setu desktop` shares the whole screen, mouse, keyboard and clipboard in the browser. |
+| 🏢 **Team and fleet ready** | Personal links per person, an OpenTelemetry audit log of who typed what, and MDM policy for Intune, Jamf, Kandji or Group Policy. |
 
-Every record carries `setu.session.id`, and service records also carry
-`setu.profile`. Each `setu.command` record stands on its own and answers
-three questions:
+## Quick start
 
-| | Attributes |
+**1. Install** (Linux, macOS or Windows)
+
+```sh
+go install github.com/dmdhrumilmistry/setu/cmd/setu@latest
+```
+
+Or download a binary from the [releases page](https://github.com/dmdhrumilmistry/setu/releases).
+setu updates itself afterwards (`setu upgrade`).
+
+**2. Share**
+
+```sh
+setu share --password -- claude      # or any command; no command shares your shell
+```
+
+**3. Join.** Scan the QR code with your phone (or open the link anywhere), type
+the password once, and check that the **verification code** matches on both
+screens. That's it.
+
+Type `<Enter> ~ .` on your computer to end the share, or use `setu share -d …`
+to run it in the background and get your prompt back (`setu ps`, `setu stop`).
+
+## Always-on access from your phone
+
+Want your computer reachable whenever it is on, without starting anything?
+
+```sh
+setu service add claude -- claude
+```
+
+This one command creates a permanent link, starts the service, sets it to start
+at login, and prints a **pairing QR code**. Scan it with your phone: the phone
+is now paired and joins with a tap from then on. To add another device later:
+
+```sh
+setu service pair claude              # a one-time code / QR for one more device
+setu service device list claude       # which devices can get in
+setu service device remove claude <fingerprint>   # cut one off immediately
+setu doctor                           # check everything; each problem comes with its fix
+```
+
+Your computer shows a notification every time someone connects, so access you
+did not expect does not go unnoticed.
+
+## Secure by default
+
+| Default | What it means for you |
 | --- | --- |
-| **Who** ran it | `setu.actor` (for example `alice (client #2 from 203.0.113.7:51234, device alice-laptop (linux/amd64, setu-cli), verification code 769 168)`), `setu.actor.name` (the personal key's owner, `host-terminal`, or `shared-control-link`), `setu.client.verification_code`, `setu.client.dtls_fingerprint`, and the account and machine it ran as (`user.name`, `host.name`, `host.id`) |
-| **From where** | `client.address`/`client.port` (the selected network path), `network.transport`, `setu.client.candidate_type`, `setu.client.public_addresses` (the client's public IP:port as its NAT presents it, which is still the real origin when the path is a TURN relay) and `setu.client.local_addresses` (LAN addresses; browsers hide these) |
-| **On what device** | `setu.client.device.*`: `app`, `version`, `id` (a random id kept per installation or browser, so you can tell a returning device from a new one), `os`, `os_version`, `arch`, `model`, `hostname`, `user`, `language`, `timezone`, `screen`, `mobile`, plus `user_agent.original`. These are **self-reported** (`setu.client.device.self_reported=true`): good for investigation, never used for access decisions. The host strips control characters and caps lengths, so a client cannot inject escape sequences or forge log lines. `setu join --anonymous` sends none of them. |
-| **When** | the record timestamp, plus `setu.command.submitted_at` (Enter pressed) and `setu.command.started_at` (first keystroke), in RFC 3339 UTC |
-| **What** | the record body and `setu.command.text`, plus `setu.session.command` (the program it was typed into, for example `bash` or `claude`) |
+| The link *is* the key | A 256-bit secret after `#`, which browsers never send to any server. |
+| Paired devices only (service) | A new device needs a single-use, 15-minute pairing code; the link alone gets nobody in. |
+| Password once per device | With `--password`, each device is asked once and then recognised by its device key. |
+| Verification code | Both ends show the same 6-digit code, so a man in the middle would show up. |
+| Lockout | 5 wrong passwords or codes lock new joins for 10 minutes; 20 disable the link. |
+| Expiry | Service links expire after 90 days and unused devices after 90 days. |
+| Alerts | A desktop notification for every connection and pairing. |
+| Safe updates | Updates are checksum-verified, test-run, swapped in atomically, and applied only when nobody is connected. |
+| Nothing third party in the page | All browser code is vendored and pinned; you can self-host it. |
 
-`setu.actor.name` can only name a person if each person has their own key.
-With a shared link, every holder looks the same (`shared-control-link`), so
-use personal keys (`setu service key add`) when you need to know who typed a
-command.
+Read [SECURITY.md](SECURITY.md) for the full threat model.
 
-Commands are rebuilt from keystrokes, so they are best effort. setu sees what
-was typed, not what the shell finally ran. Lines that used arrow keys, history
-or tab completion are flagged `setu.input.edited=true`. Commands that an agent
-runs on its own are not keystrokes, so setu does not see them. Claude Code's
-own OpenTelemetry export covers those.
+## What can I do with it?
 
-Secrets are kept out of the log:
+```sh
+setu share --view-link -- claude          # also a read-only link for people who should only watch
+setu share --approve -- bash              # confirm every joiner on this terminal
+setu share --once --expire 15m -- bash    # a link that works once, for 15 minutes
+setu share --record run.cast -- claude    # record the session to replay later
+setu share --manual                       # no relays at all: copy and paste the connection details
+setu join 'https://…/#k=…'                # join from another terminal instead of a browser
+setu desktop --password                   # share the whole desktop
+setu service key add claude alice         # Alice's own link; the audit log names her
+setu share --audit-endpoint https://otel.example.com:4318 -- claude   # audit log to your collector
+```
 
-* On Linux and macOS, lines typed while the terminal has echo off (sudo,
-  ssh and other password prompts) are replaced with a marker.
-* Common token formats (AWS, GitHub, Slack, Anthropic/OpenAI, JWTs, bearer
-  tokens, `password=`-style assignments, credentials in URLs, private keys
-  and setu invite keys) are redacted. Add your own patterns with
-  `--audit-redact <regex>`.
-* Use `--audit-input off` to record connections only.
-
-| Flag (`setu share`) | Meaning |
+| Guide | |
 | --- | --- |
-| `--audit` | Enable, using `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` / `OTEL_EXPORTER_OTLP_ENDPOINT`. |
-| `--audit-endpoint` | Collector URL (`/v1/logs` is added to a bare origin). Implies `--audit`. |
-| `--audit-required` | Fail closed: refuse to share unless the collector accepts a test record. |
-| `--audit-ca`, `--audit-cert`, `--audit-key` | Pin the collector's CA, and use mutual TLS. |
-| `--audit-insecure` | Allow plain `http://` to a host other than this machine (refused by default). |
-| `--audit-input` | `lines` (default) or `off`. |
-| `--audit-redact` | Extra regular expression to redact (repeatable). |
-
-### Managed devices (MDM)
-
-Organizations can deploy a **managed policy** through Intune, Jamf, Kandji,
-VaanarSena, Group Policy or configuration management. The policy can:
-
-* disable sharing or the service,
-* require passwords and personal keys,
-* cap clients and lifetimes,
-* restrict which programs, relays and web clients may be used,
-* force audit logging to the organization's collector.
-
-setu fails closed: if a policy is present but malformed or not
-admin-owned, setu will not run. `setu policy` shows what is in force.
-
-Ready-made artifacts are in [deploy/mdm](deploy/mdm): an ADMX/ADML template,
-a `.mobileconfig` profile, a `.reg` file, a Linux installer and a VaanarSena
-manifest.
-
-### Join
-
-* **Browser:** open the link. On a phone, use the key bar for Esc / Tab /
-  ⇧Tab / Ctrl / arrows, and ✎ to compose a multi-line prompt. Multi-line text
-  is sent as a bracketed paste, so Claude Code treats it as one prompt.
-* **Terminal:** `setu join '<link or k=…>'`. Type `<Enter> ~ .` to detach.
-* **Manual mode:**
-  1. Open the offer link, or run `setu join <offer-code>`.
-  2. Send the answer code it prints back to the host.
-  3. The host pastes that code into `setu share --manual`.
-
-Check that the **verification code** shown on both sides is the same.
+| [Quick start](https://dmdhrumilmistry.github.io/setu/docs/quickstart.html) | Your first share in two minutes |
+| [Claude Code](https://dmdhrumilmistry.github.io/setu/docs/claude-code.html) | Driving Claude Code from a phone |
+| [Sharing](https://dmdhrumilmistry.github.io/setu/docs/sharing.html) and [Joining](https://dmdhrumilmistry.github.io/setu/docs/joining.html) | Passwords, approval, background shares, strict networks |
+| [Always-on service](https://dmdhrumilmistry.github.io/setu/docs/service.html) | Profiles, pairing, devices, personal links |
+| [Remote desktop](https://dmdhrumilmistry.github.io/setu/docs/desktop.html) | Screen, mouse, keyboard and clipboard |
+| [Audit log](https://dmdhrumilmistry.github.io/setu/docs/audit.html) | Who connected and what they typed, over OpenTelemetry |
+| [MDM and policy](https://dmdhrumilmistry.github.io/setu/docs/mdm.html) | Fleet-wide rules and updates for organizations |
+| [CLI reference](https://dmdhrumilmistry.github.io/setu/docs/cli.html) | Every command and flag |
 
 ## How it works
 
-```
- setu share ──(encrypted hello/offer/answer via nostr relays)── browser / setu join
-      │                                                              │
-      └──────────── WebRTC data channel (DTLS, peer-to-peer) ────────┘
+```mermaid
+sequenceDiagram
+    participant H as Your computer (setu share)
+    participant R as Public nostr relays
+    participant P as Phone (browser)
+    P->>R: encrypted "hello" to the room derived from the link
+    R->>H: (relays see only ciphertext)
+    H->>R: encrypted WebRTC offer
+    R->>P: offer
+    P->>R: encrypted answer
+    R->>H: answer
+    P-->>H: direct WebRTC connection (DTLS), STUN finds the path
+    H->>P: challenge; P proves its device key (and password or pairing code once)
+    H->>P: your terminal, live
 ```
 
-1. `setu share` starts your command in a PTY and creates a random secret. The
-   secret is split, using HKDF, into a public room id and an AES-GCM key.
-2. The joiner publishes an encrypted *hello* to the room. The host replies with
-   an encrypted WebRTC offer, and the joiner sends back an encrypted answer.
-   These are all ephemeral nostr events.
-3. The peers connect directly, using STUN for NAT traversal. Over the data
-   channel the host sends a challenge. Once the password is verified (if one is
-   set), the terminal stream starts with a replay of recent output.
+1. The link's secret is split (HKDF) into a public room id and an AES-GCM key.
+2. The two ends exchange an encrypted WebRTC offer and answer through public
+   nostr relays, as short-lived events.
+3. They connect directly. The host challenges the joiner, and the terminal
+   stream starts with a replay of recent output.
 
-The full protocol is described in [docs/DESIGN.md](docs/DESIGN.md).
+The full protocol is in [docs/DESIGN.md](docs/DESIGN.md).
+
+## Platforms
+
+Sharing and joining work on Linux, macOS and Windows (amd64 and arm64). On
+Windows, hosting uses ConPTY (Windows 10 1809 / Server 2019 or newer) and
+shares PowerShell by default; npm shims like `claude.cmd` work. Remote desktop
+needs an X11 session on Linux (Wayland is not supported yet).
+
+## Organizations
+
+A managed policy, deployed with Intune, Jamf, Kandji, VaanarSena, Group Policy
+or configuration management, can turn features off, require passwords, device
+pairing and personal keys, cap clients and lifetimes, allow-list commands,
+relays and web clients, force audit logging, and pin or turn off updates.
+setu fails closed: a policy that is malformed or not admin-owned stops it.
+Ready-made templates are in [deploy/mdm](deploy/mdm).
 
 ## Hosting the web client
 
-The `pages` workflow publishes `web/` to GitHub Pages. To turn it on, go to
-**Settings → Pages → Source** and choose **GitHub Actions**. If you use a
-fork, or self-host the page anywhere that serves static files over HTTPS, pass
-`--web-url https://you.example/setu/` to `setu share`.
+The `pages` workflow publishes `web/` to GitHub Pages (**Settings → Pages →
+Source → GitHub Actions**). To use your own copy, serve `web/` from any HTTPS
+static host and pass `--web-url https://you.example/setu/`.
 
 ## Development
 
@@ -314,19 +195,12 @@ go test -race ./...                       # unit + e2e tests (real PTY + WebRTC 
 node --test web/test/crypto.test.mjs      # JS crypto parity with Go test vectors
 go build -o setu ./cmd/setu && SETU_LOCAL_RELAY=1 node web/test/browser-e2e.mjs   # headless Chromium e2e
 web/vendor/update.sh                      # re-vendor xterm.js / noble-curves
+cd tools/docsgen && go run .              # regenerate docs/*.html after editing docs/src
+cd tools/docsgen && go run . -check       # what CI runs: stale output, broken links, undocumented CLI flags
 ```
 
-### Documentation
-
-The docs site is written in Markdown under [`docs/src`](docs/src) (plus
-[`docs/DESIGN.md`](docs/DESIGN.md)) and rendered to static HTML in `docs/` by
-[`tools/docsgen`](tools/docsgen). The HTML is committed because GitHub Pages
-serves the `main` branch as is. After editing a page:
-
-```sh
-cd tools/docsgen && go run .          # regenerate docs/*.html and the search index
-cd tools/docsgen && go run . -check   # what CI runs: stale output, broken links, undocumented CLI flags
-```
-
-Preview locally with any static server from the repository root, for example
-`python -m http.server` and http://localhost:8000/docs/.
+The docs site is Markdown under [`docs/src`](docs/src), rendered to the
+committed HTML in `docs/` by [`tools/docsgen`](tools/docsgen). Preview it with
+any static server from the repository root (`python -m http.server`, then
+http://localhost:8000/docs/). Contributors and coding agents: see
+[AGENTS.md](AGENTS.md).

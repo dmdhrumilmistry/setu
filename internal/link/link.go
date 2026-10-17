@@ -28,6 +28,10 @@ type Invite struct {
 	Secret string   // k=, nostr mode
 	Relays []string // r=, optional relay override
 	Offer  string   // o=, manual mode offer code
+	// Pairing (p=) is a one-time pairing code carried in the link, so a new
+	// device pairs with one scan. Such a link is itself a short-lived,
+	// single-use secret.
+	Pairing string
 }
 
 // Build renders an invite as a link rooted at base (or as a bare fragment if
@@ -43,7 +47,10 @@ func Build(base string, inv Invite) string {
 	if inv.Offer != "" {
 		v.Set("o", inv.Offer)
 	}
-	frag := encodeOrdered(v, "k", "r", "o")
+	if inv.Pairing != "" {
+		v.Set("p", inv.Pairing)
+	}
+	frag := encodeOrdered(v, "k", "r", "o", "p")
 	if base == "" {
 		return frag
 	}
@@ -76,7 +83,7 @@ func Parse(s string) (Invite, error) {
 	if err != nil {
 		return Invite{}, fmt.Errorf("invalid invite fragment: %w", err)
 	}
-	inv := Invite{Secret: v.Get("k"), Offer: v.Get("o")}
+	inv := Invite{Secret: v.Get("k"), Offer: v.Get("o"), Pairing: v.Get("p")}
 	if r := v.Get("r"); r != "" {
 		for _, u := range strings.Split(r, ",") {
 			if u = strings.TrimSpace(u); u != "" {

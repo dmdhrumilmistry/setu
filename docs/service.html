@@ -98,8 +98,9 @@ what.</p>
 code once, prints a one-time <strong>pairing code</strong>, and starts the service (it also
 registers it to start at login, so there is nothing else to set up). Send each
 person only their own link.</p>
-<p>By default a profile admits only <strong>paired devices</strong>: open the link on your
-phone or laptop, enter the pairing code once, and from then on that device is
+<p>By default a profile admits only <strong>paired devices</strong>: scan the <strong>pairing link</strong>
+QR code with your phone (it carries the one-time code), or open the normal
+link and type the code once, and from then on that device is
 recognised by its device key and never asks for anything again. See
 <a href="#devices-and-pairing">Devices and pairing</a>.</p>
 <table>
@@ -197,6 +198,10 @@ setu service auth claude password          # switch to a password (asked once pe
 setu service auth claude device            # back to paired devices; known devices keep working
 </code></pre>
 <ul>
+<li><code>setu service pair</code> prints a pairing link with a QR code, which carries the
+code so a phone pairs with one scan, and the code itself for devices that
+already have the link. Treat the pairing link like a password until it is
+used: it works once and expires.</li>
 <li>A pairing code is 12 random characters (60 bits), works for <strong>one</strong> device,
 expires (15 minutes by default), and is checked with the same
 challenge-response as a password, so it never crosses the network. Wrong
@@ -205,6 +210,13 @@ codes count toward the lockout (5 failures lock the profile for 10 minutes).</li
 the view link cannot use the control link, and removing a person's key
 (<code>setu service key remove</code>) also removes their devices.</li>
 <li>Removing a device disconnects it at once and invalidates its reconnect token.</li>
+<li>A device that has not joined for 90 days is forgotten (<code>--device-idle</code> on
+<code>add</code>, or <code>setu service set NAME --device-idle 720h</code>; <code>0</code> keeps devices
+forever), so a lost or retired device does not keep access.</li>
+<li>Whenever someone connects or a device pairs, this computer shows a desktop
+notification naming who it is, from where, and the verification code, so
+access you did not expect does not go unnoticed. Turn it off with
+<code>setu service set NAME --notify off</code>.</li>
 <li>A device's fingerprint is shown on the web client's home page, and by
 <code>setu device</code> on the command line, so you can add one without a code.</li>
 <li>In <code>password</code> mode, a device that gives the password is remembered the same
@@ -310,6 +322,23 @@ setu service remove claude                 # delete the profile and its keys
 </code></pre>
 <p>When keys expire the profile stops being served and <code>setu service list</code> shows
 it as <code>expired</code>; <code>setu service rotate</code> issues fresh keys with a new expiry.</p>
+<h2 id="check-your-setup">Check your setup</h2>
+<pre><code class="language-sh">setu doctor
+</code></pre>
+<p><code>setu doctor</code> reviews the service and every profile and prints each problem
+with the command that fixes it: a profile anyone with the link can use, shared
+control links, keys that never expire or expire soon, no idle timeout, devices
+that never expire or have not been used for a month, a service that is not
+running or will not start after a reboot, automatic updates turned off, and an
+outdated setu. <code>setu doctor --json</code> gives the same for scripts and compliance
+checks.</p>
+<p>Change a setting without recreating the profile:</p>
+<pre><code class="language-sh">setu service set claude --idle-timeout 30m --device-idle 720h
+setu service set claude --max-clients 2 --notify off
+</code></pre>
+<h2 id="updates">Updates</h2>
+<p>The service keeps setu up to date by itself and switches to a new version only
+when nobody is connected; see <a href="install.html#updates">Updates</a>.</p>
 <h2 id="audit-the-service">Audit the service</h2>
 <pre><code class="language-sh">export OTEL_EXPORTER_OTLP_HEADERS='Authorization=Bearer%20&lt;ingest-token&gt;'
 setu service audit --endpoint https://otel.example.com:4318
@@ -379,6 +408,8 @@ profile against it before serving.</li>
       <li class="l2"><a href="#always-on-remote-desktop">Always-on remote desktop</a></li>
       <li class="l2"><a href="#start-it-at-login">Start it at login</a></li>
       <li class="l2"><a href="#manage-profiles">Manage profiles</a></li>
+      <li class="l2"><a href="#check-your-setup">Check your setup</a></li>
+      <li class="l2"><a href="#updates">Updates</a></li>
       <li class="l2"><a href="#audit-the-service">Audit the service</a></li>
       <li class="l2"><a href="#where-things-live">Where things live</a></li>
       <li class="l2"><a href="#safety-rules-the-service-applies">Safety rules the service applies</a></li>

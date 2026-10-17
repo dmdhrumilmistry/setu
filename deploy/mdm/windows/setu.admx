@@ -14,6 +14,9 @@
   </supportedOn>
   <categories>
     <category name="Setu" displayName="$(string.Setu)" />
+    <category name="Updates" displayName="$(string.Updates)">
+      <parentCategory ref="Setu" />
+    </category>
   </categories>
   <policies>
     <policy name="DisableShare" class="Machine" displayName="$(string.DisableShare)" explainText="$(string.DisableShare_Help)" key="Software\Policies\setu" valueName="DisableShare">
@@ -113,6 +116,39 @@
       <supportedOn ref="SUPPORTED_Setu" />
       <elements>
         <decimal id="MaxDevicesPerProfile" valueName="MaxDevicesPerProfile" minValue="1" maxValue="1000" required="true" />
+      </elements>
+    </policy>
+    <policy name="MaxDeviceIdle" class="Machine" displayName="$(string.MaxDeviceIdle)" explainText="$(string.MaxDeviceIdle_Help)" presentation="$(presentation.MaxDeviceIdle)" key="Software\Policies\setu">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <elements>
+        <text id="MaxDeviceIdle" valueName="MaxDeviceIdle" required="true" />
+      </elements>
+    </policy>
+    <policy name="DisableUpdate" class="Machine" displayName="$(string.DisableUpdate)" explainText="$(string.DisableUpdate_Help)" key="Software\Policies\setu" valueName="DisableUpdate">
+      <parentCategory ref="Updates" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="AutoUpdate" class="Machine" displayName="$(string.AutoUpdate)" explainText="$(string.AutoUpdate_Help)" key="Software\Policies\setu" valueName="AutoUpdate">
+      <parentCategory ref="Updates" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="UpdateVersion" class="Machine" displayName="$(string.UpdateVersion)" explainText="$(string.UpdateVersion_Help)" presentation="$(presentation.UpdateVersion)" key="Software\Policies\setu">
+      <parentCategory ref="Updates" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <elements>
+        <text id="UpdateVersion" valueName="UpdateVersion" required="true" />
+      </elements>
+    </policy>
+    <policy name="UpdateURL" class="Machine" displayName="$(string.UpdateURL)" explainText="$(string.UpdateURL_Help)" presentation="$(presentation.UpdateURL)" key="Software\Policies\setu">
+      <parentCategory ref="Updates" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <elements>
+        <text id="UpdateURL" valueName="UpdateURL" required="true" />
       </elements>
     </policy>
     <policy name="AllowedCommands" class="Machine" displayName="$(string.AllowedCommands)" explainText="$(string.AllowedCommands_Help)" presentation="$(presentation.AllowedCommands)" key="Software\Policies\setu\AllowedCommands">

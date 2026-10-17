@@ -107,6 +107,10 @@ type Config struct {
 
 	// Audit, if not nil, receives session, client and command records.
 	Audit *audit.Logger
+
+	// Notify, if not nil, tells the person at the host when a client
+	// connects, a device pairs, or logins keep failing (see internal/notify).
+	Notify func(title, body string)
 }
 
 const (
@@ -375,6 +379,14 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 	return code, nil
 }
 
+// Idle reports whether nobody is connected, joining, or able to resume:
+// restarting the share now would not interrupt anyone.
+func (s *Session) Idle() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.peers) == 0 && !s.liveTicketsLocked()
+}
+
 func (s *Session) endAudit(code int, reason string) {
 	s.localInput.Close()
 	s.audit.End(code, reason)
@@ -588,6 +600,7 @@ func (s *Session) authFailed(p *peer) {
 	s.logf("WARNING: client #%d failed password authentication (%d recent, %d total): %s", p.id, fails, total, who.Actor())
 	if fails >= maxAuthFailures {
 		s.logf("WARNING: too many failures — refusing new clients for %s", lockoutDuration)
+		s.notify("setu: repeated failed logins", fmt.Sprintf("%s refuses new clients for %s after %d failed logins. Last attempt: %s", s.what(), lockoutDuration, fails, who.Actor()))
 	}
 	if total >= maxTotalFailures {
 		s.stopAccepting("too many failed logins")
@@ -663,6 +676,21 @@ func (s *Session) approve(p *peer) (how string, ok bool) {
 		return "", false
 	}
 	return proto.ApprovalPrompt, true
+}
+
+// notify tells the person at the host about an access event.
+func (s *Session) notify(title, body string) {
+	if s.cfg.Notify != nil {
+		s.cfg.Notify(title, body)
+	}
+}
+
+// what names the share for people: the service profile, or the command.
+func (s *Session) what() string {
+	if s.cfg.Profile != "" {
+		return "Profile " + s.cfg.Profile
+	}
+	return "The share of " + s.commandLine()
 }
 
 func orNone(s string) string {

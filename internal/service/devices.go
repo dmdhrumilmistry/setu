@@ -228,6 +228,7 @@ type deviceStore struct {
 	logf         func(format string, args ...any)
 	now          func() time.Time
 	pol          *policy.Policy // MaxPairingTime, MaxDevicesPerProfile
+	idle         time.Duration  // forget devices unused for this long (0 = never)
 }
 
 func (d *deviceStore) Known(fp, binding string) bool {
@@ -240,6 +241,16 @@ func (d *deviceStore) Known(fp, binding string) bool {
 	if dev == nil || dev.Devices[fp] == nil || dev.Devices[fp].Binding != binding {
 		return false
 	}
+	if d.stale(dev.Devices[fp]) {
+		d.logf("forgetting device %s: unused for more than %s", fp, d.idle)
+		_ = UpdateDevices(d.dir, func(st *DeviceState) error {
+			if x := st.Profile(d.profile).Devices[fp]; x != nil && d.stale(x) {
+				delete(st.Profile(d.profile).Devices, fp)
+			}
+			return nil
+		})
+		return false
+	}
 	// Record when the device was last used, at most once an hour.
 	if d.now().Sub(dev.Devices[fp].LastSeen) > time.Hour {
 		_ = UpdateDevices(d.dir, func(st *DeviceState) error {
@@ -250,6 +261,15 @@ func (d *deviceStore) Known(fp, binding string) bool {
 		})
 	}
 	return true
+}
+
+// stale reports whether a device has gone unused for longer than d.idle.
+func (d *deviceStore) stale(dev *Device) bool {
+	last := dev.LastSeen
+	if last.IsZero() {
+		last = dev.Added
+	}
+	return d.idle > 0 && d.now().Sub(last) > d.idle
 }
 
 func (d *deviceStore) Remember(fp, binding string, c audit.Client) error {

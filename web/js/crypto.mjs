@@ -145,7 +145,7 @@ export function parseInvite(s) {
   if (i >= 0) frag = s.slice(i + 1);
   else if (!s.includes('=')) return { offer: s };
   const p = new URLSearchParams(frag);
-  const inv = { secret: p.get('k') || '', offer: p.get('o') || '', relays: [] };
+  const inv = { secret: p.get('k') || '', offer: p.get('o') || '', pairing: p.get('p') || '', relays: [] };
   const r = p.get('r');
   if (r) inv.relays = r.split(',').map((x) => x.trim()).filter(Boolean);
   if (!inv.secret && !inv.offer) throw new Error('invite has neither k= nor o=');

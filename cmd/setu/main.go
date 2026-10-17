@@ -23,6 +23,7 @@ import (
 	"github.com/dmdhrumilmistry/setu/internal/host"
 	"github.com/dmdhrumilmistry/setu/internal/link"
 	"github.com/dmdhrumilmistry/setu/internal/nostr"
+	"github.com/dmdhrumilmistry/setu/internal/notify"
 	"github.com/dmdhrumilmistry/setu/internal/policy"
 	"github.com/dmdhrumilmistry/setu/internal/proto"
 	"github.com/dmdhrumilmistry/setu/internal/rtc"
@@ -45,6 +46,8 @@ Usage:
   setu service ...                              always-on shares with persistent links (see 'setu service')
   setu policy                                   show the managed (MDM) policy in force on this device
   setu device [show | reset]                    this device's key fingerprint (for auto-approval)
+  setu doctor                                   check this computer's setu setup and say how to fix problems
+  setu upgrade [--check] | auto on|off|status   update setu (the service also does it by itself)
   setu version
 
 Examples:
@@ -92,6 +95,10 @@ func main() {
 		code, err = runPolicy(os.Args[2:])
 	case "device":
 		code, err = runDevice(os.Args[2:])
+	case "upgrade", "update":
+		code, err = runUpgrade(os.Args[2:])
+	case "doctor":
+		code, err = runDoctor(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println(versionString())
 	case "help", "-h", "--help":
@@ -163,6 +170,7 @@ func serve(sub string, args []string) (int, error) {
 		record = fs.String("record", "", "record the terminal's output to this new file (asciicast v2, mode 0600)")
 	}
 	qr := fs.Bool("qr", true, "print a QR code of the invite link")
+	alerts := fs.String("notify", "auto", "desktop notification when someone connects or logins keep failing: auto (when this terminal is not attached, as with -d), on or off")
 	linkFile := fs.String("link-file", "", "also write the invite link(s) to this file (mode 0600)")
 	uploadDir := fs.String("upload-dir", "", "where files uploaded by control clients are saved (default ~/Downloads/setu)")
 	noUpload := fs.Bool("no-upload", false, "do not accept file uploads from clients")
@@ -188,6 +196,9 @@ func serve(sub string, args []string) (int, error) {
 	_ = fs.Parse(args)
 
 	command := fs.Args()
+	if *alerts != "auto" && *alerts != "on" && *alerts != "off" {
+		return 2, fmt.Errorf("--notify %q: want auto, on or off", *alerts)
+	}
 	label := "remote desktop"
 	switch {
 	case desktopMode && len(command) > 0:
@@ -371,6 +382,7 @@ func serve(sub string, args []string) (int, error) {
 		Expire:            *expire,
 		IdleTimeout:       *idleTimeout,
 		Mirror:            mirror,
+		Notify:            notifier(*alerts, !mirror),
 		Verbose:           *verbose,
 		Audit:             auditLog,
 	}
@@ -637,4 +649,16 @@ func writePrivate(path, content string) error {
 		return err
 	}
 	return f.Close()
+}
+
+// notifier resolves --notify: desktop notifications on the host, by default
+// only when nobody watches this terminal.
+func notifier(mode string, unattended bool) func(title, body string) {
+	if mode == "off" || (mode == "auto" && !unattended) {
+		return nil
+	}
+	if f := notify.Desktop(); f != nil {
+		return f
+	}
+	return nil
 }

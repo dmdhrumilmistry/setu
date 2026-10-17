@@ -111,6 +111,28 @@ go build -o setu ./cmd/setu      # setu.exe on Windows
 </code></pre>
 <p>Cross-compile with <code>GOOS</code> and <code>GOARCH</code>, for example
 <code>GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build ./cmd/setu</code>.</p>
+<h2 id="updates">Updates</h2>
+<p>setu keeps itself up to date. The always-on service checks for a new release
+about every 6 hours and installs it by itself; you can also run
+<code>setu upgrade</code> at any time. Updating never interrupts anyone:</p>
+<ul>
+<li>The download is checked against the release's <code>SHA256SUMS</code> (and, in builds
+that carry the release signing key, against an ed25519 signature of it),
+then run once to make sure it starts and reports the right version.</li>
+<li>Only then is it swapped in, with a single rename: the file is never half
+written, and a failed update leaves the old binary in place.</li>
+<li>Shares that are already running keep the version they started with until
+they end.</li>
+<li>The service switches to the new version only when nobody has been
+connected for two minutes and no session can still be resumed.</li>
+</ul>
+<p><code>setu upgrade auto off</code> turns automatic updates off (<code>on</code> turns them back on,
+<code>status</code> shows the state). A development build (built from source) is never
+updated automatically; <code>setu upgrade --force</code> replaces it with the latest
+release. If setu was installed by an administrator in a directory you cannot
+write to, they update it. Organizations can pin a version, use an internal
+mirror, require automatic updates or turn them off with
+<a href="mdm.html">managed policy</a>.</p>
 <h2 id="platform-notes">Platform notes</h2>
 <p><strong>Windows.</strong> Hosting uses the ConPTY pseudo console, so it needs Windows 10
 1809 / Server 2019 or newer. With no command, setu shares PowerShell 7
@@ -141,6 +163,7 @@ that block peer-to-peer UDP, add a TURN server; see
       <li class="l2"><a href="#with-go">With Go</a></li>
       <li class="l2"><a href="#release-binaries">Release binaries</a></li>
       <li class="l2"><a href="#from-source">From source</a></li>
+      <li class="l2"><a href="#updates">Updates</a></li>
       <li class="l2"><a href="#platform-notes">Platform notes</a></li>
       <li class="l2"><a href="#next">Next</a></li>
     </ul>
