@@ -4,6 +4,37 @@ setu is a single static binary. You need it on the machine you share from and
 on any machine you want to join from a terminal. Joining from a browser needs
 nothing installed.
 
+## One line
+
+Linux and macOS:
+
+```sh
+curl -fsSL https://dmdhrumilmistry.github.io/setu/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/dmdhrumilmistry/setu/main/install.ps1 | iex
+```
+
+The installer picks the right release for your system, checks it against the
+release's `SHA256SUMS` and, where OpenSSL 3 is available, the signature of that
+file, makes sure it runs, and installs it without administrator rights: to
+`~/.local/bin` (or `/usr/local/bin` when run as root) on Linux and macOS, and
+to `%LOCALAPPDATA%\Programs\setu` on Windows, which it adds to your `PATH`.
+Because the binary stays writable by you, setu keeps itself up to date (see
+[Updates](#updates)). Read the scripts first if you like:
+[install.sh](https://github.com/dmdhrumilmistry/setu/blob/main/install.sh),
+[install.ps1](https://github.com/dmdhrumilmistry/setu/blob/main/install.ps1).
+
+| Variable | Meaning |
+| --- | --- |
+| `SETU_VERSION` | Install this release (for example `v0.1.0`) instead of the latest. |
+| `SETU_INSTALL_DIR` | Install into this directory. |
+| `SETU_BASE_URL` | Download from a release mirror with GitHub's layout. |
+| `SETU_REQUIRE_SIGNATURE=1` | (install.sh) Fail instead of warning when the signature cannot be checked. |
+
 ## With Go
 
 ```sh

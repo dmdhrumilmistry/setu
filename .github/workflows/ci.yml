@@ -99,6 +99,45 @@ jobs:
       - name: vendored files untouched
         run: cd web/vendor && sha256sum -c SHA256SUMS
 
+  # The one-line installers, against the latest published release.
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-26, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: shellcheck
+        if: runner.os == 'Linux'
+        run: shellcheck install.sh
+      - name: install.sh (signature required where OpenSSL 3 is present)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          openssl version
+          req=0; openssl version | grep -q '^OpenSSL [3-9]' && req=1
+          SETU_INSTALL_DIR="$RUNNER_TEMP/bin" SETU_REQUIRE_SIGNATURE=$req sh install.sh
+          "$RUNNER_TEMP/bin/setu" version
+          "$RUNNER_TEMP/bin/setu" doctor --offline || true
+      - name: install.ps1 (PowerShell 7)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:SETU_INSTALL_DIR = "$env:RUNNER_TEMP\bin7"
+          Get-Content -Raw install.ps1 | Invoke-Expression
+          & "$env:RUNNER_TEMP\bin7\setu.exe" version
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: install.ps1 (Windows PowerShell 5.1), twice to replace an installed copy
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $env:SETU_INSTALL_DIR = "$env:RUNNER_TEMP\bin5"
+          Get-Content -Raw install.ps1 | Invoke-Expression
+          Get-Content -Raw install.ps1 | Invoke-Expression
+          & "$env:RUNNER_TEMP\bin5\setu.exe" version
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
   # The browser jobs start at once instead of waiting for the Go jobs: they
   # are the longest, and a Go failure fails the run anyway.
   browser-e2e:

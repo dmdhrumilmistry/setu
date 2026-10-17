@@ -55,14 +55,22 @@ CONTROL link - anyone holding it can type into this terminal. Keep it secret:
 
 ## Quick start
 
-**1. Install** (Linux, macOS or Windows)
+**1. Install**
 
 ```sh
-go install github.com/dmdhrumilmistry/setu/cmd/setu@latest
+curl -fsSL https://dmdhrumilmistry.github.io/setu/install.sh | sh
 ```
 
-Or download a binary from the [releases page](https://github.com/dmdhrumilmistry/setu/releases).
-setu updates itself afterwards (`setu upgrade`).
+On Windows, in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/dmdhrumilmistry/setu/main/install.ps1 | iex
+```
+
+No admin rights needed. The installer verifies the release (checksum and
+signature) before installing, and setu keeps itself up to date afterwards.
+Prefer Go? `go install github.com/dmdhrumilmistry/setu/cmd/setu@latest`. Or grab a
+binary from the [releases page](https://github.com/dmdhrumilmistry/setu/releases).
 
 **2. Share**
 
