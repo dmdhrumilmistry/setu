@@ -204,7 +204,16 @@ func TestAudioHubCapturesOnlyWhileListened(t *testing.T) {
 	h.Listen(b)
 	waitFor(t, "sound", func() bool { return a.count() > 0 && b.count() > 0 })
 	// 10 reads of 160 samples = 10 packets of 160 (8000 Hz / 50); silence is not sent.
-	time.Sleep(50 * time.Millisecond)
+	// The hub sends each packet before its next Read, so once the source
+	// has been read a few times past the tone, every packet is in.
+	waitFor(t, "silence", func() bool {
+		mu.Lock()
+		f := opened[0]
+		mu.Unlock()
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		return f.n >= 13
+	})
 	if n := a.count(); n != 10 {
 		t.Errorf("listener got %d packets, want 10 (silence must not be sent)", n)
 	}
