@@ -162,7 +162,7 @@ sequenceDiagram
     P->>R: encrypted answer
     R->>H: answer
     P-->>H: direct WebRTC connection (DTLS), STUN finds the path
-    H->>P: challenge; P proves its device key (and password or pairing code once)
+    H->>P: challenge, answered with the device key (and password or pairing code once)
     H->>P: your terminal, live
 ```
 
