@@ -260,6 +260,7 @@ func serviceSet(args []string) (int, error) {
 	deviceIdle := fs.Duration("device-idle", 0, "forget a device that has not joined for this long (0 = never)")
 	validFor := fs.Duration("valid-for", 0, "how long keys last from the next `setu service rotate` (0 = never)")
 	alerts := fs.String("notify", "on", "desktop notification on this computer when someone connects: on or off")
+	audio := fs.String("audio", "on", "desktop profiles: share this computer's sound with clients that turn it on: on or off")
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "Usage: setu service set [flags] <name>\n\nChanges only the settings you pass.\n\n")
 		fs.PrintDefaults()
@@ -282,6 +283,9 @@ func serviceSet(args []string) (int, error) {
 	if changed["notify"] && *alerts != "on" && *alerts != "off" {
 		return 2, fmt.Errorf("--notify %q: want on or off", *alerts)
 	}
+	if changed["audio"] && *audio != "on" && *audio != "off" {
+		return 2, fmt.Errorf("--audio %q: want on or off", *audio)
+	}
 	st, err := loadService()
 	if err != nil {
 		return 1, err
@@ -289,6 +293,15 @@ func serviceSet(args []string) (int, error) {
 	p, err := st.cfg.Get(name)
 	if err != nil {
 		return 1, err
+	}
+	if changed["audio"] {
+		if p.Desktop == nil {
+			return 2, fmt.Errorf("--audio: %s is not a remote desktop profile", name)
+		}
+		if err := checkAudio(st.pol, *audio == "on"); err != nil {
+			return 1, err
+		}
+		p.Desktop.Audio = *audio == "on"
 	}
 	if changed["idle-timeout"] {
 		if *idleTimeout, err = st.pol.IdleTimeout(*idleTimeout, true); err != nil {
@@ -314,7 +327,7 @@ func serviceSet(args []string) (int, error) {
 	if err := st.save(name); err != nil {
 		return 1, err
 	}
-	if changed["idle-timeout"] || changed["max-clients"] || changed["device-idle"] || changed["notify"] {
+	if changed["idle-timeout"] || changed["max-clients"] || changed["device-idle"] || changed["notify"] || changed["audio"] {
 		fmt.Fprintf(os.Stderr, "%s restarts with the new settings; anyone connected reconnects to a fresh session.\n", name)
 	}
 	if changed["valid-for"] {

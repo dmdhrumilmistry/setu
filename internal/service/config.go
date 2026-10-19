@@ -116,6 +116,8 @@ type DesktopProfile struct {
 	// start without that environment (Linux and the BSDs only).
 	X11Display string `json:"x11_display,omitempty"`
 	XAuthority string `json:"xauthority,omitempty"`
+	// Audio shares this computer's sound with clients that turn it on.
+	Audio bool `json:"audio,omitempty"`
 }
 
 // Label is what the profile shares, for listings and logs.

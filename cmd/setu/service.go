@@ -239,6 +239,7 @@ func serviceAdd(args []string) (int, error) {
 	desktopMode := fs.Bool("desktop", false, "share this computer's desktop (screen, mouse, keyboard, clipboard) instead of a command")
 	display := fs.Int("display", -1, "with --desktop: display to share, by number (0 = first); -1 = the primary display")
 	fps := fs.Int("fps", 0, "with --desktop: maximum frames per second (1-60; 0 = default)")
+	audio := fs.Bool("audio", false, "with --desktop: also share this computer's sound with clients that turn it on")
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "Usage: setu service add [flags] <name> [--] command [args...]\n       setu service add --desktop [flags] <name>\n\n")
 		fs.PrintDefaults()
@@ -256,6 +257,9 @@ func serviceAdd(args []string) (int, error) {
 	if *desktopMode && (*dir != "" || *fps < 0 || *fps > 60 || *display < -1) {
 		return 2, errors.New("--desktop takes no --dir, --fps must be 1-60 and --display -1 or a display number")
 	}
+	if *audio && !*desktopMode {
+		return 2, errors.New("--audio is for --desktop profiles")
+	}
 	if err := service.ValidName(name); err != nil {
 		return 1, err
 	}
@@ -271,6 +275,9 @@ func serviceAdd(args []string) (int, error) {
 	}
 	if *desktopMode {
 		if err := st.pol.CheckDesktop(false); err != nil {
+			return 1, err
+		}
+		if err := checkAudio(st.pol, *audio); err != nil {
 			return 1, err
 		}
 	}
@@ -354,7 +361,7 @@ func serviceAdd(args []string) (int, error) {
 	}
 	if *desktopMode {
 		p.Command = nil
-		p.Desktop = &service.DesktopProfile{FPS: *fps, Display: *display}
+		p.Desktop = &service.DesktopProfile{FPS: *fps, Display: *display, Audio: *audio}
 		if runtime.GOOS != "windows" && runtime.GOOS != "darwin" {
 			// The service starts without the graphical session's environment.
 			p.Desktop.X11Display, p.Desktop.XAuthority = os.Getenv("DISPLAY"), os.Getenv("XAUTHORITY")
@@ -513,6 +520,14 @@ func startService(dir string, skip bool) {
 
 // printDesktopServiceNotes says what each system needs before an
 // always-on desktop profile works.
+// checkAudio refuses sharing sound when the policy forbids it.
+func checkAudio(pol *policy.Policy, on bool) error {
+	if !on {
+		return nil
+	}
+	return pol.CheckAudio()
+}
+
 func printDesktopServiceNotes() {
 	exe, _ := os.Executable()
 	var note string

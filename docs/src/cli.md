@@ -112,6 +112,7 @@ the terminal), plus:
 | `--display N` | `-1` (primary) | Display to share, by number (0 = first). Control clients can switch displays from the browser. |
 | `--notify MODE` | `auto` | As for `setu share`; since the desktop never attaches the terminal, `auto` means on. |
 | `--fps N` | 20 | Maximum frames per second, 1 to 60. |
+| `--audio` | off | Also share this computer's sound (what it plays, not the microphone). Viewers turn it on with **Sound** in the browser; nothing is captured until one does. See [Sound](desktop.md#sound). |
 
 Press Ctrl-C to end the share.
 
@@ -136,7 +137,7 @@ Ids can be abbreviated to any unique prefix.
 | `setu service device add [--name N] [--person P \| --view] <name> <fingerprint>` | Admit a device without a code. |
 | `setu service device remove <name> <fingerprint>` / `--all` | Stop admitting a device; it is disconnected at once. |
 | `setu service auth [--password-stdin] [--password-every-join] <name> device\|password\|none` | Change how new devices get in. |
-| `setu service set [flags] <name>` | Change settings in place: `--idle-timeout`, `--max-clients`, `--device-idle`, `--valid-for` (from the next rotate), `--notify on\|off`. Only the flags you pass change. |
+| `setu service set [flags] <name>` | Change settings in place: `--idle-timeout`, `--max-clients`, `--device-idle`, `--valid-for` (from the next rotate), `--notify on\|off`, `--audio on\|off` (desktop profiles). Only the flags you pass change. |
 | `setu service list` | List profiles. |
 | `setu service link <name> [person]` | Show a profile's links (+ QR), or one person's. |
 | `setu service key add [--view] <name> <person>` | Give one person their own link. |
@@ -180,6 +181,7 @@ Ids can be abbreviated to any unique prefix.
 | `--desktop` | off | Share this computer's desktop instead of a command (no command is given). See [always-on remote desktop](service.md#always-on-remote-desktop). |
 | `--display N` | `-1` (primary) | With `--desktop`: display to share, by number. |
 | `--fps N` | 20 | With `--desktop`: maximum frames per second, 1 to 60. |
+| `--audio` | off | With `--desktop`: also share this computer's sound with viewers who turn it on. |
 
 ### setu service rotate
 

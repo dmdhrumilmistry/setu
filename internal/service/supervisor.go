@@ -357,7 +357,10 @@ func hostConfig(name string, p *Profile, pol *policy.Policy) (host.Config, error
 	}
 	if d := p.Desktop; d != nil {
 		cfg.Command = nil
-		cfg.Desktop = &host.DesktopConfig{FPS: d.FPS, Display: d.Display, X11Display: d.X11Display, XAuthority: d.XAuthority}
+		cfg.Desktop = &host.DesktopConfig{FPS: d.FPS, Display: d.Display, X11Display: d.X11Display, XAuthority: d.XAuthority,
+			// Like uploads, a policy that forbids sound turns it off
+			// rather than stopping the desktop.
+			Audio: d.Audio && pol.AudioAllowed()}
 	}
 	if p.ControlKey != "" {
 		cs, err := secure.ParseSecret(p.ControlKey)

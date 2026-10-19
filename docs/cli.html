@@ -385,6 +385,11 @@ the terminal), plus:</p>
 <td>20</td>
 <td>Maximum frames per second, 1 to 60.</td>
 </tr>
+<tr>
+<td><code>--audio</code></td>
+<td>off</td>
+<td>Also share this computer's sound (what it plays, not the microphone). Viewers turn it on with <strong>Sound</strong> in the browser; nothing is captured until one does. See <a href="desktop.html#sound">Sound</a>.</td>
+</tr>
 </tbody>
 </table>
 <p>Press Ctrl-C to end the share.</p>
@@ -451,7 +456,7 @@ the terminal), plus:</p>
 </tr>
 <tr>
 <td><code>setu service set [flags] &lt;name&gt;</code></td>
-<td>Change settings in place: <code>--idle-timeout</code>, <code>--max-clients</code>, <code>--device-idle</code>, <code>--valid-for</code> (from the next rotate), <code>--notify on|off</code>. Only the flags you pass change.</td>
+<td>Change settings in place: <code>--idle-timeout</code>, <code>--max-clients</code>, <code>--device-idle</code>, <code>--valid-for</code> (from the next rotate), <code>--notify on|off</code>, <code>--audio on|off</code> (desktop profiles). Only the flags you pass change.</td>
 </tr>
 <tr>
 <td><code>setu service list</code></td>
@@ -641,6 +646,11 @@ the terminal), plus:</p>
 <td><code>--fps N</code></td>
 <td>20</td>
 <td>With <code>--desktop</code>: maximum frames per second, 1 to 60.</td>
+</tr>
+<tr>
+<td><code>--audio</code></td>
+<td>off</td>
+<td>With <code>--desktop</code>: also share this computer's sound with viewers who turn it on.</td>
 </tr>
 </tbody>
 </table>

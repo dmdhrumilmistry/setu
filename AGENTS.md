@@ -19,7 +19,7 @@ go test -race -count=1 ./...                     # unit + e2e (real PTY, WebRTC,
 go test -race -count=1 -run TestRequireDevice ./internal/e2e/    # one test
 gofmt -l . ; go vet ./...                        # CI fails on either
 
-node --test web/test/crypto.test.mjs web/test/keymap.test.mjs     # JS/Go parity
+node --test web/test/crypto.test.mjs web/test/keymap.test.mjs web/test/audio.test.mjs  # JS/Go parity
 for f in web/js/*.mjs; do node --check "$f"; done
 
 # Headless Chromium e2e of the web client against a real `setu share`

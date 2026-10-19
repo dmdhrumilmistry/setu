@@ -20,6 +20,12 @@ const DataChannelLabel = "setu"
 // frame never delays control messages.
 const ScreenChannelLabel = "setu-screen"
 
+// AudioChannelLabel is the channel a desktop share with sound opens:
+// binary audio packets (see internal/desktop/audio.go), host to client
+// only, unordered and never retransmitted, so a lost packet is a short gap
+// rather than a delay.
+const AudioChannelLabel = "setu-audio"
+
 // UploadChannelLabel is the label of the data channel a control client
 // opens for each file it uploads (see internal/host/upload.go).
 const UploadChannelLabel = "setu-upload"
@@ -109,6 +115,10 @@ const (
 	CtlClipboard     = "clipboard"     // both ways: clipboard text, in parts (control)
 	CtlClipboardGet  = "clipboard-get" // client -> host: send me the host clipboard (control)
 	CtlSelectDisplay = "display"       // client -> host: share another display (control)
+	// CtlAudio turns the sound on (Audio true) or off for this client.
+	// The host sends it back with Audio false and Msg when it stops the
+	// sound itself (capture failed).
+	CtlAudio = "audio"
 
 	// On an upload channel.
 	CtlUpload      = "upload"       // client -> host: {name, size}
@@ -223,6 +233,9 @@ type Control struct {
 	More     bool          `json:"more,omitempty"` // clipboard: more parts follow
 	Frame    uint32        `json:"frame,omitempty"`
 	Quality  string        `json:"quality,omitempty"`
+	// Audio (with "ready") says the host shares its sound; with "audio",
+	// whether the client wants it.
+	Audio bool `json:"audio,omitempty"`
 
 	// Uploads: Upload (with "ready") says this client may upload files; Name
 	// and Size describe a file on an upload channel.

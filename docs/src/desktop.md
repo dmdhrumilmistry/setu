@@ -9,6 +9,7 @@ peer-to-peer connection, invite links, passwords, approval and audit log as
 setu desktop --password              # prints a link and a QR code; open it anywhere
 setu desktop --password --view-link  # also a watch-only link
 setu desktop -d --password           # keep serving in the background
+setu desktop --password --audio      # also share the computer's sound
 ```
 
 Open the printed link on another computer, a tablet or a phone, enter the
@@ -26,6 +27,11 @@ For a desktop you can reach at any time, create an
 | macOS 12+ | CoreGraphics, every display, full Retina resolution | CoreGraphics events | text |
 | Linux and the BSDs, X11 session | MIT-SHM (falls back to `GetImage`), RandR monitors | XTEST | text, `CLIPBOARD` selection |
 | Linux, Wayland session | not supported yet: log in with an X11 session ("on Xorg") | | |
+
+Sound (`--audio`) is captured with WASAPI loopback on Windows,
+ScreenCaptureKit on macOS 13 and later, and through PulseAudio or PipeWire
+(the `parec` program, package `pulseaudio-utils`) on Linux and the BSDs. See
+[Sound](#sound).
 
 Run `setu desktop` inside your graphical session: as yourself, on the desktop
 you want to share (on Linux, `DISPLAY` must be set). It needs no extra
@@ -85,6 +91,7 @@ The toolbar at the bottom of the page:
 | **Cmd as Ctrl** / **Ctrl as Cmd** | Shown when exactly one side is a Mac (see Keyboard below). On by default; turn it off to send the keys unchanged. |
 | **Keyboard** | Opens the on-screen keyboard (touch devices). |
 | **Clipboard** | Text to and from the remote clipboard (see below). |
+| **Sound off** / **Sound on** | Play the remote computer's sound here. Shown when the host shares sound (`--audio`). See [Sound](#sound). |
 | **Upload** | Send files to the remote computer; you can also drop them on the screen. See [Uploading files](joining.md#uploading-files). |
 | **Fullscreen** | In Chrome and Edge, fullscreen also captures Esc, Alt+Tab and the Windows key for the remote computer. |
 
@@ -126,6 +133,33 @@ arrive as their Mac equivalents (Insert is Help, Print Screen is F13).
 
 Clipboard sync is text only, up to 1 MiB, and only for control links.
 
+## Sound
+
+With `--audio`, viewers can hear what the remote computer plays: videos,
+calls, notifications. It is the computer's sound output, never its
+microphone.
+
+* Sound starts **off** for every viewer. Click **Sound off** in the toolbar to
+  turn it on (browsers only play sound after a click), and again to turn it
+  off. The host captures nothing while no viewer has it on.
+* View-only links can turn sound on too, like watching the screen.
+* Sound plays about a tenth of a second behind the remote computer, and a
+  bad network causes short gaps rather than a growing delay.
+* setu's own sound is left out on macOS. Bandwidth is about 400 kbit/s while
+  something plays, and nothing during silence.
+
+What each system needs:
+
+| Host | Needs |
+| --- | --- |
+| Windows | Nothing extra. The default playback device is captured; with no playback device (some servers and virtual machines) there is nothing to capture. |
+| macOS 13+ | The Screen Recording permission it already has for the screen. Older macOS versions share the screen without sound. |
+| Linux, BSD | A PulseAudio or PipeWire sound server in the session (the default on desktop distributions) and the `parec` program: `sudo apt install pulseaudio-utils` (Debian, Ubuntu), `sudo dnf install pulseaudio-utils` (Fedora). |
+
+If capture fails (no sound device, `parec` missing), the browser says why and
+the sound button turns off; the screen keeps working. Organizations can turn
+sound off with the `DisableAudio` [managed policy](mdm.md#settings).
+
 ## Security and logging
 
 Everything from [Security model](security.md) applies, plus:
@@ -138,6 +172,9 @@ Everything from [Security model](security.md) applies, plus:
   enforces this from which link was used, not from what the browser claims.
 * Keys and mouse buttons a client is holding are released when it
   disconnects, so a dropped connection cannot leave a key stuck down.
+* Sound is shared only with `--audio`, and only with viewers who turn it on.
+  It can carry calls and media playing on your computer, so leave `--audio`
+  off when you do not need it.
 * Organizations can turn remote desktop off with the `DisableDesktop`
   [managed policy](mdm.md#settings). When a policy restricts
   `AllowedCommands`, remote desktop is refused unless the list includes
@@ -146,7 +183,8 @@ Everything from [Security model](security.md) applies, plus:
 The host log (and `setu logs <id>` for background shares) records who
 connected, display switches, clipboard transfers and a summary of each
 client's input. With [audit logging](audit.md) on, the same appears as
-`setu.desktop.*` records. Clipboard contents and keystrokes are never
+`setu.desktop.*` records, including when each client turns the sound on or
+off. Clipboard contents and keystrokes are never
 recorded, only their sizes and counts, because they often hold passwords.
 
 ## How it works
@@ -174,3 +212,6 @@ ones, and nothing is captured while nobody is watching. See
 | Clicks do nothing in one window | On Windows, input cannot reach windows running as administrator unless setu runs as administrator too. |
 | Blurry text | Choose **Sharp**, or **1:1** to stop scaling. |
 | Laggy on a slow link | Choose **Fast**, or lower `--fps`. |
+| No **Sound** button | The host was started without `--audio`, or its policy has `DisableAudio`. |
+| `sharing sound needs the "parec" program` | On the Linux host, install `pulseaudio-utils`. |
+| Sound is on, but silent | Check that the remote computer is playing to its default output device, and that this tab is not muted. |

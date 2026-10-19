@@ -96,6 +96,8 @@ jobs:
         run: node --test web/test/crypto.test.mjs
       - name: key mapping between Mac and PC keyboards
         run: node --test web/test/keymap.test.mjs
+      - name: sound decoding parity with Go
+        run: node --test web/test/audio.test.mjs
       - name: vendored files untouched
         run: cd web/vendor && sha256sum -c SHA256SUMS
 
