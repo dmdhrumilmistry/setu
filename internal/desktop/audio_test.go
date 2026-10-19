@@ -288,7 +288,8 @@ func TestAudioGoldenVector(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(got, want) {
+	// Windows checkouts may turn the file's line endings into CRLF.
+	if !bytes.Equal(bytes.ReplaceAll(got, []byte("\r\n"), []byte("\n")), want) {
 		t.Fatalf("%s is stale: run go test ./internal/desktop -run Golden -update", path)
 	}
 }
