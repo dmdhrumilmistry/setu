@@ -304,6 +304,9 @@ client→ {t:&quot;pointer&quot;, x, y, buttons}           control only; buttons
 client→ {t:&quot;wheel&quot;, dx, dy} | {t:&quot;key&quot;, key: KeyboardEvent.code, down} | {t:&quot;text&quot;, text}
 both  → {t:&quot;clipboard&quot;, text, more}            control only; parts of at most 8192 characters, 1 MiB in total
 client→ {t:&quot;clipboard-get&quot;} | {t:&quot;display&quot;, display} | {t:&quot;refresh&quot;} | {t:&quot;quality&quot;, quality}
+client→ {t:&quot;audio&quot;, audio}                     sound on (true) or off, any role; only if &quot;ready&quot; had audio:true
+host  → {t:&quot;audio&quot;, msg}                       the host stopped the sound (capture failed, or not shared)
+host  → binary on &quot;setu-audio&quot;: sound packets
 </code></pre>
 <p>Binary messages (little endian) are at most 60 KiB, under every WebRTC
 implementation's message size limit:</p>
@@ -334,6 +337,25 @@ Windows backend converts to and from CRLF. A copy shortcut in the browser
 starts a clipboard write at once with a promise for the text, resolved when
 the host clipboard changes (or with <code>clipboard-get</code> if it does not), because
 browsers only allow clipboard writes during a user action.</p>
+<h3 id="sound">Sound</h3>
+<p>With <code>--audio</code>, <code>ready</code> carries <code>audio: true</code> and the host opens a third
+channel, <code>&quot;setu-audio&quot;</code>, unordered and with no retransmissions: late sound is
+worse than a gap. The sound is captured once for every listener, only while
+at least one client has asked for it, with WASAPI loopback (Windows),
+ScreenCaptureKit (macOS 13+; its video is reduced to 2x2 pixels at one frame
+a second and ignored) or <code>parec</code> on the default output's monitor (PulseAudio
+and PipeWire). Every 20 ms becomes one packet of 4-bit IMA ADPCM (about a
+quarter of 16-bit PCM, about 400 kbit/s for 48 kHz stereo), and silent
+packets are not sent:</p>
+<pre><code>sound  [1, channels u8, rate u16, seq u32, frames u16,
+        per channel: predictor i16, step index u8, 0,
+        per channel: ceil(frames/2) bytes, low nibble first]
+</code></pre>
+<p>Each packet carries its decoder state, so it decodes on its own and a lost
+packet costs only its 20 ms. The browser (<code>web/js/audio.mjs</code>) drops packets
+older than one it played, and schedules each with Web Audio about 80 ms ahead,
+starting over after a gap or when it falls 400 ms behind. A listener whose
+channel has more than 64 KiB unsent skips packets instead of queueing them.</p>
 <h2 id="file-upload">File upload</h2>
 <p>A control client opens a data channel labelled <code>&quot;setu-upload&quot;</code> for each file
 (no renegotiation is needed once the SCTP association exists), so a large
@@ -429,6 +451,7 @@ key bar and a compose box.</li>
       <li class="l3"><a href="#data-channel-setu-reliable-and-ordered">Data channel (&#34;setu&#34;, reliable and ordered)</a></li>
       <li class="l3"><a href="#reconnecting">Reconnecting</a></li>
       <li class="l2"><a href="#remote-desktop">Remote desktop</a></li>
+      <li class="l3"><a href="#sound">Sound</a></li>
       <li class="l2"><a href="#file-upload">File upload</a></li>
       <li class="l2"><a href="#audit-log">Audit log</a></li>
       <li class="l2"><a href="#service">Service</a></li>

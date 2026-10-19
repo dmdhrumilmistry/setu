@@ -116,7 +116,9 @@ setu service install
 
 It gets everything a terminal profile has (password, personal keys, expiry,
 `rotate`, audit log) and works like [`setu desktop`](desktop.md) in the
-browser. `--display N` picks a monitor and `--fps N` caps the frame rate. What
+browser. `--display N` picks a monitor, `--fps N` caps the frame rate and
+`--audio` shares the computer's [sound](desktop.md#sound) (turn it on or off
+later with `setu service set NAME --audio on|off`). What
 each system needs:
 
 | System | Before it works |

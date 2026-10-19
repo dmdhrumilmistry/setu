@@ -50,6 +50,9 @@ type Policy struct {
 	DisableDesktop bool `json:"DisableDesktop,omitempty"` // forbid `setu desktop` (remote desktop)
 	// DisableFileTransfer turns off uploads from clients to this device.
 	DisableFileTransfer bool `json:"DisableFileTransfer,omitempty"`
+	// DisableAudio stops remote desktop sessions from sharing this
+	// device's sound.
+	DisableAudio bool `json:"DisableAudio,omitempty"`
 
 	// Access requirements.
 	RequirePassword     bool     `json:"RequirePassword,omitempty"`
@@ -294,6 +297,17 @@ func (p *Policy) CheckDesktop(manual bool) error {
 
 // FileTransferAllowed reports whether clients may upload files.
 func (p *Policy) FileTransferAllowed() bool { return p == nil || !p.DisableFileTransfer }
+
+// AudioAllowed reports whether remote desktop sessions may share sound.
+func (p *Policy) AudioAllowed() bool { return p == nil || !p.DisableAudio }
+
+// CheckAudio reports whether sharing sound (--audio) is allowed.
+func (p *Policy) CheckAudio() error {
+	if !p.AudioAllowed() {
+		return violation("DisableAudio", "sharing this device's sound (--audio) is disabled")
+	}
+	return nil
+}
 
 // CheckService reports whether the background service is allowed.
 func (p *Policy) CheckService() error {

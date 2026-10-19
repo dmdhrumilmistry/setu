@@ -66,6 +66,9 @@ func (p *Profile) Findings(name string, pd *ProfileDevices, now time.Time) []Fin
 	if p.Desktop != nil && p.MaxClients > 1 {
 		add(LevelInfo, fmt.Sprintf("up to %d people can control the desktop at once", p.MaxClients), "setu service set %s --max-clients 1", name)
 	}
+	if p.Desktop != nil && p.Desktop.Audio {
+		add(LevelInfo, "clients can listen to this computer's sound, including calls and media", "setu service set %s --audio off", name)
+	}
 	if pd == nil {
 		pd = &ProfileDevices{}
 	}

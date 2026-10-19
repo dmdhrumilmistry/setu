@@ -17,6 +17,8 @@
       <string id="DisableDesktop_Help">If enabled, "setu desktop" is refused, so nobody can share this computer's screen, mouse, keyboard or clipboard. Remote desktop is also refused when "Allowed commands" is set and does not list @desktop.</string>
       <string id="DisableFileTransfer">Disable file upload to this device</string>
       <string id="DisableFileTransfer_Help">If enabled, clients cannot upload files to this device during shares and remote desktop sessions.</string>
+      <string id="DisableAudio">Disable sharing sound in remote desktop</string>
+      <string id="DisableAudio_Help">If enabled, remote desktop sessions cannot share this computer's sound (setu desktop --audio is refused, and service profiles with sound share only the screen).</string>
       <string id="RequirePassword">Require a session password</string>
       <string id="RequirePassword_Help">If enabled, every share and service profile must have a password. Optionally set a minimum length (0 keeps setu's own minimum: 8 for shares, 12 for service profiles).</string>
       <string id="RequirePersonalKeys">Require personal keys for service profiles</string>

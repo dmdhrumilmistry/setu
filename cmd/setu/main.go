@@ -161,10 +161,11 @@ func serve(sub string, args []string) (int, error) {
 	turn := fs.String("turn", "", "TURN server URL for strict NATs, e.g. turn:turn.example.com:3478")
 	turnUser := fs.String("turn-user", "", "TURN username")
 	webURL := fs.String("web-url", link.DefaultWebURL, "base URL of the web client (empty = print terminal join command only)")
-	headless, display, fps, record := new(bool), new(int), new(int), new(string)
+	headless, display, fps, record, audio := new(bool), new(int), new(int), new(string), new(bool)
 	if desktopMode {
 		display = fs.Int("display", -1, "display to share, by number (0 = first); -1 = the primary display. Clients can switch displays")
 		fps = fs.Int("fps", 20, "maximum frames per second (1-60)")
+		audio = fs.Bool("audio", false, "also share this computer's sound (what it plays, not the microphone) with clients that turn it on")
 	} else {
 		headless = fs.Bool("headless", false, "do not attach this terminal; just serve clients")
 		record = fs.String("record", "", "record the terminal's output to this new file (asciicast v2, mode 0600)")
@@ -225,6 +226,11 @@ func serve(sub string, args []string) (int, error) {
 	if desktopMode {
 		if err := pol.CheckDesktop(*manual); err != nil {
 			return 1, err
+		}
+		if *audio {
+			if err := pol.CheckAudio(); err != nil {
+				return 1, err
+			}
 		}
 	} else {
 		if err := pol.CheckShare(*manual); err != nil {
@@ -388,7 +394,7 @@ func serve(sub string, args []string) (int, error) {
 	}
 	if desktopMode {
 		cfg.Command = nil
-		cfg.Desktop = &host.DesktopConfig{FPS: *fps, Display: *display}
+		cfg.Desktop = &host.DesktopConfig{FPS: *fps, Display: *display, Audio: *audio}
 	}
 	if cfg.UploadDir, err = uploadDirFor(*uploadDir, *noUpload, pol); err != nil {
 		return 1, err

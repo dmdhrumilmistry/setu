@@ -52,6 +52,7 @@ type peer struct {
 	pc      *webrtc.PeerConnection
 	dc      *webrtc.DataChannel
 	screen  *webrtc.DataChannel // desktop shares: screen updates
+	audio   *webrtc.DataChannel // desktop shares with sound: audio packets
 	clip    strings.Builder     // clipboard text being received (data channel goroutine only)
 	clipOut sync.Mutex          // one outgoing clipboard transfer at a time
 
@@ -107,16 +108,23 @@ func (s *Session) newPeer(role, label, keyName, resumeID string) (*peer, error) 
 		pc.Close()
 		return nil, err
 	}
-	var screen *webrtc.DataChannel
+	var screen, audio *webrtc.DataChannel
 	if s.desk != nil {
 		if screen, err = pc.CreateDataChannel(proto.ScreenChannelLabel, nil); err != nil {
 			pc.Close()
 			return nil, err
 		}
 	}
+	if s.desk != nil && s.desk.audio != nil {
+		unordered, noRetransmit := false, uint16(0)
+		if audio, err = pc.CreateDataChannel(proto.AudioChannelLabel, &webrtc.DataChannelInit{Ordered: &unordered, MaxRetransmits: &noRetransmit}); err != nil {
+			pc.Close()
+			return nil, err
+		}
+	}
 	s.mu.Lock()
 	s.nextID++
-	p := &peer{s: s, id: s.nextID, role: role, label: label, keyName: keyName, pc: pc, dc: dc, screen: screen, nonce: secure.RandomBytes(32), mustResume: resume}
+	p := &peer{s: s, id: s.nextID, role: role, label: label, keyName: keyName, pc: pc, dc: dc, screen: screen, audio: audio, nonce: secure.RandomBytes(32), mustResume: resume}
 	s.peers[p.id] = p
 	s.mu.Unlock()
 
@@ -425,6 +433,7 @@ func (p *peer) activate(t *ticket, pos *int64) {
 	}
 	ready := proto.Control{T: proto.CtlReady, V: proto.Version, Role: p.role, Cmd: s.commandLine(), Host: s.host, Cols: s.cols, Rows: s.rows,
 		Approval: how, Auth: p.authBy, Kind: s.kind(), OS: s.hostOS(), Upload: s.uploadsAllowed(p.role), Resume: token}
+	ready.Audio = s.desk != nil && s.desk.audio != nil
 	if s.desk == nil {
 		ready.Pos, ready.Resumed = &from, resumed
 	}

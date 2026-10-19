@@ -49,6 +49,12 @@
       <enabledValue><decimal value="1" /></enabledValue>
       <disabledValue><decimal value="0" /></disabledValue>
     </policy>
+    <policy name="DisableAudio" class="Machine" displayName="$(string.DisableAudio)" explainText="$(string.DisableAudio_Help)" key="Software\Policies\setu" valueName="DisableAudio">
+      <parentCategory ref="Setu" />
+      <supportedOn ref="SUPPORTED_Setu" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
     <policy name="RequirePassword" class="Machine" displayName="$(string.RequirePassword)" explainText="$(string.RequirePassword_Help)" presentation="$(presentation.RequirePassword)" key="Software\Policies\setu" valueName="RequirePassword">
       <parentCategory ref="Setu" />
       <supportedOn ref="SUPPORTED_Setu" />

@@ -84,6 +84,7 @@ peer-to-peer connection, invite links, passwords, approval and audit log as
 <pre><code class="language-sh">setu desktop --password              # prints a link and a QR code; open it anywhere
 setu desktop --password --view-link  # also a watch-only link
 setu desktop -d --password           # keep serving in the background
+setu desktop --password --audio      # also share the computer's sound
 </code></pre>
 <p>Open the printed link on another computer, a tablet or a phone, enter the
 password, and compare the verification code with the one the host prints.</p>
@@ -127,6 +128,10 @@ password, and compare the verification code with the one the host prints.</p>
 </tr>
 </tbody>
 </table>
+<p>Sound (<code>--audio</code>) is captured with WASAPI loopback on Windows,
+ScreenCaptureKit on macOS 13 and later, and through PulseAudio or PipeWire
+(the <code>parec</code> program, package <code>pulseaudio-utils</code>) on Linux and the BSDs. See
+<a href="#sound">Sound</a>.</p>
 <p>Run <code>setu desktop</code> inside your graphical session: as yourself, on the desktop
 you want to share (on Linux, <code>DISPLAY</code> must be set). It needs no extra
 packages, drivers or administrator rights. Any modern browser can join.</p>
@@ -223,6 +228,10 @@ screen.</li>
 <td>Text to and from the remote clipboard (see below).</td>
 </tr>
 <tr>
+<td><strong>Sound off</strong> / <strong>Sound on</strong></td>
+<td>Play the remote computer's sound here. Shown when the host shares sound (<code>--audio</code>). See <a href="#sound">Sound</a>.</td>
+</tr>
+<tr>
 <td><strong>Upload</strong></td>
 <td>Send files to the remote computer; you can also drop them on the screen. See <a href="joining.html#uploading-files">Uploading files</a>.</td>
 </tr>
@@ -289,6 +298,46 @@ browser allows it, or a prompt offers a Copy button.</li>
 work, such as login prompts.</li>
 </ul>
 <p>Clipboard sync is text only, up to 1 MiB, and only for control links.</p>
+<h2 id="sound">Sound</h2>
+<p>With <code>--audio</code>, viewers can hear what the remote computer plays: videos,
+calls, notifications. It is the computer's sound output, never its
+microphone.</p>
+<ul>
+<li>Sound starts <strong>off</strong> for every viewer. Click <strong>Sound off</strong> in the toolbar to
+turn it on (browsers only play sound after a click), and again to turn it
+off. The host captures nothing while no viewer has it on.</li>
+<li>View-only links can turn sound on too, like watching the screen.</li>
+<li>Sound plays about a tenth of a second behind the remote computer, and a
+bad network causes short gaps rather than a growing delay.</li>
+<li>setu's own sound is left out on macOS. Bandwidth is about 400 kbit/s while
+something plays, and nothing during silence.</li>
+</ul>
+<p>What each system needs:</p>
+<table>
+<thead>
+<tr>
+<th>Host</th>
+<th>Needs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Windows</td>
+<td>Nothing extra. The default playback device is captured; with no playback device (some servers and virtual machines) there is nothing to capture.</td>
+</tr>
+<tr>
+<td>macOS 13+</td>
+<td>The Screen Recording permission it already has for the screen. Older macOS versions share the screen without sound.</td>
+</tr>
+<tr>
+<td>Linux, BSD</td>
+<td>A PulseAudio or PipeWire sound server in the session (the default on desktop distributions) and the <code>parec</code> program: <code>sudo apt install pulseaudio-utils</code> (Debian, Ubuntu), <code>sudo dnf install pulseaudio-utils</code> (Fedora).</td>
+</tr>
+</tbody>
+</table>
+<p>If capture fails (no sound device, <code>parec</code> missing), the browser says why and
+the sound button turns off; the screen keeps working. Organizations can turn
+sound off with the <code>DisableAudio</code> <a href="mdm.html#settings">managed policy</a>.</p>
 <h2 id="security-and-logging">Security and logging</h2>
 <p>Everything from <a href="security.html">Security model</a> applies, plus:</p>
 <ul>
@@ -300,6 +349,9 @@ input, never receive your clipboard, and cannot switch displays. The host
 enforces this from which link was used, not from what the browser claims.</li>
 <li>Keys and mouse buttons a client is holding are released when it
 disconnects, so a dropped connection cannot leave a key stuck down.</li>
+<li>Sound is shared only with <code>--audio</code>, and only with viewers who turn it on.
+It can carry calls and media playing on your computer, so leave <code>--audio</code>
+off when you do not need it.</li>
 <li>Organizations can turn remote desktop off with the <code>DisableDesktop</code>
 <a href="mdm.html#settings">managed policy</a>. When a policy restricts
 <code>AllowedCommands</code>, remote desktop is refused unless the list includes
@@ -308,7 +360,8 @@ disconnects, so a dropped connection cannot leave a key stuck down.</li>
 <p>The host log (and <code>setu logs &lt;id&gt;</code> for background shares) records who
 connected, display switches, clipboard transfers and a summary of each
 client's input. With <a href="audit.html">audit logging</a> on, the same appears as
-<code>setu.desktop.*</code> records. Clipboard contents and keystrokes are never
+<code>setu.desktop.*</code> records, including when each client turns the sound on or
+off. Clipboard contents and keystrokes are never
 recorded, only their sizes and counts, because they often hold passwords.</p>
 <h2 id="how-it-works">How it works</h2>
 <p>The host captures the shared display up to <code>--fps</code> times a second (20 by
@@ -365,6 +418,18 @@ ones, and nothing is captured while nobody is watching. See
 <td>Laggy on a slow link</td>
 <td>Choose <strong>Fast</strong>, or lower <code>--fps</code>.</td>
 </tr>
+<tr>
+<td>No <strong>Sound</strong> button</td>
+<td>The host was started without <code>--audio</code>, or its policy has <code>DisableAudio</code>.</td>
+</tr>
+<tr>
+<td><code>sharing sound needs the &quot;parec&quot; program</code></td>
+<td>On the Linux host, install <code>pulseaudio-utils</code>.</td>
+</tr>
+<tr>
+<td>Sound is on, but silent</td>
+<td>Check that the remote computer is playing to its default output device, and that this tab is not muted.</td>
+</tr>
 </tbody>
 </table>
 
@@ -384,6 +449,7 @@ ones, and nothing is captured while nobody is watching. See
       <li class="l2"><a href="#platforms">Platforms</a></li>
       <li class="l3"><a href="#macos-permissions">macOS permissions</a></li>
       <li class="l2"><a href="#using-it">Using it</a></li>
+      <li class="l2"><a href="#sound">Sound</a></li>
       <li class="l2"><a href="#security-and-logging">Security and logging</a></li>
       <li class="l2"><a href="#how-it-works">How it works</a></li>
       <li class="l2"><a href="#troubleshooting">Troubleshooting</a></li>

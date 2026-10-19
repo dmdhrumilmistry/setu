@@ -31,7 +31,10 @@ type deskClient struct {
 	dc     chan *webrtc.DataChannel
 	ctl    chan proto.Control
 	frames chan []byte
-	ctlDC  *webrtc.DataChannel
+	audio  chan []byte
+	// audioReliable: the audio channel was opened ordered or retransmitting.
+	audioReliable bool
+	ctlDC         *webrtc.DataChannel
 }
 
 func newDeskClient(t *testing.T, ctx context.Context, offerCode string) (*deskClient, string) {
@@ -45,7 +48,7 @@ func newDeskClient(t *testing.T, ctx context.Context, offerCode string) (*deskCl
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { pc.Close() })
-	c := &deskClient{t: t, pc: pc, dc: make(chan *webrtc.DataChannel, 1), ctl: make(chan proto.Control, 64), frames: make(chan []byte, 1024)}
+	c := &deskClient{t: t, pc: pc, dc: make(chan *webrtc.DataChannel, 1), ctl: make(chan proto.Control, 64), frames: make(chan []byte, 1024), audio: make(chan []byte, 1024)}
 	pc.OnDataChannel(func(d *webrtc.DataChannel) {
 		switch d.Label() {
 		case proto.DataChannelLabel:
@@ -58,6 +61,14 @@ func newDeskClient(t *testing.T, ctx context.Context, offerCode string) (*deskCl
 			d.OnOpen(func() { c.dc <- d })
 		case proto.ScreenChannelLabel:
 			d.OnMessage(func(m webrtc.DataChannelMessage) { c.frames <- append([]byte(nil), m.Data...) })
+		case proto.AudioChannelLabel:
+			c.audioReliable = d.Ordered() || d.MaxRetransmits() == nil || *d.MaxRetransmits() != 0
+			d.OnMessage(func(m webrtc.DataChannelMessage) {
+				select {
+				case c.audio <- append([]byte(nil), m.Data...):
+				default:
+				}
+			})
 		}
 	})
 	sdp, err := rtc.Answer(ctx, pc, offer.SDP)

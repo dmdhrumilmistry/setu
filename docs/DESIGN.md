@@ -196,6 +196,9 @@ client→ {t:"pointer", x, y, buttons}           control only; buttons = Pointer
 client→ {t:"wheel", dx, dy} | {t:"key", key: KeyboardEvent.code, down} | {t:"text", text}
 both  → {t:"clipboard", text, more}            control only; parts of at most 8192 characters, 1 MiB in total
 client→ {t:"clipboard-get"} | {t:"display", display} | {t:"refresh"} | {t:"quality", quality}
+client→ {t:"audio", audio}                     sound on (true) or off, any role; only if "ready" had audio:true
+host  → {t:"audio", msg}                       the host stopped the sound (capture failed, or not shared)
+host  → binary on "setu-audio": sound packets
 ```
 
 Binary messages (little endian) are at most 60 KiB, under every WebRTC
@@ -231,6 +234,30 @@ Windows backend converts to and from CRLF. A copy shortcut in the browser
 starts a clipboard write at once with a promise for the text, resolved when
 the host clipboard changes (or with `clipboard-get` if it does not), because
 browsers only allow clipboard writes during a user action.
+
+### Sound
+
+With `--audio`, `ready` carries `audio: true` and the host opens a third
+channel, `"setu-audio"`, unordered and with no retransmissions: late sound is
+worse than a gap. The sound is captured once for every listener, only while
+at least one client has asked for it, with WASAPI loopback (Windows),
+ScreenCaptureKit (macOS 13+; its video is reduced to 2x2 pixels at one frame
+a second and ignored) or `parec` on the default output's monitor (PulseAudio
+and PipeWire). Every 20 ms becomes one packet of 4-bit IMA ADPCM (about a
+quarter of 16-bit PCM, about 400 kbit/s for 48 kHz stereo), and silent
+packets are not sent:
+
+```
+sound  [1, channels u8, rate u16, seq u32, frames u16,
+        per channel: predictor i16, step index u8, 0,
+        per channel: ceil(frames/2) bytes, low nibble first]
+```
+
+Each packet carries its decoder state, so it decodes on its own and a lost
+packet costs only its 20 ms. The browser (`web/js/audio.mjs`) drops packets
+older than one it played, and schedules each with Web Audio about 80 ms ahead,
+starting over after a gap or when it falls 400 ms behind. A listener whose
+channel has more than 64 KiB unsent skips packets instead of queueing them.
 
 ## File upload
 

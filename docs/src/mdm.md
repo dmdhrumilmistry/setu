@@ -46,6 +46,7 @@ Every setting is optional; without a policy setu behaves as unmanaged.
 | `DisableDesktop` | bool | `setu desktop` (remote desktop) is refused. |
 | `MaxIdleTime` | duration | Control clients are disconnected after this long without input (watching is not input; view-only clients are not affected). Without `--idle-timeout`, shares and profiles get this value; turning it off or a longer value is refused. |
 | `DisableFileTransfer` | bool | Clients cannot upload files to this device (shares, remote desktop and service profiles). |
+| `DisableAudio` | bool | Remote desktop cannot share this device's sound: `setu desktop --audio` is refused, and service profiles with sound share only the screen. |
 | `RequirePassword` | bool | Every share and profile needs a password; `setu share` prompts even without `--password`. |
 | `MinPasswordLength` | int | Minimum password length (setu's own floors of 8 and 12 still apply). |
 | `RequirePersonalKeys` | bool | Service profiles cannot have a shared control link, so every audited command names a person. |

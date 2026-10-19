@@ -716,6 +716,18 @@ func (s *Session) DisplaySelected(c Client, display string) {
 		append(c.attrs(), attribute.String("setu.desktop.display", display))...)
 }
 
+// DesktopSound records a client turning the host's sound on or off.
+func (s *Session) DesktopSound(c Client, on bool) {
+	if s == nil {
+		return
+	}
+	body := fmt.Sprintf("client #%d turned the host's sound off", c.ID)
+	if on {
+		body = fmt.Sprintf("client #%d is listening to the host's sound", c.ID)
+	}
+	s.emit(otellog.SeverityInfo, "setu.desktop.sound", body, append(c.attrs(), attribute.Bool("setu.desktop.sound", on))...)
+}
+
 // DesktopInput summarises a control client's remote input when it leaves.
 // Keystrokes on a desktop go to arbitrary applications, so only counts are
 // recorded.

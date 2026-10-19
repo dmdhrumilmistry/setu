@@ -4,6 +4,7 @@
 // "setu-screen" channel) and internal/proto (JSON control messages).
 import { MODIFIERS, chunks, combos, crossPlatform, hostCode, isMacPlatform, isShortcut } from './keymap.mjs';
 import { uploadAll, dropTarget } from './upload.mjs';
+import { createPlayer } from './audio.mjs';
 
 const $ = (id) => document.getElementById(id);
 
@@ -24,7 +25,7 @@ const CODE_FOR_KEY = {
 
 const isMac = isMacPlatform(navigator.userAgentData?.platform || navigator.platform);
 
-export function createDesktop({ send, control, hostOS, upload }) {
+export function createDesktop({ send, control, hostOS, upload, audio }) {
   const canvas = $('desk-canvas');
   const ctx = canvas.getContext('2d', { alpha: false });
   const view = $('desk-view');
@@ -40,6 +41,7 @@ export function createDesktop({ send, control, hostOS, upload }) {
   let hovering = false;
   let last = { x: 0, y: 0, cx: 0, cy: 0, vis: false };
   const held = new Set();
+  let resendSound = false;
 
   // ---------- screen ----------
   function frame(buf) {
@@ -72,6 +74,10 @@ export function createDesktop({ send, control, hostOS, upload }) {
   }
 
   function onScreen(m) {
+    if (resendSound) {
+      resendSound = false;
+      send({ t: 'audio', audio: true });
+    }
     const d = m.displays[m.display] || m.displays[0];
     if (canvas.width !== d.w || canvas.height !== d.h) {
       canvas.width = d.w;
@@ -387,6 +393,23 @@ export function createDesktop({ send, control, hostOS, upload }) {
     }
   }
 
+  // ---------- sound ----------
+  // Off until the user turns it on: browsers only play sound after a click,
+  // and the host sends (and captures) nothing until then.
+  const player = createPlayer();
+  const soundBtn = $('desk-sound');
+  soundBtn.hidden = !audio;
+  function showSound() {
+    soundBtn.textContent = player.playing ? 'Sound on' : 'Sound off';
+    soundBtn.setAttribute('aria-pressed', String(player.playing));
+  }
+  function setSound(on) {
+    if (on) player.start(); else player.stop();
+    send(on ? { t: 'audio', audio: true } : { t: 'audio' });
+    showSound();
+  }
+  if (audio) soundBtn.addEventListener('click', () => setSound(!player.playing));
+
   // ---------- toolbar ----------
   $('desk-fit').addEventListener('click', () => {
     fit = !fit;
@@ -474,9 +497,21 @@ export function createDesktop({ send, control, hostOS, upload }) {
     frame,
     onScreen,
     onClipboard,
+    audio: (buf) => player.push(buf),
+    // The host stopped the sound (or does not share it).
+    onAudio(m) {
+      player.stop();
+      showSound();
+      if (m.msg) toast(m.msg);
+    },
+    // After a reconnect the host has forgotten that the sound was on; ask
+    // again with the next "screen", which comes once the host listens.
+    reconnected() { resendSound = player.playing; },
     notice: (msg) => toast(msg),
     ended(msg) {
       releaseAll();
+      player.stop();
+      showSound();
       overlay.textContent = msg;
       overlay.hidden = false;
     },

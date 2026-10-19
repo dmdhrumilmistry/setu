@@ -21,11 +21,16 @@ type DesktopConfig struct {
 	// does not (a background service); empty = the environment's.
 	X11Display string
 	XAuthority string
+	// Audio shares this computer's sound with clients that turn it on.
+	Audio bool
+	// OpenAudio starts a sound capture; nil captures this computer's.
+	OpenAudio func() (desktop.AudioSource, error)
 }
 
 type desktopShare struct {
-	hub *desktop.Hub
-	scr desktop.Screen
+	hub   *desktop.Hub
+	scr   desktop.Screen
+	audio *desktop.AudioHub // nil without --audio
 }
 
 // inputProblem says why remote control would not work right now, if the
@@ -43,6 +48,9 @@ const (
 	maxClipboard  = 1 << 20 // bytes of clipboard text in either direction
 	clipboardPart = 8 << 10 // runes per clipboard message (stays under maxInputFrame)
 	inputErrEvery = 30 * time.Second
+	// Sound packets are dropped, not queued, past this much unsent data:
+	// late sound is worse than a gap.
+	maxAudioBuffered = 64 << 10
 )
 
 var errSlowClient = errors.New("client too slow")
@@ -67,6 +75,16 @@ func (s *Session) startDesktop(ctx context.Context) (func(), error) {
 		return nil, err
 	}
 	s.desk = &desktopShare{hub: hub, scr: scr}
+	if dc.Audio {
+		open := dc.OpenAudio
+		if open == nil {
+			open = func() (desktop.AudioSource, error) {
+				return desktop.OpenAudio(desktop.OpenOptions{X11Display: dc.X11Display, XAuthority: dc.XAuthority})
+			}
+		}
+		s.desk.audio = desktop.NewAudioHub(desktop.AudioOptions{Open: open, Logf: s.logf, OnStop: s.audioStopped})
+		s.logf("sharing this computer's sound with clients that turn it on")
+	}
 	ds, cur := hub.Displays()
 	s.logf("sharing display %s (%dx%d; %d display(s) attached)", ds[cur].Name, ds[cur].W, ds[cur].H, len(ds))
 	if p := s.desk.inputProblem(); p != "" {
@@ -81,6 +99,9 @@ func (s *Session) startDesktop(ctx context.Context) (func(), error) {
 	return func() {
 		cancel()
 		<-done
+		if s.desk.audio != nil {
+			s.desk.audio.Close()
+		}
 		if dc.Screen == nil {
 			scr.Close()
 		}
@@ -170,6 +191,55 @@ func (k screenSink) SendFrame(b []byte) error {
 	return k.p.screen.Send(b)
 }
 
+// audioSink sends sound packets on the peer's audio channel.
+type audioSink struct{ p *peer }
+
+func (k audioSink) SendAudio(b []byte) {
+	if k.p.audio.BufferedAmount() > maxAudioBuffered {
+		return
+	}
+	_ = k.p.audio.Send(b)
+}
+
+// audioStopped tells listeners that the sound stopped because capture
+// failed (the hub has dropped them).
+func (s *Session) audioStopped(err error, sinks []desktop.AudioSink) {
+	for _, k := range sinks {
+		if a, ok := k.(audioSink); ok {
+			a.p.sendControl(proto.Control{T: proto.CtlAudio, Msg: "The remote computer's sound stopped: " + err.Error()})
+		}
+	}
+}
+
+// setAudio turns the sound on or off for this peer.
+func (p *peer) setAudio(on bool) {
+	hub := p.s.desk.audio
+	if hub == nil || p.audio == nil {
+		if on {
+			p.sendControl(proto.Control{T: proto.CtlAudio, Msg: "The host does not share its sound."})
+		}
+		return
+	}
+	k := audioSink{p}
+	if on {
+		hub.Listen(k)
+		// close unlistens after marking the peer closed: if it raced
+		// ahead of this Listen, undo it, or the capture would never stop.
+		if !p.isReady() {
+			hub.Unlisten(k)
+			return
+		}
+	} else if !hub.Unlisten(k) {
+		return
+	}
+	p.s.audit.DesktopSound(p.auditClient(), on)
+	if on {
+		p.s.logf("client #%d turned this computer's sound on", p.id)
+	} else {
+		p.s.logf("client #%d turned this computer's sound off", p.id)
+	}
+}
+
 // joinDesktop starts streaming to a peer that just became ready.
 func (p *peer) joinDesktop() {
 	hub := p.s.desk.hub
@@ -193,6 +263,9 @@ func (p *peer) joinDesktop() {
 
 // leaveDesktop stops streaming and records what the client did.
 func (p *peer) leaveDesktop(v *desktop.Viewer, c *audit.Client) {
+	if hub := p.s.desk.audio; hub != nil {
+		hub.Unlisten(audioSink{p})
+	}
 	a := v.Leave()
 	if c == nil || a == (desktop.Activity{}) {
 		return
@@ -219,6 +292,9 @@ func (p *peer) onDesktopMessage(c proto.Control) {
 		return
 	case proto.CtlQuality:
 		v.SetQuality(c.Quality)
+		return
+	case proto.CtlAudio: // sound is part of watching, like the screen
+		p.setAudio(c.Audio)
 		return
 	}
 	if p.role != proto.RoleControl {

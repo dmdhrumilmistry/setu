@@ -112,6 +112,11 @@ async function answerOffer(offer, gen = state.gen) {
   state.pc = pc;
   pc.ondatachannel = (e) => {
     if (stale()) { e.channel.close(); return; }
+    if (e.channel.label === 'setu-audio') {
+      e.channel.binaryType = 'arraybuffer';
+      e.channel.onmessage = (m) => state.desk?.audio(m.data);
+      return;
+    }
     if (e.channel.label === 'setu-screen') {
       e.channel.binaryType = 'arraybuffer';
       e.channel.onmessage = (m) => { if (state.desk) state.desk.frame(m.data); else state.screenEarly.push(m.data); };
@@ -189,6 +194,7 @@ async function onMessage(e) {
       return termNotice(`\r\n[setu] ${m.msg}\r\n`);
     case 'screen': return state.desk?.onScreen(m);
     case 'clipboard': return state.desk?.onClipboard(m);
+    case 'audio': return state.desk?.onAudio(m);
   }
 }
 
@@ -346,8 +352,8 @@ function onReady(m) {
   if (upload) $('upload-input').onchange = (e) => { uploadAll([...e.target.files], upload, toast); e.target.value = ''; };
   if (m.kind === 'desktop') {
     show('screen-desk');
-    if (!state.desk) state.desk = createDesktop({ send: sendCtl, control: state.role === 'control', hostOS: m.os, upload });
-    else state.desk.notice('Reconnected');
+    if (!state.desk) state.desk = createDesktop({ send: sendCtl, control: state.role === 'control', hostOS: m.os, upload, audio: !!m.audio });
+    else { state.desk.notice('Reconnected'); state.desk.reconnected(); }
     for (const b of state.screenEarly) state.desk.frame(b);
     state.screenEarly = [];
   } else {

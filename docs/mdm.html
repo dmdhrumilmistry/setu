@@ -175,6 +175,11 @@ attributes (such as an asset tag) to every record.</li>
 <td>Clients cannot upload files to this device (shares, remote desktop and service profiles).</td>
 </tr>
 <tr>
+<td><code>DisableAudio</code></td>
+<td>bool</td>
+<td>Remote desktop cannot share this device's sound: <code>setu desktop --audio</code> is refused, and service profiles with sound share only the screen.</td>
+</tr>
+<tr>
 <td><code>RequirePassword</code></td>
 <td>bool</td>
 <td>Every share and profile needs a password; <code>setu share</code> prompts even without <code>--password</code>.</td>
