@@ -5,12 +5,12 @@ go 1.27.2
 require (
 	github.com/btcsuite/btcd/btcec/v2 v2.5.0
 	github.com/creack/pty v1.1.24
-	github.com/ebitengine/purego v0.11.1
+	github.com/ebitengine/purego v0.11.2
 	github.com/gorilla/websocket v1.5.3
 	github.com/jezek/xgb v1.3.1
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/pion/logging v0.2.4
-	github.com/pion/webrtc/v4 v4.2.23
+	github.com/pion/webrtc/v4 v4.2.24
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.23.0
 	go.opentelemetry.io/otel/log v1.47.0
@@ -33,7 +33,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.31.0 // indirect
 	github.com/pion/datachannel v1.6.3 // indirect
-	github.com/pion/dtls/v3 v3.1.10 // indirect
+	github.com/pion/dtls/v3 v3.1.13 // indirect
 	github.com/pion/ice/v4 v4.4.7 // indirect
 	github.com/pion/interceptor v0.1.49 // indirect
 	github.com/pion/mdns/v2 v2.2.2 // indirect
