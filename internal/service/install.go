@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/dmdhrumilmistry/setu/internal/proc"
 )
 
 // Unit describes what autostart should run.
@@ -38,7 +40,9 @@ func (u Unit) env() map[string]string {
 }
 
 func run(name string, args ...string) error {
-	out, err := exec.Command(name, args...).CombinedOutput()
+	cmd := exec.Command(name, args...)
+	proc.NoWindow(cmd)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s %s: %v: %s", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}
