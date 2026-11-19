@@ -577,6 +577,9 @@ func (conn *Conn) attachTerminal(ctx context.Context) (int, error) {
 		if err == nil {
 			defer restore()
 		}
+		// The remote already sends \r\n; deferred calls run LIFO, so this is
+		// undone before the terminal leaves raw mode.
+		defer tty.DisableNewlineAutoReturn(os.Stdout)()
 	}
 	resize := make(chan struct{}, 1)
 	stopResize := tty.NotifyResize(resize)

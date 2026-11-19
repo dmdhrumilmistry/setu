@@ -13,6 +13,8 @@ import (
 	"unicode/utf16"
 
 	"golang.org/x/sys/windows"
+
+	"github.com/dmdhrumilmistry/setu/internal/proc"
 )
 
 const taskName = `setu`
@@ -120,7 +122,9 @@ func Uninstall() error {
 
 // AutostartStatus describes the autostart registration.
 func AutostartStatus() string {
-	out, err := exec.Command("schtasks", "/Query", "/TN", taskName, "/FO", "LIST").Output()
+	cmd := exec.Command("schtasks", "/Query", "/TN", taskName, "/FO", "LIST")
+	proc.NoWindow(cmd)
+	out, err := cmd.Output()
 	if err != nil {
 		return "not installed (run `setu service install`)"
 	}

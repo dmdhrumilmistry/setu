@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 	"unicode"
+
+	"github.com/dmdhrumilmistry/setu/internal/proc"
 )
 
 // Func shows one notification.
@@ -53,6 +55,8 @@ func Desktop() Func {
 			defer cancel()
 			c := exec.CommandContext(ctx, name, args...)
 			c.Env = append(os.Environ(), env...)
+			// -WindowStyle Hidden only hides the console after it exists.
+			proc.NoWindow(c)
 			_ = c.Run()
 		}()
 	}

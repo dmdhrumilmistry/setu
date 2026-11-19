@@ -41,7 +41,7 @@ Because the binary stays writable by you, setu keeps itself up to date (see
 go install github.com/dmdhrumilmistry/setu/cmd/setu@latest
 ```
 
-This needs Go 1.27.2 or newer. The binary lands in `$(go env GOPATH)/bin`
+This needs Go 1.27.4 or newer. The binary lands in `$(go env GOPATH)/bin`
 (usually `~/go/bin`); make sure that directory is on your `PATH`.
 
 Check the installation:
@@ -94,7 +94,12 @@ Cross-compile with `GOOS` and `GOARCH`, for example
 ## Updates
 
 setu keeps itself up to date. The always-on service checks for a new release
-about every 6 hours and installs it by itself; you can also run
+about every 6 hours and installs it by itself. When the service is not
+running, the command line does it instead: a command such as `setu share` or
+`setu join` starts a background check at most once a day, without waiting for
+it or printing anything, and the next command reports
+"setu updated itself to vX.Y.Z" once. Set `SETU_NO_AUTO_UPDATE` to turn this
+off for a shell or script (it is also skipped when `CI` is set). You can run
 `setu upgrade` at any time. Updating never interrupts anyone:
 
 * The download is checked against the release's `SHA256SUMS` (and, in builds

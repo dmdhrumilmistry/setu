@@ -38,6 +38,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/dmdhrumilmistry/setu/internal/proc"
 )
 
 // DefaultBaseURL is where official releases are published.
@@ -302,7 +304,10 @@ func checksum(sums []byte, file string) ([]byte, error) {
 func SelfTest(ctx context.Context, bin, version string) error {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, bin, "version").CombinedOutput()
+	cmd := exec.CommandContext(ctx, bin, "version")
+	// No console window, for callers that have no console of their own.
+	proc.NoWindow(cmd)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("the new setu does not start here: %v: %s", err, bytes.TrimSpace(out))
 	}

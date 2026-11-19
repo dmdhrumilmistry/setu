@@ -520,14 +520,16 @@ function restoreKept(k) {
 
 // Leave the session for good: forget the invite and token kept for this
 // tab and start over from a clean page.
-function leave() {
+// leave ends this session and reloads the page: to the home page, or with
+// next as the fragment to join another link instead.
+function leave(next = '') {
   state.ended = true;
   stopReconnect();
   clearKept();
   release();
   try { state.pc?.close(); } catch { /* ignore */ }
   if (state.pool) state.pool.close();
-  location.replace(location.pathname + location.search);
+  location.replace(location.pathname + location.search + (next ? '#' + next : ''));
 }
 
 // Check a connection that may have died silently (after a network change,
@@ -886,7 +888,7 @@ function boot() {
   });
   $('keep-session').checked = keepEnabled();
   $('keep-session').addEventListener('change', (e) => setKeepEnabled(e.target.checked));
-  $('leave').addEventListener('click', leave);
+  $('leave').addEventListener('click', () => leave());
   $('reconnect').addEventListener('click', () => {
     $('reconnect').hidden = true;
     state.resume = null;
@@ -899,11 +901,15 @@ function boot() {
     $('invite').value = '';
     start(v);
   });
-  // A link opened in this tab while it shows the home page only changes the
-  // fragment, which does not load the page again: join with it.
+  // A link opened in this tab only changes the fragment, which does not load
+  // the page again: join with it. In a connected tab that means leaving the
+  // current session first; ignoring the link would silently keep the old one
+  // (for example a view-only session when the control link was opened).
   window.addEventListener('hashchange', () => {
     const f = location.hash.slice(1);
-    if (!f || (state.connected && !state.ended) || state.invite) return;
+    if (!f) return;
+    if (state.connected && !state.ended) return leave(f);
+    if (state.invite) return;
     history.replaceState(null, '', location.pathname + location.search);
     start(f);
   });

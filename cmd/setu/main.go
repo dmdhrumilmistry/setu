@@ -47,7 +47,7 @@ Usage:
   setu policy                                   show the managed (MDM) policy in force on this device
   setu device [show | reset]                    this device's key fingerprint (for auto-approval)
   setu doctor                                   check this computer's setu setup and say how to fix problems
-  setu upgrade [--check] | auto on|off|status   update setu (the service also does it by itself)
+  setu upgrade [--check] | auto on|off|status   update setu (it also does so by itself, about daily)
   setu version
 
 Examples:
@@ -72,6 +72,7 @@ func main() {
 	// Windows consoles need VT processing switched on for colours and TUIs.
 	restoreOut := tty.EnableVT(os.Stdout)
 	restoreErr := tty.EnableVT(os.Stderr)
+	autoUpdateHook(os.Args[1], os.Args[2:])
 	var err error
 	code := 0
 	switch os.Args[1] {

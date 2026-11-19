@@ -243,7 +243,7 @@ exits with status 1 if anything fails, 0 otherwise (warnings included).
 setu upgrade                    # install the latest release (or the version your organization pins)
 setu upgrade --check            # only say whether one is available
 setu upgrade --version v1.4.0   # install this release (also to roll back)
-setu upgrade auto status        # automatic updates by the service: on by default
+setu upgrade auto status        # automatic updates (service or CLI): on by default
 setu upgrade auto off           # ...or on
 ```
 
@@ -253,7 +253,11 @@ setu upgrade auto off           # ...or on
 | `--version VERSION` | Install this release instead of the latest. |
 | `--force` | Also replace a development build (one built from source, without a release version). |
 
-See [Updates](install.md#updates) for how updates are verified and applied.
+Without the service, other commands start a detached check at most once a day
+(`setu upgrade --auto`, an internal form that logs to `autoupdate.log` in the
+service directory). It honours `setu upgrade auto off` and managed policy, and
+is skipped for development builds. See [Updates](install.md#updates) for how
+updates are verified and applied.
 
 ## setu policy
 
@@ -271,4 +275,5 @@ values hidden), or "no managed policy on this device". See
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`, `OTEL_EXPORTER_OTLP_ENDPOINT` | share `--audit`, service audit | Collector URL when no endpoint flag is given. |
 | `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | share, service audit | Collector headers, `Name=value,Name2=value2`, values percent-encoded. |
 | `SETU_SERVICE_DIR` | service | Use another state directory. |
+| `SETU_NO_AUTO_UPDATE` | all commands | Set to any value to stop the command line's daily background update check (also skipped when `CI` is set). |
 | `SETU_SESSION` | set by setu | Set to `1` inside shared commands, so scripts can tell they are shared. |
