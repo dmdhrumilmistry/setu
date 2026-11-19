@@ -778,7 +778,7 @@ exits with status 1 if anything fails, 0 otherwise (warnings included).</p>
 <pre><code class="language-sh">setu upgrade                    # install the latest release (or the version your organization pins)
 setu upgrade --check            # only say whether one is available
 setu upgrade --version v1.4.0   # install this release (also to roll back)
-setu upgrade auto status        # automatic updates by the service: on by default
+setu upgrade auto status        # automatic updates (service or CLI): on by default
 setu upgrade auto off           # ...or on
 </code></pre>
 <table>
@@ -803,7 +803,11 @@ setu upgrade auto off           # ...or on
 </tr>
 </tbody>
 </table>
-<p>See <a href="install.html#updates">Updates</a> for how updates are verified and applied.</p>
+<p>Without the service, other commands start a detached check at most once a day
+(<code>setu upgrade --auto</code>, an internal form that logs to <code>autoupdate.log</code> in the
+service directory). It honours <code>setu upgrade auto off</code> and managed policy, and
+is skipped for development builds. See <a href="install.html#updates">Updates</a> for how
+updates are verified and applied.</p>
 <h2 id="setu-policy">setu policy</h2>
 <p>Prints where the managed policy came from, its hash and its settings (header
 values hidden), or &quot;no managed policy on this device&quot;. See
@@ -847,6 +851,11 @@ values hidden), or &quot;no managed policy on this device&quot;. See
 <td><code>SETU_SERVICE_DIR</code></td>
 <td>service</td>
 <td>Use another state directory.</td>
+</tr>
+<tr>
+<td><code>SETU_NO_AUTO_UPDATE</code></td>
+<td>all commands</td>
+<td>Set to any value to stop the command line's daily background update check (also skipped when <code>CI</code> is set).</td>
 </tr>
 <tr>
 <td><code>SETU_SESSION</code></td>

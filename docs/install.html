@@ -160,7 +160,12 @@ go build -o setu ./cmd/setu      # setu.exe on Windows
 <code>GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build ./cmd/setu</code>.</p>
 <h2 id="updates">Updates</h2>
 <p>setu keeps itself up to date. The always-on service checks for a new release
-about every 6 hours and installs it by itself; you can also run
+about every 6 hours and installs it by itself. When the service is not
+running, the command line does it instead: a command such as <code>setu share</code> or
+<code>setu join</code> starts a background check at most once a day, without waiting for
+it or printing anything, and the next command reports
+&quot;setu updated itself to vX.Y.Z&quot; once. Set <code>SETU_NO_AUTO_UPDATE</code> to turn this
+off for a shell or script (it is also skipped when <code>CI</code> is set). You can run
 <code>setu upgrade</code> at any time. Updating never interrupts anyone:</p>
 <ul>
 <li>The download is checked against the release's <code>SHA256SUMS</code> (and, in builds

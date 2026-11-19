@@ -139,6 +139,10 @@ func Spawn(childArgs func(dir string) []string, secretInput string, timeout time
 	}
 }
 
+// Detach configures cmd to outlive this process and its terminal, for
+// callers that start a helper without registering a session.
+func Detach(cmd *exec.Cmd) { detach(cmd) }
+
 func withoutEnv(env []string, key string) []string {
 	out := env[:0:0]
 	for _, kv := range env {

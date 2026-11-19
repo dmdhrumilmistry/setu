@@ -15,7 +15,7 @@ import (
 
 const upgradeUsage = `Usage:
   setu upgrade [--check] [--version vX.Y.Z] [--force]   install the latest release (or the version your organization pins)
-  setu upgrade auto on|off|status                      let the service install updates by itself (on by default)
+  setu upgrade auto on|off|status                      let setu install updates by itself (on by default)
 
 The download is checked against the release's SHA256SUMS (and its signature,
 when this build has a release key) and run once before it replaces this
@@ -26,6 +26,9 @@ service switches to the new one only when nobody is connected.
 func runUpgrade(args []string) (int, error) {
 	if len(args) > 0 && args[0] == "auto" {
 		return upgradeAuto(args[1:])
+	}
+	if len(args) == 1 && args[0] == "--auto" {
+		return runAutoUpgrade() // internal: the CLI's background check, not in the help
 	}
 	fs := flag.NewFlagSet("upgrade", flag.ExitOnError)
 	check := fs.Bool("check", false, "only report whether an update is available")
@@ -129,7 +132,7 @@ func upgradeAuto(args []string) (int, error) {
 		}
 		fmt.Printf("automatic updates: %s\nrunning: %s\n", state, versionString())
 		if _, ok := service.RunningPID(service.LockPath(dir)); !ok {
-			fmt.Println("the service is not running; it is what installs updates (setu service install)")
+			fmt.Println("the service is not running: setu installs updates in the background after a command, at most once a day (set SETU_NO_AUTO_UPDATE to stop that)")
 		}
 		return 0, nil
 	case "on", "off":
