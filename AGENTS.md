@@ -14,7 +14,7 @@ signaling or service paths.
 ## Commands
 
 ```sh
-go build ./...                                   # Go 1.27.3+
+go build ./...                                   # Go 1.27.4+
 go test -race -count=1 ./...                     # unit + e2e (real PTY, WebRTC, in-memory relay)
 go test -race -count=1 -run TestRequireDevice ./internal/e2e/    # one test
 gofmt -l . ; go vet ./...                        # CI fails on either
