@@ -1,6 +1,6 @@
 module github.com/dmdhrumilmistry/setu
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/btcsuite/btcd/btcec/v2 v2.5.1

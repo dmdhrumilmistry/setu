@@ -41,7 +41,7 @@ Because the binary stays writable by you, setu keeps itself up to date (see
 go install github.com/dmdhrumilmistry/setu/cmd/setu@latest
 ```
 
-This needs Go 1.27.2 or newer. The binary lands in `$(go env GOPATH)/bin`
+This needs Go 1.27.3 or newer. The binary lands in `$(go env GOPATH)/bin`
 (usually `~/go/bin`); make sure that directory is on your `PATH`.
 
 Check the installation:
