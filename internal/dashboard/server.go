@@ -195,6 +195,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/profiles/{name}/devices/remove", s.authed(true, s.removeDevice))
 	mux.HandleFunc("POST /api/clients/disconnect", s.authed(true, s.disconnect))
 	mux.HandleFunc("POST /api/shares/{id}/stop", s.authed(true, s.stopShare))
+	mux.HandleFunc("POST /api/shares/action", s.authed(true, s.shareAction))
+	mux.HandleFunc("POST /api/people/disconnect", s.authed(true, s.disconnectPerson))
+	mux.HandleFunc("POST /api/access/add", s.authed(true, s.accessAdd))
+	mux.HandleFunc("POST /api/access/remove", s.authed(true, s.accessRemove))
 	return s.guard(mux)
 }
 

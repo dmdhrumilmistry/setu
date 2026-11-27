@@ -289,6 +289,10 @@ func (p *peer) binding() string {
 // unless the host admits only known devices.
 func (p *peer) login(c proto.Control) {
 	s := p.s
+	if ok, why := s.allowed(p); !ok {
+		s.refuseBlocked(p, why)
+		return
+	}
 	p.mu.Lock()
 	fp := p.deviceFP
 	p.mu.Unlock()
@@ -366,6 +370,17 @@ func (p *peer) refuse(msg string) {
 // joined; a client that only got in by naming a ticket has no other way in.
 func (p *peer) resume(c proto.Control) {
 	t, old, err := p.s.claimTicket(p, c.Resume)
+	if err == nil {
+		if ok, why := p.s.allowed(p); !ok {
+			// Blocked since it joined: the ticket dies with it.
+			p.s.revokeTicket(p)
+			if old != nil {
+				old.close(why)
+			}
+			p.s.refuseBlocked(p, why)
+			return
+		}
+	}
 	if err == nil && p.s.cfg.RequireDevice && !p.s.knownDevice(t.deviceFP, p.binding()) {
 		// The device was removed since it joined: the ticket dies with it.
 		p.s.revokeTicket(p)

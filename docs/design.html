@@ -185,6 +185,10 @@ HKDF, PBKDF2, AES-GCM and HMAC in its standard library. The Rust options
 <td>Local control socket between hosting processes (service, background shares) and the dashboard: one JSON request per connection, status and disconnect only</td>
 </tr>
 <tr>
+<td><code>internal/access</code></td>
+<td>Block and allow lists (<code>access.json</code>): rule validation, evaluation, a locked atomic writer and a cached checker the host calls</td>
+</tr>
+<tr>
 <td><code>internal/history</code></td>
 <td>Append-only connection history (<code>history.jsonl</code>) behind the dashboard's analytics</td>
 </tr>
@@ -426,7 +430,10 @@ named in <code>control.path</code>. Each connection carries one JSON request
 (<code>status</code> or <code>disconnect</code>, unknown fields refused, 4 KiB limit, 5 s
 deadline) and one response. Linux and macOS also check the peer's uid.
 <code>status</code> returns <code>host.Session.Status()</code>, a snapshot with no secrets;
-<code>disconnect</code> revokes the client's resume ticket before closing it.</li>
+<code>disconnect</code> revokes the client's resume ticket before closing it;
+<code>disconnect_all</code>, <code>pause</code> (refuse new joins, keep connected clients),
+<code>terminate</code> (end <code>Run</code>; the supervisor restarts the profile) and
+<code>enforce</code> (re-check the access rules now) act on one share.</li>
 <li><strong>History.</strong> <code>host.Config.Events</code> receives connection events (connect,
 reconnect, disconnect with its duration, failed logins, lockouts, refused
 joins, pairings). The supervisor and background shares queue them to a
@@ -438,6 +445,13 @@ stall a share.</li>
 are the same file edits the CLI makes (<code>internal/service/ops.go</code>, with the
 managed-policy check); the supervisor picks them up as usual.</li>
 </ol>
+<p>Block and allow lists (<code>internal/access</code>) are a separate file per state
+directory, read through a checker that re-parses it only when its size,
+mtime or mode change, so editing rules never restarts a profile. The host
+asks <code>Config.Access</code> in <code>login</code> and <code>resume</code> (after the device signature and
+the resume token are verified) and every 10 s for connected clients; a
+refused client gets a generic error, its ticket is revoked and the refusal is
+audited and recorded. An unreadable file denies everyone.</p>
 <p>The HTTP side binds a loopback address, checks <code>Host</code> against its own
 address, exchanges the one-time fragment token for a cookie session, requires
 a CSRF header plus a same-origin JSON request for every change and serves an

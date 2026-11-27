@@ -184,6 +184,26 @@ Ids can be abbreviated to any unique prefix.
 | `--fps N` | 20 | With `--desktop`: maximum frames per second, 1 to 60. |
 | `--audio` | off | With `--desktop`: also share this computer's sound with viewers who turn it on. |
 
+### setu service access
+
+```sh
+setu service access list [name|all]
+setu service access block [--for 24h] [--note TEXT] <name|all> device|person|network <value>
+setu service access allow [--for 24h] [--note TEXT] <name|all> device|person|network <value>
+setu service access remove <name|all> <rule-id>
+```
+
+Block and allow lists for one profile or (`all`) every profile; `setu service
+block ...` and `setu service allow ...` are short forms. A running service
+applies a new rule at once and disconnects the clients it covers.
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--for DURATION` | never | The rule expires after this long, for example `24h`. |
+| `--note TEXT` | none | Why the rule exists, shown in listings. |
+
+See [Block and allow lists](dashboard.md#block-and-allow-lists).
+
 ### setu service rotate
 
 | Flag | Meaning |

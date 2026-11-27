@@ -14,18 +14,20 @@ import (
 	"github.com/dmdhrumilmistry/setu/internal/host"
 )
 
-type fakeHandler struct{ kicked []int }
+type fakeHandler struct{ asked []string }
 
 func (f *fakeHandler) Shares() []host.Status {
 	return []host.Status{{ID: "abc", Profile: "p", Clients: []host.ClientStatus{{ID: 3, Name: "alice"}}}}
 }
 
-func (f *fakeHandler) Disconnect(profile string, client int) error {
-	if profile != "p" || client != 3 {
-		return host.ErrNoClient
+// Session returns an idle, never-run host: enough to see each operation
+// reach it (its own behaviour is tested in internal/e2e).
+func (f *fakeHandler) Session(profile string) (*host.Session, error) {
+	f.asked = append(f.asked, profile)
+	if profile != "p" {
+		return nil, errors.New("profile \"" + profile + "\" is not being served")
 	}
-	f.kicked = append(f.kicked, client)
-	return nil
+	return host.New(host.Config{Command: []string{"true"}, Manual: true})
 }
 
 // shortTemp is a directory with a short path: socket paths are limited.
@@ -66,14 +68,22 @@ func TestStatusAndDisconnect(t *testing.T) {
 	if len(resp.Shares) != 1 || resp.Shares[0].Clients[0].Name != "alice" {
 		t.Fatalf("status %+v", resp)
 	}
-	if _, err := Call(ctx, dir, Request{Op: OpDisconnect, Profile: "p", Client: 3}); err != nil {
-		t.Fatal(err)
-	}
-	if len(h.kicked) != 1 {
-		t.Fatal("disconnect did not reach the handler")
-	}
 	if _, err := Call(ctx, dir, Request{Op: OpDisconnect, Profile: "p", Client: 4}); err == nil || !strings.Contains(err.Error(), "no such client") {
-		t.Fatalf("handler error not passed back: %v", err)
+		t.Fatalf("session error not passed back: %v", err)
+	}
+	if _, err := Call(ctx, dir, Request{Op: OpDisconnectAll, Profile: "q"}); err == nil || !strings.Contains(err.Error(), "not being served") {
+		t.Fatalf("unknown profile: %v", err)
+	}
+	for _, op := range []string{OpDisconnectAll, OpPause, OpEnforce} {
+		if _, err := Call(ctx, dir, Request{Op: op, Profile: "p", On: true}); err != nil {
+			t.Fatalf("%s: %v", op, err)
+		}
+	}
+	if _, err := Call(ctx, dir, Request{Op: OpTerminate, Profile: "p"}); err == nil {
+		t.Fatal("terminated a share that is not running")
+	}
+	if len(h.asked) != 6 {
+		t.Fatalf("operations reached the handler %d times", len(h.asked))
 	}
 	if _, err := Call(ctx, dir, Request{Op: "shell"}); err == nil {
 		t.Fatal("unknown operation accepted")

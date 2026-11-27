@@ -656,6 +656,36 @@ the terminal), plus:</p>
 </tr>
 </tbody>
 </table>
+<h3 id="setu-service-access">setu service access</h3>
+<pre><code class="language-sh">setu service access list [name|all]
+setu service access block [--for 24h] [--note TEXT] &lt;name|all&gt; device|person|network &lt;value&gt;
+setu service access allow [--for 24h] [--note TEXT] &lt;name|all&gt; device|person|network &lt;value&gt;
+setu service access remove &lt;name|all&gt; &lt;rule-id&gt;
+</code></pre>
+<p>Block and allow lists for one profile or (<code>all</code>) every profile; <code>setu service block ...</code> and <code>setu service allow ...</code> are short forms. A running service
+applies a new rule at once and disconnects the clients it covers.</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--for DURATION</code></td>
+<td>never</td>
+<td>The rule expires after this long, for example <code>24h</code>.</td>
+</tr>
+<tr>
+<td><code>--note TEXT</code></td>
+<td>none</td>
+<td>Why the rule exists, shown in listings.</td>
+</tr>
+</tbody>
+</table>
+<p>See <a href="dashboard.html#block-and-allow-lists">Block and allow lists</a>.</p>
 <h3 id="setu-service-rotate">setu service rotate</h3>
 <table>
 <thead>
@@ -913,6 +943,7 @@ values hidden), or &quot;no managed policy on this device&quot;. See
       <li class="l2"><a href="#background-shares">Background shares</a></li>
       <li class="l2"><a href="#setu-service">setu service</a></li>
       <li class="l3"><a href="#setu-service-add">setu service add</a></li>
+      <li class="l3"><a href="#setu-service-access">setu service access</a></li>
       <li class="l3"><a href="#setu-service-rotate">setu service rotate</a></li>
       <li class="l3"><a href="#setu-service-audit">setu service audit</a></li>
       <li class="l3"><a href="#setu-service-install-and-run">setu service install and run</a></li>

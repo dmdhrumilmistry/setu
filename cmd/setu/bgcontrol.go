@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/dmdhrumilmistry/setu/internal/access"
 	"github.com/dmdhrumilmistry/setu/internal/control"
 	"github.com/dmdhrumilmistry/setu/internal/history"
 	"github.com/dmdhrumilmistry/setu/internal/host"
@@ -34,6 +35,9 @@ func dashboardHooks(cfg *host.Config, sessionDir string) (serve func(context.Con
 		cfg.Events = func(e history.Event) { e.Source = src; write(e) }
 		stop = func() { hcancel(); <-done }
 	}
+	// The share's block and allow lists: a file in its own directory, so
+	// they end with it.
+	cfg.Access = access.NewChecker(access.Path(sessionDir), access.AllScope).Check
 	serve = func(ctx context.Context, s *host.Session) {
 		ln, err := control.Listen(sessionDir)
 		if err != nil {
@@ -50,9 +54,9 @@ type oneShare struct{ s *host.Session }
 
 func (o oneShare) Shares() []host.Status { return []host.Status{o.s.Status()} }
 
-func (o oneShare) Disconnect(profile string, client int) error {
+func (o oneShare) Session(profile string) (*host.Session, error) {
 	if profile != "" {
-		return errors.New("this is a background share, not a service profile")
+		return nil, errors.New("this is a background share, not a service profile")
 	}
-	return o.s.Disconnect(client, "disconnected from the dashboard")
+	return o.s, nil
 }

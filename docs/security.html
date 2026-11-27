@@ -175,6 +175,10 @@ an SSH private key.</p>
 <td>Connections, admission decisions and submitted commands go to your collector over TLS, off the machine within about a second. See <a href="audit.html">Audit logging</a>.</td>
 </tr>
 <tr>
+<td>Block and allow lists</td>
+<td>Rules that keep a device key, a person or a network out, or let only them in, checked at login, on reconnect and while connected. Unreadable rules make a share admit nobody. See <a href="dashboard.html#block-and-allow-lists">Block and allow lists</a>.</td>
+</tr>
+<tr>
 <td>Dashboard</td>
 <td><code>setu dashboard</code> listens on a loopback address only, and only while it runs. Its link carries a one-time 256-bit token in the fragment, traded for an <code>HttpOnly</code>, <code>SameSite=Strict</code> session cookie; every change needs a CSRF token and a same-origin JSON request, requests naming any other host are refused (DNS rebinding), and the page has a strict CSP and cannot be framed. It never shows links, keys or verifiers. The service and background shares answer it over a control socket in their owner-only directories. See <a href="dashboard.html">Dashboard</a>.</td>
 </tr>

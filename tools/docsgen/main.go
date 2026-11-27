@@ -355,7 +355,7 @@ func undocumentedFlags(root, cliDoc string) ([]string, error) {
 	var missing []string
 	for _, args := range [][]string{
 		{"share"}, {"desktop"}, {"join"}, {"service", "add"}, {"service", "rotate"},
-		{"service", "audit"}, {"service", "install"}, {"service", "run"}, {"dashboard"},
+		{"service", "audit"}, {"service", "install"}, {"service", "run"}, {"dashboard"}, {"service", "access", "block"},
 	} {
 		cmd := exec.Command("go", append(append([]string{"run", "./cmd/setu"}, args...), "-h")...)
 		cmd.Dir = root

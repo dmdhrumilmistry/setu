@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/dmdhrumilmistry/setu/internal/history"
@@ -49,6 +50,7 @@ type totals struct {
 	AuthFailures  int     `json:"auth_failures"`
 	Lockouts      int     `json:"lockouts"`
 	Rejected      int     `json:"rejected"`
+	Blocked       int     `json:"blocked"` // of Rejected: by a block or allow list
 	Paired        int     `json:"paired"`
 }
 
@@ -172,6 +174,9 @@ func analyze(evs []history.Event, rng rangeSpec, now time.Time) analyticsView {
 			v.Totals.Lockouts++
 		case history.Rejected:
 			v.Totals.Rejected++
+			if strings.HasPrefix(e.Reason, "blocked: ") || e.Reason == "not on the allow list" {
+				v.Totals.Blocked++
+			}
 		case history.Paired:
 			v.Totals.Paired++
 		}

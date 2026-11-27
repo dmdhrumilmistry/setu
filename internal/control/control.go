@@ -33,8 +33,12 @@ import (
 
 // Operations.
 const (
-	OpStatus     = "status"
-	OpDisconnect = "disconnect"
+	OpStatus        = "status"         // every share's host.Status
+	OpDisconnect    = "disconnect"     // one client (Client)
+	OpDisconnectAll = "disconnect_all" // every client of the share
+	OpPause         = "pause"          // stop (On) or resume admitting new clients
+	OpTerminate     = "terminate"      // end the share; the service restarts a profile
+	OpEnforce       = "enforce"        // apply changed block/allow lists now
 )
 
 // SocketName is the socket's file name in a state directory.
@@ -55,19 +59,22 @@ type Request struct {
 	Op      string `json:"op"`
 	Profile string `json:"profile,omitempty"` // which share, for the service
 	Client  int    `json:"client,omitempty"`
+	On      bool   `json:"on,omitempty"`
 }
 
 // Response answers a Request.
 type Response struct {
 	Error  string        `json:"error,omitempty"`
 	Shares []host.Status `json:"shares,omitempty"`
+	Count  int           `json:"count,omitempty"` // clients disconnected
 }
 
-// Handler serves requests. Shares is called for OpStatus; Disconnect for
-// OpDisconnect (profile is "" for a background share).
+// Handler serves requests: Shares for OpStatus, Session for the others
+// (profile is "" for a background share). Every action is logged by the
+// hosting process, so its own log says what the dashboard did.
 type Handler interface {
 	Shares() []host.Status
-	Disconnect(profile string, client int) error
+	Session(profile string) (*host.Session, error)
 }
 
 // pointerName is a file in the state directory naming the socket, when
@@ -170,25 +177,53 @@ func handle(c net.Conn, h Handler, logf func(string, ...any)) {
 	if err := dec.Decode(&req); err != nil {
 		resp.Error = "malformed request"
 	} else {
-		resp = serve(req, h)
+		resp = serve(req, h, logf)
 	}
 	_ = json.NewEncoder(c).Encode(resp)
 }
 
-func serve(req Request, h Handler) Response {
-	switch req.Op {
-	case OpStatus:
+func serve(req Request, h Handler, logf func(string, ...any)) Response {
+	if req.Op == OpStatus {
 		return Response{Shares: h.Shares()}
+	}
+	switch req.Op {
+	case OpDisconnect, OpDisconnectAll, OpPause, OpTerminate, OpEnforce:
+	default:
+		return Response{Error: fmt.Sprintf("unknown operation %q", req.Op)}
+	}
+	s, err := h.Session(req.Profile)
+	if err != nil {
+		return Response{Error: err.Error()}
+	}
+	what := req.Op
+	if req.Profile != "" {
+		what += " on profile " + req.Profile
+	}
+	if logf != nil && req.Op != OpEnforce {
+		logf("dashboard: %s", what)
+	}
+	const reason = "disconnected from the dashboard"
+	switch req.Op {
 	case OpDisconnect:
 		if req.Client <= 0 {
 			return Response{Error: "no client given"}
 		}
-		if err := h.Disconnect(req.Profile, req.Client); err != nil {
+		if err := s.Disconnect(req.Client, reason); err != nil {
 			return Response{Error: err.Error()}
 		}
-		return Response{}
+		return Response{Count: 1}
+	case OpDisconnectAll:
+		return Response{Count: s.DisconnectAll(reason)}
+	case OpPause:
+		s.Pause(req.On)
+	case OpTerminate:
+		if err := s.Terminate("ended from the dashboard"); err != nil {
+			return Response{Error: err.Error()}
+		}
+	case OpEnforce:
+		return Response{Count: s.Enforce()}
 	}
-	return Response{Error: fmt.Sprintf("unknown operation %q", req.Op)}
+	return Response{}
 }
 
 // ErrNotRunning means nothing is listening on the socket.

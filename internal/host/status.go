@@ -5,6 +5,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/dmdhrumilmistry/setu/internal/access"
 	"github.com/dmdhrumilmistry/setu/internal/audit"
 	"github.com/dmdhrumilmistry/setu/internal/history"
 	"github.com/dmdhrumilmistry/setu/internal/proto"
@@ -19,7 +20,8 @@ type Status struct {
 	Profile    string    `json:"profile,omitempty"`
 	Started    time.Time `json:"started"`
 	Accepting  bool      `json:"accepting"`
-	Auth       string    `json:"auth"` // "device", "password" or "none"
+	Paused     bool      `json:"paused"` // new joins refused for now
+	Auth       string    `json:"auth"`   // "device", "password" or "none"
 	ViewLink   bool      `json:"view_link"`
 	MaxClients int       `json:"max_clients"`
 	// LockedUntil is set while new joins are refused after failed logins.
@@ -61,7 +63,7 @@ func (s *Session) Status() Status {
 	s.mu.Lock()
 	st := Status{
 		ID: s.id, Kind: s.kind(), Command: s.commandLine(), Profile: s.cfg.Profile, Started: s.started,
-		Accepting: s.accepting, ViewLink: s.cfg.ViewSecret != nil, MaxClients: s.cfg.MaxClients,
+		Accepting: s.accepting, Paused: s.paused, ViewLink: s.cfg.ViewSecret != nil, MaxClients: s.cfg.MaxClients,
 		RecentFailures: s.failures, TotalFailures: s.totalFails,
 	}
 	if now.Before(s.lockedUntil) {
@@ -163,4 +165,94 @@ func (s *Session) clientEvent(kind string, c audit.Client, reason string, d time
 	}
 	s.event(history.Event{Kind: kind, Client: c.ID, Name: c.ActorName(), Role: c.Role, DeviceKey: c.DeviceKey,
 		Device: c.Device.Summary(), Address: addr, Reason: reason, Seconds: d.Round(time.Second).Seconds()})
+}
+
+// subject is what the access rules see of p.
+func (p *peer) subject() (access.Subject, audit.Client) {
+	c := p.auditClient()
+	return access.Subject{Person: c.KeyName, DeviceKey: c.DeviceKey, Address: c.Address, Claimed: c.PublicAddresses}, c
+}
+
+// allowed asks Config.Access about p.
+func (s *Session) allowed(p *peer) (bool, string) {
+	if s.cfg.Access == nil {
+		return true, ""
+	}
+	sub, _ := p.subject()
+	return s.cfg.Access(sub)
+}
+
+// refuseBlocked turns away a client the access rules do not admit. The
+// client is not told which rule matched.
+func (s *Session) refuseBlocked(p *peer, why string) {
+	_, who := p.subject()
+	s.audit.ClientRejected(who, why)
+	s.clientEvent(history.Rejected, who, why, 0)
+	s.logf("client #%d refused (%s): %s", p.id, why, who.Actor())
+	p.refuse("the host does not allow this connection")
+}
+
+// Enforce disconnects connected clients that the access rules no longer
+// admit, revoking their resume tokens. The host runs it every few seconds;
+// callers that just changed the rules can run it at once.
+func (s *Session) Enforce() int {
+	if s.cfg.Access == nil {
+		return 0
+	}
+	n := 0
+	for _, p := range s.readyPeers(false) {
+		if ok, why := s.allowed(p); !ok {
+			if s.Disconnect(p.id, why) == nil {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// DisconnectAll disconnects every connected client (revoking their resume
+// tokens) and reports how many there were.
+func (s *Session) DisconnectAll(reason string) int {
+	n := 0
+	for _, p := range s.readyPeers(false) {
+		if s.Disconnect(p.id, reason) == nil {
+			n++
+		}
+	}
+	return n
+}
+
+// Pause stops (or, with false, resumes) admitting new clients. Connected
+// clients stay, and a client that dropped may still resume.
+func (s *Session) Pause(on bool) {
+	s.mu.Lock()
+	was := s.paused
+	s.paused = on
+	s.mu.Unlock()
+	if was != on {
+		verb := "resumed"
+		if on {
+			verb = "paused"
+		}
+		s.logf("new joins %s by the host", verb)
+		s.event(history.Event{Kind: history.InviteDisabled, Reason: "new joins " + verb})
+	}
+}
+
+// Terminate ends the share: everyone is disconnected and cannot resume, and
+// the command is stopped (the service then starts the profile afresh).
+func (s *Session) Terminate(reason string) error {
+	s.mu.Lock()
+	end := s.endRun
+	for id := range s.tickets {
+		delete(s.tickets, id)
+	}
+	s.mu.Unlock()
+	if end == nil {
+		return errors.New("the share is not running")
+	}
+	s.logf("ending the share: %s", reason)
+	s.DisconnectAll(reason)
+	end()
+	return nil
 }

@@ -3,6 +3,7 @@ package dashboard
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dmdhrumilmistry/setu/internal/access"
 	"github.com/dmdhrumilmistry/setu/internal/history"
 	"github.com/dmdhrumilmistry/setu/internal/policy"
 	"github.com/dmdhrumilmistry/setu/internal/proto"
@@ -48,6 +50,18 @@ func (f *fakeBackend) disconnect(_ context.Context, source string, client int) e
 }
 func (f *fakeBackend) stopShare(id string) error {
 	f.calls = append(f.calls, "stop:"+id)
+	return nil
+}
+func (f *fakeBackend) shareOp(_ context.Context, source, op string, on bool) (int, error) {
+	f.calls = append(f.calls, fmt.Sprintf("%s:%s:%v", op, source, on))
+	return 0, nil
+}
+func (f *fakeBackend) accessAdd(scope string, r access.Rule) error {
+	f.calls = append(f.calls, "add:"+scope+":"+r.Action+":"+r.Describe())
+	return nil
+}
+func (f *fakeBackend) accessRemove(scope, id string) error {
+	f.calls = append(f.calls, "rm:"+scope+":"+id)
 	return nil
 }
 
@@ -366,12 +380,13 @@ func TestAnalyze(t *testing.T) {
 		{Time: at(time.Hour), Kind: history.AuthFailure},
 		{Time: at(time.Hour), Kind: history.Lockout},
 		{Time: at(30 * time.Minute), Kind: history.Reconnect, Name: "alice"},
+		{Time: at(20 * time.Minute), Kind: history.Rejected, Reason: "blocked: device aaaa-bbbb-cccc-dddd-eeee"},
 		{Time: at(time.Minute), Kind: history.SessionStart},
 	}
 	v := analyze(evs, ranges["7d"], now)
 	tt := v.Totals
 	if tt.Connections != 2 || tt.Previous != 1 || tt.View != 1 || tt.Control != 1 || tt.People != 1 || tt.Devices != 1 ||
-		tt.Seconds != 4200 || tt.MedianSeconds != 2100 || tt.AuthFailures != 1 || tt.Lockouts != 1 || tt.Reconnects != 1 {
+		tt.Seconds != 4200 || tt.MedianSeconds != 2100 || tt.AuthFailures != 1 || tt.Lockouts != 1 || tt.Reconnects != 1 || tt.Rejected != 1 || tt.Blocked != 1 {
 		t.Fatalf("totals %+v", tt)
 	}
 	if len(v.Series) != 7 || v.Series[6].View != 1 || v.Series[6].Failures != 1 || v.Series[4].Control != 1 {
@@ -380,10 +395,58 @@ func TestAnalyze(t *testing.T) {
 	if v.Who[0].Name != "alice" || !v.Who[0].Personal || v.Who[1].Personal || v.Who[0].Seconds != 3600 {
 		t.Fatalf("who %+v", v.Who)
 	}
-	if len(v.Events) != 7 || v.Events[0].Kind != history.Reconnect {
+	if len(v.Events) != 8 || v.Events[0].Kind != history.Rejected {
 		t.Fatalf("events should be newest first without session starts: %+v", v.Events)
 	}
 	if h := ranges["24h"]; len(analyze(evs, h, now).Series) != 24 {
 		t.Fatal("24h range is not hourly")
+	}
+}
+
+func TestAccessAndShareActions(t *testing.T) {
+	h := newHarness(t)
+	cookie, csrf := h.login()
+	auth := []reqOpt{withCookie(cookie), withCSRF(csrf)}
+	w := h.do("POST", "/api/access/add", `{"scope":"profile:claude","kind":"device","value":"3F2A91C077DE0B4EA1C9","action":"block","for":"24h","note":"lost phone"}`, auth...)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "3f2a-91c0-77de-0b4e-a1c9") {
+		t.Fatalf("add rule: %d %s", w.Code, w.Body)
+	}
+	for name, body := range map[string]string{
+		"bad scope":    `{"scope":"profile:../x","kind":"person","value":"bob","action":"block"}`,
+		"bad kind":     `{"scope":"profile:*","kind":"user","value":"bob","action":"block"}`,
+		"bad duration": `{"scope":"profile:*","kind":"person","value":"bob","action":"block","for":"5y"}`,
+		"every ip":     `{"scope":"profile:*","kind":"network","value":"0.0.0.0/0","action":"block"}`,
+	} {
+		if w := h.do("POST", "/api/access/add", body, auth...); w.Code != 400 {
+			t.Fatalf("%s: %d", name, w.Code)
+		}
+	}
+	if w := h.do("POST", "/api/access/remove", `{"scope":"share:ab12","id":"00ff"}`, auth...); w.Code != 200 {
+		t.Fatalf("remove rule: %d", w.Code)
+	}
+	for _, a := range []string{"pause", "resume", "disconnect_all", "terminate"} {
+		if w := h.do("POST", "/api/shares/action", `{"source":"profile:claude","action":"`+a+`"}`, auth...); w.Code != 200 {
+			t.Fatalf("%s: %d %s", a, w.Code, w.Body)
+		}
+	}
+	if w := h.do("POST", "/api/shares/action", `{"source":"share:ab12","action":"terminate"}`, auth...); w.Code != 400 {
+		t.Fatalf("terminate a background share: %d", w.Code)
+	}
+	if w := h.do("POST", "/api/shares/action", `{"source":"profile:*","action":"pause"}`, auth...); w.Code != 400 {
+		t.Fatalf("pause every profile at once: %d", w.Code)
+	}
+	if w := h.do("POST", "/api/shares/action", `{"source":"profile:claude","action":"reboot"}`, auth...); w.Code != 400 {
+		t.Fatalf("unknown action: %d", w.Code)
+	}
+	if w := h.do("POST", "/api/people/disconnect", `{"name":"alice"}`, auth...); w.Code != 200 {
+		t.Fatalf("disconnect person: %d", w.Code)
+	}
+	want := []string{
+		"add:profile:claude:block:device 3f2a-91c0-77de-0b4e-a1c9", "enforce:profile:claude:false",
+		"rm:share:ab12:00ff", "enforce:share:ab12:false",
+		"pause:profile:claude:true", "pause:profile:claude:false", "disconnect_all:profile:claude:false", "terminate:profile:claude:false",
+	}
+	if got := strings.Join(h.be.calls, " | "); got != strings.Join(want, " | ") {
+		t.Fatalf("backend calls:\n%s\nwant:\n%s", got, strings.Join(want, " | "))
 	}
 }

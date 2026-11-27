@@ -11,6 +11,26 @@ so security decisions are the product, not an afterthought: read
 `SECURITY.md` and `docs/DESIGN.md` before changing anything in the auth,
 signaling or service paths.
 
+## Finding your way
+
+`docs/CODEMAP.md` is a generated map of the whole tree: every package's
+purpose and internal imports, every file's purpose and its functions, methods
+and exported types, the tests by name, and the JavaScript by function. Read
+it (or grep it) before exploring, and open only the files it points to. It
+has no line numbers, so it changes only when declarations are added, removed
+or renamed; regenerate it then (`go run ./tools/codemap`), or CI fails.
+
+Where to look first, by task:
+
+| Task | Start in |
+| --- | --- |
+| Join/auth behaviour (password, devices, pairing, resume, block/allow) | `internal/host/peer.go` (`login`, `resume`, `activate`), `internal/host/status.go`, `internal/access` |
+| Signaling and the wire format | `internal/host/signal_nostr.go`, `internal/proto`, `docs/DESIGN.md`, mirrored in `web/js/app.mjs` |
+| Service profiles, keys, devices | `internal/service` (`config.go`, `devices.go`, `ops.go`, `supervisor.go`), CLI in `cmd/setu/service*.go` |
+| Dashboard | `internal/dashboard` (`server.go` security, `api.go` endpoints, `analytics.go`, `static/app.js`), live state via `internal/control` |
+| A new CLI flag | `cmd/setu`, then a row in `docs/src/cli.md` (docsgen `-check` enforces it) |
+| End-to-end behaviour tests | `internal/e2e` (real host + Go client over `relaytest`) |
+
 ## Commands
 
 ```sh
@@ -31,6 +51,8 @@ go build -o bin/ ./cmd/setu && scripts/smoke.sh ./bin/setu      # CLI smoke test
 
 cd tools/docsgen && go run .          # regenerate docs/*.html + search index after editing docs/src
 cd tools/docsgen && go run . -check   # CI: stale HTML, broken links, undocumented CLI flags
+go run ./tools/codemap                # regenerate docs/CODEMAP.md after adding/renaming declarations
+go run ./tools/codemap -check         # CI: code map is current
 ```
 
 `docs/*.html` is generated and committed (GitHub Pages serves `main` as is):
@@ -114,6 +136,10 @@ separate step after auth.
   over `internal/control` (a Unix socket in each host's 0700 directory);
   analytics come from `internal/history` (`history.jsonl`, connection
   metadata only). Changes reuse `internal/service/ops.go`.
+- `internal/access`: block/allow lists (`access.json` in the service dir or a
+  background share's dir). Enforced by the host in `login`, `resume` and the
+  `maintain` loop through `host.Config.Access`; an unreadable file denies
+  everyone. CLI: `setu service access`.
 - `setu doctor` (`cmd/setu/doctor.go`, profile checks in
   `internal/service/doctor.go`): every finding carries the command that fixes it.
 - `internal/audit`: OpenTelemetry (OTLP/HTTP) audit records, keystroke-to-

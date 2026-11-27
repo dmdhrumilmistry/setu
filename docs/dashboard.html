@@ -123,6 +123,26 @@ event and by name, address or share.</p>
 <td>The client is cut off at once, and its resume token stops working, so it must join and log in again.</td>
 </tr>
 <tr>
+<td>Block a client</td>
+<td>Live sessions</td>
+<td>Adds block rules for its device key, its personal key or its network address, on this profile or every profile, for an hour up to permanently. It is disconnected at once, and with its personal key it can be disconnected from every session too. See <a href="#block-and-allow-lists">Block and allow lists</a>.</td>
+</tr>
+<tr>
+<td>Disconnect everyone</td>
+<td>Live sessions</td>
+<td>Every client of that share is cut off and cannot resume; the command keeps running.</td>
+</tr>
+<tr>
+<td>Pause new joins</td>
+<td>Live sessions</td>
+<td>The share refuses new clients until you resume it (or it restarts); connected clients stay and dropped ones can still reconnect.</td>
+</tr>
+<tr>
+<td>End session</td>
+<td>Live sessions</td>
+<td>The profile's command is stopped and everyone is disconnected; the service starts a fresh session within seconds. You type the profile's name to confirm.</td>
+</tr>
+<tr>
 <td>Stop a background share</td>
 <td>Live sessions</td>
 <td>Same as <code>setu stop &lt;id&gt;</code>: the command ends and its links stop working.</td>
@@ -152,8 +172,64 @@ event and by name, address or share.</p>
 <p>Changes go through the same code and the same managed-policy checks as the
 command line, and the running service applies them within a few seconds. Each
 change is printed in the dashboard's terminal and recorded in the connection
-history. Creating or removing profiles, people's keys and how a profile signs
-in stay on the command line.</p>
+history.</p>
+<h2 id="block-and-allow-lists">Block and allow lists</h2>
+<p>The <strong>Block and allow lists</strong> page holds rules on top of the link and the
+login, never instead of them: an allowed client still needs a valid link and
+the password, pairing code or known device. There is one list for every
+service profile, one per profile (applied together with the first) and one
+per background share (which ends with the share).</p>
+<table>
+<thead>
+<tr>
+<th>A rule can name</th>
+<th>Example</th>
+<th>How sure the match is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A device key</td>
+<td><code>3f2a-91c0-77de-0b4e-a1c9</code></td>
+<td>Proven: the device signs every connection with its key.</td>
+</tr>
+<tr>
+<td>A person</td>
+<td><code>alice</code></td>
+<td>Proven: the person is the personal key that decrypted the join request.</td>
+</tr>
+<tr>
+<td>A network</td>
+<td><code>203.0.113.7</code> or <code>203.0.113.0/24</code></td>
+<td>The address the connection comes from (a TURN server's, if relayed). Block rules also match the addresses a client lists for itself.</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>A matching <strong>block</strong> rule always refuses.</li>
+<li>If a list has any <strong>allow</strong> rule, only clients that match one of its allow
+rules may join, and connected clients that do not are disconnected. The page
+warns before you add the first one, so you do not lock yourself out.</li>
+<li>Rules can expire (1 hour, 24 hours, 7 days, 30 days) or stay until removed,
+and can carry a note.</li>
+<li>Rules apply to new logins, to reconnects (a blocked client's resume token is
+revoked) and to connected clients, within seconds and at once when you add
+them from the dashboard or the CLI.</li>
+<li>Refused joins are recorded in the activity history and the audit log with
+the rule that matched; the client is only told that the host does not allow
+the connection.</li>
+</ul>
+<p>The same lists from a terminal:</p>
+<pre><code class="language-sh">setu service access list                                  # every rule
+setu service access block --for 24h --note &quot;lost phone&quot; claude device 3f2a-91c0-77de-0b4e-a1c9
+setu service access block all network 203.0.113.0/24      # every profile
+setu service access allow claude person alice             # only alice may join claude
+setu service access remove claude &lt;rule-id&gt;
+</code></pre>
+<p>The rules live in <code>access.json</code> (owner-only) in the service directory, or in a
+background share's own directory. If the file cannot be read or is malformed,
+the share admits nobody until it is fixed, rather than silently dropping the
+rules.</p>
 <h2 id="security">Security</h2>
 <p>The dashboard is a control panel for remote shells, so it is reachable only by
 you, at this computer, while it runs:</p>
@@ -224,6 +300,8 @@ the current version.</p>
 </tr>
 </tbody>
 </table>
+<p>Creating or removing profiles and personal keys, and changing how a profile
+signs in, stay on the command line (<code>setu service</code>).</p>
 <p>To use the dashboard of a computer you reach over SSH, forward the same port
 number on both ends (the dashboard accepts only requests addressed to its own
 address) and open the printed link on your own computer:</p>
@@ -245,6 +323,7 @@ address) and open the printed link on your own computer:</p>
     <ul>
       <li class="l2"><a href="#what-it-shows">What it shows</a></li>
       <li class="l2"><a href="#what-you-can-do">What you can do</a></li>
+      <li class="l2"><a href="#block-and-allow-lists">Block and allow lists</a></li>
       <li class="l2"><a href="#security">Security</a></li>
       <li class="l2"><a href="#connection-history">Connection history</a></li>
       <li class="l2"><a href="#live-state">Live state</a></li>

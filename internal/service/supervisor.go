@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dmdhrumilmistry/setu/internal/access"
 	"github.com/dmdhrumilmistry/setu/internal/audit"
 	"github.com/dmdhrumilmistry/setu/internal/control"
 	"github.com/dmdhrumilmistry/setu/internal/daemon"
@@ -313,18 +314,15 @@ func (sv *Supervisor) Shares() []host.Status {
 	return out
 }
 
-// Disconnect ends a client's connection to a profile (control.Handler).
-func (sv *Supervisor) Disconnect(profile string, client int) error {
+// Session returns the running share of a profile (control.Handler).
+func (sv *Supervisor) Session(profile string) (*host.Session, error) {
 	m := sv.shares.Load()
-	if m == nil || (*m)[profile] == nil {
-		return fmt.Errorf("profile %q is not being served", profile)
+	if m != nil && (*m)[profile] != nil {
+		if s := (*m)[profile].session.Load(); s != nil {
+			return s, nil
+		}
 	}
-	s := (*m)[profile].session.Load()
-	if s == nil {
-		return fmt.Errorf("profile %q is not being served", profile)
-	}
-	sv.Log.Printf("profile %s: disconnecting client #%d (asked from the dashboard)", profile, client)
-	return s.Disconnect(client, "disconnected from the dashboard")
+	return nil, fmt.Errorf("profile %q is not being served", profile)
 }
 
 // serve runs one profile's command, restarting it with backoff whenever it
@@ -349,6 +347,9 @@ func (sv *Supervisor) serve(ctx context.Context, r *runner, name string, p *Prof
 		}
 		store := &deviceStore{dir: sv.Dir, profile: name, logf: out.printf, now: time.Now, pol: pol, idle: pol.DeviceIdle(time.Duration(p.DeviceIdle))}
 		cfg.Devices = store
+		// Block and allow lists live in their own file, read when it
+		// changes, so editing them never restarts a profile.
+		cfg.Access = access.NewChecker(access.Path(sv.Dir), name).Check
 		if ev := sv.events; ev != nil {
 			src := "profile:" + name
 			cfg.Events = func(e history.Event) { e.Source = src; ev(e) }

@@ -4,7 +4,7 @@
 
 const POLL_MS = 3000;
 const ANALYTICS_MS = 30000;
-const PAGES = ['overview', 'sessions', 'profiles', 'activity'];
+const PAGES = ['overview', 'sessions', 'profiles', 'access', 'activity'];
 
 const app = {
   csrf: null,
@@ -137,6 +137,8 @@ function sentence(str) { str = cap(String(str).trim()); return /[.!?]$/.test(str
 function sourceName(src) {
   if (!src) return 'a share';
   const [kind, name] = src.split(':');
+  if (kind === 'person') return 'every session';
+  if (name === '*') return 'every service profile';
   return kind === 'share' ? `background share ${name}` : name;
 }
 
@@ -228,7 +230,7 @@ function route() {
     if (a.dataset.page === app.page) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   }
-  document.title = `${{ overview: 'Overview', sessions: 'Live sessions', profiles: 'Profiles and devices', activity: 'Activity' }[app.page]} · setu dashboard`;
+  document.title = `${{ overview: 'Overview', sessions: 'Live sessions', profiles: 'Profiles and devices', access: 'Block and allow lists', activity: 'Activity' }[app.page]} · setu dashboard`;
   render(true);
   if (needsAnalytics() && app.anRange !== app.range) loadAnalytics();
 }
@@ -291,7 +293,7 @@ function render(fresh) {
 
   // Keep focus on the same control across a refresh.
   const focusKey = document.activeElement?.dataset?.key;
-  const page = { overview, sessions, profiles, activity }[app.page];
+  const page = { overview, sessions, profiles, access: accessPage, activity }[app.page];
   view.replaceChildren(...(app.st ? page() : [h('div', { class: 'skeleton', 'aria-label': 'Loading' })]));
   if (focusKey) view.querySelector(`[data-key="${CSS.escape(focusKey)}"]`)?.focus();
   if (fresh) document.getElementById('main').focus({ preventScroll: true });
@@ -342,7 +344,11 @@ function attention() {
       add('warn', [h('strong', { text: p.name }), ` keys expire ${until(p.expires_at)}. Rotate them before then, or its links stop working.`], linkBtn('#/profiles', 'Review profile'));
     }
   }
+  for (const v of st.access || []) {
+    if (v.error) add('err', [h('strong', { text: v.label }), `: the block and allow lists cannot be read, so nobody can join. ${v.error}`], linkBtn('#/access', 'Review lists'));
+  }
   for (const sh of st.shares) {
+    if (sh.status?.paused) add('warn', [h('strong', { text: sourceName(sh.source) }), ' is not admitting new joins (paused from the dashboard).'], linkBtn('#/sessions', 'View session'));
     if (sh.status && isSet(sh.status.locked_until)) {
       add('err', [h('strong', { text: sourceName(sh.source) }), ` is refusing new joins until ${timeFmt.format(new Date(sh.status.locked_until))} after repeated failed logins.`], linkBtn('#/sessions', 'View session'));
     }
@@ -368,7 +374,7 @@ function overview() {
       kpi('Connected now', nf.format(clients.length), `in ${shares.filter((sh) => sh.status.clients.length).length} of ${shares.length} sessions · ${controlNow} with control`),
       kpi('Connections', nf.format(tt.connections), [h('span', { class: delta > 0 ? 'up' : 'down', text: `${delta >= 0 ? '+' : '−'}${nf.format(Math.abs(delta))}` }), ' on the previous period', tt.reconnects ? ` · ${nf.format(tt.reconnects)} resumed` : '']),
       kpi('Time connected', tt.seconds ? dur(tt.seconds) : '0 m', tt.median_seconds ? `median visit ${dur(tt.median_seconds)}` : 'no finished visits yet'),
-      kpi('Failed logins', nf.format(tt.auth_failures), `${nf.format(tt.lockouts)} lockouts · ${nf.format(tt.rejected)} refused joins`, tt.auth_failures > 0),
+      kpi('Failed logins', nf.format(tt.auth_failures), `${nf.format(tt.lockouts)} lockouts · ${nf.format(tt.rejected)} refused joins${tt.blocked ? ` (${nf.format(tt.blocked)} by access rules)` : ''}`, tt.auth_failures > 0),
     ));
     out.push(h('section', { class: 'grid2 grid3' },
       h('figure', { class: 'card pad span2', style: null }, chartHead(), barChart(an)),
@@ -561,6 +567,7 @@ function shareCard(sh) {
   const locked = isSet(st.locked_until);
   const state = locked
     ? h('span', { class: 'pill warn' }, h('span', { class: 'dot warn' }), `locked until ${timeFmt.format(new Date(st.locked_until))}`)
+    : st.paused ? h('span', { class: 'pill warn' }, h('span', { class: 'dot warn' }), 'new joins paused')
     : st.accepting
       ? h('span', { class: 'pill ok' }, h('span', { class: 'dot ok' }), sh.type === 'profile' ? 'serving' : 'accepting')
       : h('span', { class: 'pill' }, 'not admitting new clients');
@@ -575,9 +582,19 @@ function shareCard(sh) {
     st.resumable ? h('span', { text: `${st.resumable} may reconnect` }) : null,
     st.recent_failures ? h('span', { class: 'err-text', text: `${st.recent_failures} recent failed logins` }) : null,
   ];
-  const actions = sh.type === 'background'
-    ? h('button', { type: 'button', class: 'btn btn-danger', 'data-key': `stop-${sh.name}`, text: 'Stop share', onclick: () => stopShare(sh) })
-    : h('a', { class: 'btn', href: '#/profiles', text: 'Profile settings' });
+  const rules = (app.st.access || []).filter((a) => a.scope === sh.source || (sh.type === 'profile' && a.scope === 'profile:*')).reduce((n, a) => n + a.rules.length, 0);
+  if (rules) meta.push(h('a', { href: '#/access', text: `${rules} access rule${rules === 1 ? '' : 's'}` }));
+  const actions = [
+    st.accepting && h('button', {
+      type: 'button', class: 'btn', 'data-key': `pause-${sh.source}`, text: st.paused ? 'Resume new joins' : 'Pause new joins',
+      title: st.paused ? 'Admit new clients again' : 'Refuse new joins for now; connected clients stay',
+      onclick: () => shareAction(sh, st.paused ? 'resume' : 'pause'),
+    }),
+    st.clients.length > 1 && h('button', { type: 'button', class: 'btn btn-danger', 'data-key': `dcall-${sh.source}`, text: 'Disconnect everyone', onclick: () => disconnectAll(sh) }),
+    sh.type === 'background'
+      ? h('button', { type: 'button', class: 'btn btn-danger', 'data-key': `stop-${sh.name}`, text: 'Stop share', onclick: () => stopShare(sh) })
+      : h('button', { type: 'button', class: 'btn btn-danger', 'data-key': `end-${sh.name}`, text: 'End session', onclick: () => endSession(sh) }),
+  ];
   return h('section', { class: 'card unit', 'aria-label': sourceName(sh.source) },
     h('div', { class: 'unit-head' },
       h('div', null,
@@ -585,7 +602,7 @@ function shareCard(sh) {
           h('span', { class: 'pill', text: sh.type === 'profile' ? 'service profile' : 'background share' }), state),
         h('p', { class: 'meta' }, meta),
         sh.error && h('p', { class: 'meta err-text', text: sh.error })),
-      actions),
+      h('div', { class: 'unit-actions' }, actions)),
     st.clients.length ? clientTable(sh) : h('p', { class: 'empty', text: 'Nobody connected.' }));
 }
 
@@ -601,11 +618,17 @@ function clientTable(sh) {
       h('td', { class: 'code', 'data-label': 'Verification code', text: c.verification_code || '—' }),
       h('td', { 'data-label': 'Connected' }, h('span', { class: 'mono', text: dur((Date.now() - new Date(c.since)) / 1000) }),
         h('span', { class: 'sub', text: c.role === 'view' ? 'watching' : isSet(c.last_input) ? `last input ${ago(c.last_input)}` : 'no input yet' })),
-      h('td', { class: 'act' }, h('button', {
-        type: 'button', class: 'btn btn-danger', text: 'Disconnect', 'data-key': `dc-${sh.source}-${c.id}`,
-        'aria-label': `Disconnect ${who(c.name)} from ${sourceName(sh.source)}`,
-        onclick: () => disconnect(sh, c),
-      })))))));
+      h('td', { class: 'act' },
+        h('button', {
+          type: 'button', class: 'btn btn-danger', text: 'Disconnect', 'data-key': `dc-${sh.source}-${c.id}`,
+          'aria-label': `Disconnect ${who(c.name)} from ${sourceName(sh.source)}`,
+          onclick: () => disconnect(sh, c),
+        }), ' ',
+        h('button', {
+          type: 'button', class: 'btn btn-danger', text: 'Block…', 'data-key': `bl-${sh.source}-${c.id}`,
+          'aria-label': `Block ${who(c.name)}`, disabled: !c.device_key && !c.personal && !c.address,
+          onclick: () => blockClient(sh, c),
+        })))))));
 }
 
 function authText(a) {
@@ -667,6 +690,7 @@ function profileCard(p) {
       fact('Idle timeout', p.idle_timeout || 'off'),
       fact('Recording', p.recording ? 'on' : 'off'),
       fact('Uploads', p.uploads ? 'allowed' : 'off'),
+      fact('Access rules', accessSummary(p.name)),
       isSet(p.pairing_until) && fact('Pairing code', `active, expires ${until(p.pairing_until)}`)),
     devicesTable(p));
 }
@@ -873,6 +897,177 @@ async function removeDevice(p, d) {
     confirm: 'Remove device', danger: true,
   });
   if (yes) await act(() => api('POST', `/api/profiles/${encodeURIComponent(p.name)}/devices/remove`, { fingerprint: d.fingerprint }), `Removed the device from ${p.name}.`);
+}
+
+// ---------- block and allow lists ----------
+
+const KIND_TEXT = { device: 'Device key', person: 'Person', network: 'Network' };
+const FOR_OPTIONS = [['', 'Until removed'], ['1h', '1 hour'], ['24h', '24 hours'], ['7d', '7 days'], ['30d', '30 days']];
+
+function activeRules(v) { return v.rules.filter((r) => !isSet(r.expires) || new Date(r.expires) > Date.now()); }
+
+function accessSummary(name) {
+  const own = (app.st.access || []).find((a) => a.scope === `profile:${name}`);
+  const all = (app.st.access || []).find((a) => a.scope === 'profile:*');
+  const rules = [...(own ? activeRules(own) : []), ...(all ? activeRules(all) : [])];
+  if (!rules.length) return 'none';
+  const allow = rules.some((r) => r.action === 'allow');
+  return `${rules.length} rule${rules.length === 1 ? '' : 's'}${allow ? ' · allow list in force' : ''}`;
+}
+
+function accessPage() {
+  const lists = app.st.access || [];
+  const out = [head('Block and allow lists', 'Keep a device, a person or a network out, or let only them in. Rules come on top of the link and login, never instead of them.',
+    h('a', { class: 'btn', href: '#/sessions', text: 'Live sessions' }))];
+  out.push(h('div', { class: 'card pad small soft' },
+    h('p', null, h('strong', { text: 'How rules work. ' }), 'A matching block rule always refuses. If a list has any allow rule, only clients that match one of its allow rules may join; everyone else is refused, including clients connected now. Rules for every service profile apply on top of each profile\'s own.'),
+    h('p', { class: 'tiny muted' }, 'Device keys and personal keys are proven by the connection. Network rules match the address the connection comes from (a TURN server\'s if it is relayed); block rules also match the addresses a client lists for itself.')));
+  if (!lists.length) out.push(h('p', { class: 'card pad muted', text: 'There is nothing to protect yet: create a service profile or start a background share.' }));
+  for (const v of lists) out.push(accessCard(v));
+  return out;
+}
+
+function accessCard(v) {
+  const act = activeRules(v);
+  const allow = act.some((r) => r.action === 'allow');
+  return h('section', { class: `card unit${v.error ? ' err' : ''}`, 'aria-label': v.label },
+    h('div', { class: 'unit-head' },
+      h('div', null,
+        h('h2', { class: 'unit-title' }, v.label,
+          allow ? h('span', { class: 'pill warn', text: 'allow list in force' }) : act.length ? h('span', { class: 'pill', text: `${act.length} block rule${act.length === 1 ? '' : 's'}` }) : h('span', { class: 'pill', text: 'no rules' })),
+        h('p', { class: 'meta', text: v.scope === 'profile:*' ? 'Applies to every service profile.' : v.scope.startsWith('share:') ? 'Ends with the share.' : 'Applies to this profile, on top of the rules for every profile.' }),
+        v.error && h('p', { class: 'meta err-text', text: `${v.error} Nobody can join until this is fixed.` })),
+      h('div', { class: 'unit-actions' },
+        h('button', { type: 'button', class: 'btn btn-danger', 'data-key': `blk-${v.scope}`, text: 'Block…', disabled: !!v.error, onclick: () => addRule(v, 'block') }),
+        h('button', { type: 'button', class: 'btn', 'data-key': `alw-${v.scope}`, text: 'Allow only…', disabled: !!v.error, onclick: () => addRule(v, 'allow') }))),
+    v.rules.length
+      ? h('div', { class: 'table-wrap' }, h('table', { class: 'stack' },
+        h('thead', null, h('tr', null, ['Rule', 'Matches', 'Expires', 'Note'].map((c) => h('th', { scope: 'col', text: c })), h('th', null, h('span', { class: 'sr', text: 'Actions' })))),
+        h('tbody', null, v.rules.map((r) => {
+          const expired = isSet(r.expires) && new Date(r.expires) <= Date.now();
+          return h('tr', null,
+            h('td', null, h('span', { class: `pill ${expired ? '' : r.action === 'block' ? 'err' : 'ok'}`, text: expired ? 'expired' : r.action }),
+              h('span', { class: 'sub', text: `added ${ago(r.added)}` })),
+            h('td', { 'data-label': 'Matches' }, KIND_TEXT[r.kind] || r.kind, h('span', { class: 'sub mono', text: r.value })),
+            h('td', { 'data-label': 'Expires', text: isSet(r.expires) ? (expired ? `${ago(r.expires)}` : until(r.expires)) : 'never' }),
+            h('td', { 'data-label': 'Note', class: 'soft', text: r.note || '—' }),
+            h('td', { class: 'act' }, h('button', {
+              type: 'button', class: 'btn', text: 'Remove', 'data-key': `rmr-${r.id}`,
+              'aria-label': `Remove the ${r.action} rule for ${r.kind} ${r.value}`, onclick: () => removeRule(v, r),
+            })));
+        }))))
+      : h('p', { class: 'empty', text: 'No rules: anyone with a valid link and login may join.' }));
+}
+
+function select(name, options, value) {
+  const el = h('select', { name }, options.map(([v, l]) => h('option', { value: v, text: l })));
+  el.value = value;
+  return el;
+}
+
+async function addRule(v, action) {
+  const kind = select('kind', [['device', 'Device key'], ['person', 'Person (personal key)'], ['network', 'Network (IP address or range)']], 'device');
+  const value = h('input', { type: 'text', name: 'value', required: true, autocomplete: 'off', spellcheck: 'false', placeholder: '3f2a-91c0-77de-0b4e-a1c9' });
+  kind.addEventListener('change', () => { value.placeholder = { device: '3f2a-91c0-77de-0b4e-a1c9', person: 'alice', network: '203.0.113.0/24' }[kind.value]; });
+  const dur = select('for', FOR_OPTIONS, '');
+  const note = h('input', { type: 'text', name: 'note', maxlength: '200', autocomplete: 'off', placeholder: 'Optional' });
+  const firstAllow = action === 'allow' && !activeRules(v).some((r) => r.action === 'allow');
+  const ok = await dialog({
+    title: action === 'block' ? `Block on ${v.label.toLowerCase()}` : `Allow only… on ${v.label.toLowerCase()}`,
+    body: [
+      h('label', null, 'What', kind),
+      h('label', null, 'Value', value),
+      h('label', null, 'For how long', dur),
+      h('label', null, 'Note', note),
+      firstAllow ? h('p', { class: 'small err-text', text: 'This is the first allow rule here: from now on only clients that match an allow rule can join, and connected clients that do not are disconnected. Make sure your own devices match.' }) : null,
+      action === 'block' ? h('p', { class: 'small soft', text: 'Matching clients are disconnected now and refused until the rule is removed or expires.' }) : null,
+    ],
+    confirm: action === 'block' ? 'Block' : 'Add allow rule', danger: action === 'block' || firstAllow,
+  });
+  if (!ok) return;
+  const r = await act(() => api('POST', '/api/access/add', { scope: v.scope, kind: kind.value, value: value.value.trim(), action, for: dur.value, note: note.value.trim() }));
+  if (r) toast(`${action === 'block' ? 'Blocked' : 'Allowed'} ${r.rule.kind} ${r.rule.value}${r.disconnected ? `; disconnected ${r.disconnected}` : ''}.`);
+}
+
+async function removeRule(v, r) {
+  const yes = await dialog({
+    title: `Remove this ${r.action} rule?`,
+    body: h('p', { class: 'soft' }, `${KIND_TEXT[r.kind]} `, h('span', { class: 'mono', text: r.value }),
+      r.action === 'block' ? ' will be able to join again (with a valid link and login).' : ' is no longer on the allow list here.'),
+    confirm: 'Remove rule', danger: r.action === 'allow',
+  });
+  if (yes) await act(() => api('POST', '/api/access/remove', { scope: v.scope, id: r.id }), 'Rule removed.');
+}
+
+async function blockClient(sh, c) {
+  const name = who(c.name);
+  const opts = [];
+  const box = (kind, value, label, checked) => {
+    const el = h('input', { type: 'checkbox', checked });
+    opts.push({ el, kind, value });
+    return h('label', { class: 'check' }, el, h('span', null, label, ' ', h('span', { class: 'mono soft', text: value })));
+  };
+  const choices = [
+    c.device_key && box('device', c.device_key, 'This device', true),
+    c.personal && box('person', c.name, `Everyone using ${c.name}'s personal key`, !c.device_key),
+    c.address && box('network', c.address, 'This network address', !c.device_key && !c.personal),
+  ];
+  const where = sh.type === 'profile'
+    ? select('scope', [[sh.source, `Profile ${sh.name} only`], ['profile:*', 'Every service profile']], sh.source)
+    : select('scope', [[sh.source, `Background share ${sh.name}`]], sh.source);
+  const dur = select('for', FOR_OPTIONS, '24h');
+  const note = h('input', { type: 'text', maxlength: '200', autocomplete: 'off', placeholder: 'Optional' });
+  const everywhere = c.personal ? h('input', { type: 'checkbox', checked: true }) : null;
+  const ok = await dialog({
+    title: `Block ${name}?`,
+    body: [
+      h('fieldset', { class: 'choices' }, h('legend', { text: 'Block' }), choices),
+      h('label', null, 'Where', where),
+      h('label', null, 'For how long', dur),
+      h('label', null, 'Note', note),
+      everywhere && h('label', { class: 'check' }, everywhere, h('span', { text: `Also disconnect ${c.name} from every session now` })),
+      h('p', { class: 'small soft', text: 'Matching clients are disconnected at once and cannot resume. Remove the rule under Block and allow lists to let them back in. For a lost device, also remove it under Profiles and devices or rotate the keys.' }),
+    ],
+    confirm: 'Block', danger: true,
+  });
+  if (!ok) return;
+  const picked = opts.filter((o) => o.el.checked);
+  if (!picked.length) { toast('Nothing was selected to block.', true); return; }
+  let done = 0;
+  for (const o of picked) {
+    const r = await act(() => api('POST', '/api/access/add', { scope: where.value, kind: o.kind, value: o.value, action: 'block', for: dur.value, note: note.value.trim() }));
+    if (r) done++;
+  }
+  if (everywhere?.checked) await act(() => api('POST', '/api/people/disconnect', { name: c.name }));
+  if (done) toast(`Blocked ${name} (${done} rule${done === 1 ? '' : 's'}).`);
+}
+
+async function shareAction(sh, action) {
+  const label = { pause: 'New joins paused', resume: 'New joins resumed' }[action];
+  await act(() => api('POST', '/api/shares/action', { source: sh.source, action }), `${label} on ${sourceName(sh.source)}.`);
+}
+
+async function disconnectAll(sh) {
+  const n = sh.status.clients.length;
+  const yes = await dialog({
+    title: `Disconnect everyone from ${sourceName(sh.source)}?`,
+    body: h('ul', null,
+      h('li', { text: `All ${n} connected clients are cut off now and their resume tokens stop working.` }),
+      h('li', { text: 'The shared command keeps running, and anyone with a valid link and login can join again. Pause new joins first to keep them out.' })),
+    confirm: 'Disconnect everyone', danger: true,
+  });
+  if (yes) await act(() => api('POST', '/api/shares/action', { source: sh.source, action: 'disconnect_all' }), `Disconnected everyone from ${sourceName(sh.source)}.`);
+}
+
+async function endSession(sh) {
+  const yes = await dialog({
+    title: `End the session of ${sh.name}?`,
+    body: h('ul', null,
+      h('li', null, 'The shared command (', h('span', { class: 'mono', text: sh.status.command }), ') is stopped and everyone is disconnected.'),
+      h('li', { text: 'The service starts a fresh session within seconds. Links keep working: to keep people out, disable the profile, rotate its keys or block them.' })),
+    confirm: 'End session', danger: true, typeToConfirm: sh.name,
+  });
+  if (yes) await act(() => api('POST', '/api/shares/action', { source: sh.source, action: 'terminate' }), `Ended the session of ${sh.name}; a fresh one starts shortly.`);
 }
 
 // ---------- session, theme ----------

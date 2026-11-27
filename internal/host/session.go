@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dmdhrumilmistry/setu/internal/access"
 	"github.com/dmdhrumilmistry/setu/internal/audit"
 	"github.com/dmdhrumilmistry/setu/internal/history"
 	"github.com/dmdhrumilmistry/setu/internal/proto"
@@ -117,6 +118,12 @@ type Config struct {
 	// dashboard (see internal/history). It is called synchronously, so
 	// it must not block.
 	Events func(history.Event)
+
+	// Access, if not nil, decides from the block and allow lists whether a
+	// client may join or stay (see internal/access). It is asked at login,
+	// on resume and every few seconds for connected clients, so it must be
+	// fast; a client it refuses is disconnected and cannot resume.
+	Access func(access.Subject) (allowed bool, reason string)
 }
 
 const (
@@ -146,6 +153,8 @@ type Session struct {
 	totalFails  int
 	lockedUntil time.Time
 	stopSignal  context.CancelFunc
+	paused      bool               // new joins refused for now (Pause)
+	endRun      context.CancelFunc // ends Run (Terminate)
 
 	inputMu sync.Mutex
 
@@ -265,6 +274,9 @@ func (s *Session) debugf(format string, args ...any) {
 func (s *Session) Run(ctx context.Context) (int, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	s.mu.Lock()
+	s.endRun = cancel
+	s.mu.Unlock()
 
 	exited := make(chan int, 1)
 	readDone := make(chan struct{})
@@ -559,6 +571,7 @@ func (s *Session) maintain(ctx context.Context) {
 		case <-t.C:
 			s.dropIdle()
 			s.dropRevoked()
+			s.Enforce()
 			s.gcTickets()
 		}
 	}
@@ -577,6 +590,9 @@ func (s *Session) admit(resume bool) error {
 	}
 	if !resume && time.Now().Before(s.lockedUntil) {
 		return errors.New("host is temporarily locked after failed logins")
+	}
+	if !resume && s.paused {
+		return errors.New("the host has paused new joins")
 	}
 	pending, ready := 0, 0
 	for _, p := range s.peers {

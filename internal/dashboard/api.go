@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dmdhrumilmistry/setu/internal/access"
 	"github.com/dmdhrumilmistry/setu/internal/control"
 	"github.com/dmdhrumilmistry/setu/internal/daemon"
 	"github.com/dmdhrumilmistry/setu/internal/history"
@@ -28,6 +29,16 @@ type stateView struct {
 	Policy   policyView    `json:"policy"`
 	Profiles []profileView `json:"profiles"`
 	Shares   []shareView   `json:"shares"`
+	Access   []accessView  `json:"access"`
+}
+
+// accessView is one block/allow list: every service profile ("profile:*"),
+// one profile ("profile:<name>") or one background share ("share:<id>").
+type accessView struct {
+	Scope string        `json:"scope"`
+	Label string        `json:"label"`
+	Rules []access.Rule `json:"rules"`
+	Error string        `json:"error,omitempty"`
 }
 
 type serviceView struct {
@@ -103,6 +114,11 @@ type backend interface {
 	removeDevice(name, fp string) error
 	disconnect(ctx context.Context, source string, client int) error
 	stopShare(id string) error
+	// shareOp runs a control operation (disconnect_all, pause, terminate,
+	// enforce) on a share and reports how many clients it disconnected.
+	shareOp(ctx context.Context, source, op string, on bool) (int, error)
+	accessAdd(scope string, r access.Rule) error
+	accessRemove(scope, id string) error
 }
 
 func (s *Server) state(w http.ResponseWriter, r *http.Request, _ *session) {
@@ -273,6 +289,142 @@ func (s *Server) stopShare(w http.ResponseWriter, r *http.Request, _ *session) {
 	writeJSON(w, map[string]any{})
 }
 
+var (
+	scopeRE = regexp.MustCompile(`^(profile:(\*|[a-z0-9_-]{1,32})|share:[a-z0-9]{1,32})$`)
+	durRE   = map[string]time.Duration{"": 0, "1h": time.Hour, "24h": 24 * time.Hour, "7d": 7 * 24 * time.Hour, "30d": 30 * 24 * time.Hour}
+)
+
+// shareAction pauses or resumes new joins, disconnects everyone, or ends a
+// profile's share (the service starts it afresh).
+func (s *Server) shareAction(w http.ResponseWriter, r *http.Request, _ *session) {
+	var req struct {
+		Source string `json:"source"`
+		Action string `json:"action"`
+	}
+	if err := readJSON(r, &req); err != nil || !scopeRE.MatchString(req.Source) || strings.HasSuffix(req.Source, ":*") {
+		writeErr(w, http.StatusBadRequest, errors.New("The request was malformed."))
+		return
+	}
+	op, on, what := "", false, ""
+	switch req.Action {
+	case "pause":
+		op, on, what = control.OpPause, true, "new joins paused"
+	case "resume":
+		op, what = control.OpPause, "new joins resumed"
+	case "disconnect_all":
+		op, what = control.OpDisconnectAll, "everyone disconnected"
+	case "terminate":
+		if !strings.HasPrefix(req.Source, "profile:") {
+			writeErr(w, http.StatusBadRequest, errors.New("Stop a background share instead of ending it."))
+			return
+		}
+		op, what = control.OpTerminate, "session ended and restarted"
+	default:
+		writeErr(w, http.StatusBadRequest, errors.New("Unknown action."))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	n, err := s.be.shareOp(ctx, req.Source, op, on)
+	if err != nil {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	s.record(req.Source, what)
+	writeJSON(w, map[string]any{"count": n})
+}
+
+// accessAdd adds a block or allow rule and applies it at once.
+func (s *Server) accessAdd(w http.ResponseWriter, r *http.Request, _ *session) {
+	var req struct {
+		Scope  string `json:"scope"`
+		Kind   string `json:"kind"`
+		Value  string `json:"value"`
+		Action string `json:"action"`
+		For    string `json:"for"`
+		Note   string `json:"note"`
+	}
+	if err := readJSON(r, &req); err != nil || !scopeRE.MatchString(req.Scope) {
+		writeErr(w, http.StatusBadRequest, errors.New("The request was malformed."))
+		return
+	}
+	d, ok := durRE[req.For]
+	if !ok {
+		writeErr(w, http.StatusBadRequest, errors.New("Unknown duration."))
+		return
+	}
+	rule, err := access.New(req.Kind, req.Value, req.Action, req.Note, d, s.opt.now())
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.be.accessAdd(req.Scope, rule); err != nil {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	s.record(req.Scope, fmt.Sprintf("%s rule added for %s", rule.Action, rule.Describe()))
+	n := s.enforce(r.Context(), req.Scope)
+	writeJSON(w, map[string]any{"rule": rule, "disconnected": n})
+}
+
+func (s *Server) accessRemove(w http.ResponseWriter, r *http.Request, _ *session) {
+	var req struct {
+		Scope string `json:"scope"`
+		ID    string `json:"id"`
+	}
+	if err := readJSON(r, &req); err != nil || !scopeRE.MatchString(req.Scope) || req.ID == "" {
+		writeErr(w, http.StatusBadRequest, errors.New("The request was malformed."))
+		return
+	}
+	if err := s.be.accessRemove(req.Scope, req.ID); err != nil {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	s.record(req.Scope, "access rule "+req.ID+" removed")
+	// Removing one allow rule can leave others that no longer cover someone.
+	s.enforce(r.Context(), req.Scope)
+	writeJSON(w, map[string]any{})
+}
+
+// enforce applies changed rules to the running shares now; they also apply
+// by themselves within seconds, so a failure here is not an error.
+func (s *Server) enforce(ctx context.Context, scope string) int {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	n, err := s.be.shareOp(ctx, scope, control.OpEnforce, false)
+	if err != nil && !errors.Is(err, control.ErrNotRunning) {
+		s.opt.Logf("dashboard: rules saved; the share applies them within seconds (%v)", err)
+	}
+	return n
+}
+
+// disconnectPerson disconnects everyone using a personal key, in every
+// running share.
+func (s *Server) disconnectPerson(w http.ResponseWriter, r *http.Request, _ *session) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := readJSON(r, &req); err != nil || !nameRE.MatchString(req.Name) {
+		writeErr(w, http.StatusBadRequest, errors.New("The request was malformed."))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	n := 0
+	for _, sh := range s.be.snapshot(ctx).Shares {
+		if sh.Status == nil {
+			continue
+		}
+		for _, c := range sh.Status.Clients {
+			if c.Personal && c.Name == req.Name && s.be.disconnect(ctx, sh.Source, c.ID) == nil {
+				n++
+			}
+		}
+	}
+	s.record("person:"+req.Name, fmt.Sprintf("%s disconnected from every session (%d connections)", req.Name, n))
+	writeJSON(w, map[string]any{"count": n})
+}
+
 // localBackend is the real one: the service directory, the background
 // share registry and their control sockets.
 type localBackend struct {
@@ -384,7 +536,102 @@ func (b *localBackend) snapshot(ctx context.Context) stateView {
 		}
 		st.Shares = append(st.Shares, sv)
 	}
+
+	// Block and allow lists: every profile, each profile, each share.
+	if f, err := access.Load(access.Path(b.dir)); err != nil {
+		st.Access = append(st.Access, accessView{Scope: "profile:*", Label: "All service profiles", Rules: []access.Rule{}, Error: err.Error()})
+	} else {
+		st.Access = append(st.Access, accessView{Scope: "profile:*", Label: "All service profiles", Rules: rulesOf(f, access.AllScope)})
+		for _, name := range cfg.Names() {
+			st.Access = append(st.Access, accessView{Scope: "profile:" + name, Label: "Profile " + name, Rules: rulesOf(f, name)})
+		}
+	}
+	for _, info := range bg {
+		v := accessView{Scope: "share:" + info.ID, Label: "Background share " + info.ID + " (" + info.Command + ")", Rules: []access.Rule{}}
+		if f, err := access.Load(access.Path(info.Dir)); err != nil {
+			v.Error = err.Error()
+		} else {
+			v.Rules = rulesOf(f, access.AllScope)
+		}
+		st.Access = append(st.Access, v)
+	}
 	return st
+}
+
+func rulesOf(f *access.File, scope string) []access.Rule {
+	out := []access.Rule{}
+	for _, r := range f.Scopes[scope] {
+		out = append(out, *r)
+	}
+	return out
+}
+
+// scopeFile resolves a list's scope to its rules file and the scope inside it.
+func (b *localBackend) scopeFile(scope string) (path, inFile string, err error) {
+	kind, name, _ := strings.Cut(scope, ":")
+	switch {
+	case kind == "profile" && name == access.AllScope:
+		return access.Path(b.dir), access.AllScope, nil
+	case kind == "profile" && nameRE.MatchString(name):
+		cfg, err := service.Load(service.ConfigPath(b.dir))
+		if err != nil {
+			return "", "", err
+		}
+		if _, err := cfg.Get(name); err != nil {
+			return "", "", err
+		}
+		return access.Path(b.dir), name, nil
+	case kind == "share" && shareIDRE.MatchString(name):
+		info, err := daemon.Find(name)
+		if err != nil {
+			return "", "", err
+		}
+		if info.ID != name {
+			return "", "", errors.New("There is no background share with that id.")
+		}
+		return access.Path(info.Dir), access.AllScope, nil
+	}
+	return "", "", errors.New("There is no such list.")
+}
+
+func (b *localBackend) accessAdd(scope string, r access.Rule) error {
+	path, in, err := b.scopeFile(scope)
+	if err != nil {
+		return err
+	}
+	return access.Update(path, func(f *access.File) error { return f.Add(in, r) })
+}
+
+func (b *localBackend) accessRemove(scope, id string) error {
+	path, in, err := b.scopeFile(scope)
+	if err != nil {
+		return err
+	}
+	return access.Update(path, func(f *access.File) error { return f.Remove(in, id) })
+}
+
+// shareOp sends a control operation to the process hosting a share.
+// "profile:*" with enforce applies to every running profile.
+func (b *localBackend) shareOp(ctx context.Context, source, op string, on bool) (int, error) {
+	kind, name, _ := strings.Cut(source, ":")
+	switch {
+	case kind == "profile" && name == access.AllScope && op == control.OpEnforce:
+		return service.EnforceAccess(b.dir, access.AllScope)
+	case kind == "profile" && nameRE.MatchString(name):
+		resp, err := control.Call(ctx, b.dir, control.Request{Op: op, Profile: name, On: on})
+		return resp.Count, err
+	case kind == "share" && shareIDRE.MatchString(name):
+		info, err := daemon.Find(name)
+		if err != nil {
+			return 0, err
+		}
+		if info.ID != name {
+			return 0, errors.New("There is no background share with that id.")
+		}
+		resp, err := control.Call(ctx, info.Dir, control.Request{Op: op, On: on})
+		return resp.Count, err
+	}
+	return 0, errors.New("There is no such share.")
 }
 
 func (b *localBackend) setEnabled(pol *policy.Policy, name string, on bool) error {
