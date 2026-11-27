@@ -6,7 +6,7 @@ require (
 	github.com/btcsuite/btcd/btcec/v2 v2.5.1
 	github.com/creack/pty v1.1.24
 	github.com/ebitengine/purego v0.11.3
-	github.com/gorilla/websocket v1.5.3
+	github.com/gorilla/websocket v1.5.4-0.20240701034025-d67f41855da4
 	github.com/jezek/xgb v1.3.1
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/pion/logging v0.2.4
