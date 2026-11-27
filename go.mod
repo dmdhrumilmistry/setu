@@ -10,7 +10,7 @@ require (
 	github.com/jezek/xgb v1.3.1
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/pion/logging v0.2.4
-	github.com/pion/webrtc/v4 v4.2.27
+	github.com/pion/webrtc/v4 v4.2.29
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.23.0
 	go.opentelemetry.io/otel/log v1.47.0
