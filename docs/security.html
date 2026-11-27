@@ -156,7 +156,7 @@ an SSH private key.</p>
 </tr>
 <tr>
 <td>Hygiene</td>
-<td><code>SETU_PASSWORD</code>, <code>SETU_TURN_PASSWORD</code> and audit collector headers are removed from the environment before the shared command starts. Link files and session directories are owner-only. Slow clients are disconnected after 8 MiB of backlog.</td>
+<td><code>SETU_PASSWORD</code>, <code>SETU_TURN_PASSWORD</code> and audit collector headers are removed from the environment before the shared command starts. Link files and session directories are owner-only. Terminal output is flow-controlled: the command is slowed to what clients can take rather than buffered, and a client that stops draining for 5 seconds is disconnected.</td>
 </tr>
 <tr>
 <td>Web client</td>

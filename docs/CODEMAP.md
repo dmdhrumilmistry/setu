@@ -176,6 +176,7 @@ Tests:
 - audio_probe_test.go: TestAudioProbe
 - audio_test.go: TestADPCMRoundTrip, TestADPCMPacketsIndependent, TestDecodeAudioRejects, TestAudioHubCapturesOnlyWhileListened, TestAudioHubReportsFailure, TestAudioHubClose, TestAudioGoldenVector
 - audio_windows_test.go: TestParseMixFormat, TestConverterDownmixesAndDecimates
+- bench_test.go: BenchmarkEncodeFrame, BenchmarkDiffTiles
 - hub_test.go: TestHubSendsOnlyChangedTiles, TestHubFlowControl, TestHubSplitsLargeTiles, TestViewerInput, TestClipboardSync
 - keys_test.go: TestKeyTable
 - screen_darwin_test.go: TestMacBindings, TestMacInput
@@ -215,7 +216,7 @@ Imported by: cmd/setu, internal/control, internal/dashboard, internal/service.
 - **pty_windows.go** — conPTY runs a command inside a Windows pseudo console (ConPTY, Windows 10 1809+ / Server 2019+), the same mechanism Windows Terminal uses.<br>coord, startPTY, conPTY.spawn, killOnCloseJob, environmentBlock, commandLine, conPTY.Read, conPTY.Write, conPTY.Resize, conPTY.Wait, conPTY.Kill, conPTY.closeConsole, conPTY.Close, DefaultShell
 - **record.go** — recorder writes the terminal's output as an asciicast v2 recording (https://docs.asciinema.org/manual/asciicast/v2/), playable with `asciinema play` or the asciinema web player.<br>newRecorder, recordingPath, recorder.write, recorder.check, recorder.emit, recorder.output, recorder.resize, recorder.close
 - **resume.go** — Resume tickets let a client whose connection dropped (a phone switching networks, a laptop waking from sleep) reconnect to the same session without typing the password or being approved again, and without being refuse...<br>ticket.live, Session.hasTicket, Session.claimTicket, Session.issueTicket, Session.releaseTicket, Session.revokeTicket, Session.liveTicketsLocked, Session.gcTickets, Session.gcTicketsLocked, Session.dropIdle, Session.idlePeers
-- **session.go** — Package host shares a local PTY with remote peers over WebRTC.<br>type Invite, type Key, type Config, type Session, New, Session.logf, Session.debugf, Session.Run, Session.Idle, Session.endAudit, Session.passwordPrompt, Session.attachLocal, Session.pumpOutput, Session.writeInput, Session.resize, Session.recordingFile, Session.commandLine, Session.kind, Session.maintain, Session.admit, Session.authFailed, Session.stopAccepting, Session.approve, Session.notify, Session.what, orNone, Session.broadcastExit, Session.closeAll, stdinRouter.run, stdinRouter.setForward, stdinRouter.ask
+- **session.go** — Package host shares a local PTY with remote peers over WebRTC.<br>type Invite, type Key, type Config, type Session, New, Session.logf, Session.debugf, Session.Run, Session.Idle, Session.endAudit, Session.passwordPrompt, Session.attachLocal, Session.pumpOutput, Session.appendRing, Session.waitDrain, Session.writeInput, Session.resize, Session.recordingFile, Session.commandLine, Session.kind, Session.maintain, Session.admit, Session.authFailed, Session.stopAccepting, Session.approve, Session.notify, Session.what, orNone, Session.broadcastExit, Session.closeAll, stdinRouter.run, stdinRouter.setForward, stdinRouter.ask
 - **signal_manual.go** — serveManual performs one copy/paste offer/answer exchange.<br>Session.serveManual
 - **signal_nostr.go** — serveNostr listens for encrypted join requests on public nostr relays.<br>Session.serveNostr, nostrSignaler.handle, nostrSignaler.onHello, nostrSignaler.onAnswer, nostrSignaler.reply
 - **status.go** — Status is a point-in-time view of a share for the local dashboard.<br>type Status, type ClientStatus, Session.Status, peer.status, ErrNoClient, Session.Disconnect, Session.event, Session.clientEvent, peer.subject, Session.allowed, Session.refuseBlocked, Session.Enforce, Session.DisconnectAll, Session.Pause, Session.Terminate
@@ -227,6 +228,7 @@ Imported by: cmd/setu, internal/control, internal/dashboard, internal/service.
 Tests:
 - record_test.go: TestRecorder, TestRecorderStopsOnWriteError, TestRecordingPath
 - resume_test.go: TestResumeGraceBackground, TestClaimTicket, TestDropIdleSkipsBackground
+- ring_test.go: TestAppendRing, BenchmarkAppendRing
 - upload_test.go: TestSanitizeFileName, TestCreateUniqueNeverOverwrites
 
 ## internal/link
