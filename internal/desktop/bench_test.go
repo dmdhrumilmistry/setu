@@ -1,8 +1,12 @@
 package desktop
 
 import (
+	"bytes"
+	"encoding/binary"
 	"image"
 	"image/color"
+	"image/draw"
+	"image/png"
 	"math/rand/v2"
 	"testing"
 )
@@ -33,22 +37,26 @@ func benchFrame(kind string) *image.RGBA {
 	return img
 }
 
-// BenchmarkEncodeFrame measures encoding a whole 1080p frame, the cost of a
-// full refresh for one viewer: the hot path that a faster encoder would
-// speed up.
+// BenchmarkEncodeFrame measures encoding a whole 1080p frame through
+// encodeAll (the parallel path the hub uses), the cost of a full refresh.
 func BenchmarkEncodeFrame(b *testing.B) {
 	for _, kind := range []string{"text", "photo"} {
 		img := benchFrame(kind)
 		b.Run(kind, func(b *testing.B) {
 			b.SetBytes(int64(len(img.Pix)))
 			b.ReportAllocs()
-			size := 0
+			size, msgs := 0, 0
+			job := []frameJob{{rects: []image.Rectangle{img.Rect}, q: 70}}
 			for b.Loop() {
-				size = 0
-				for _, m := range encodeRect(img, img.Rect, 70) {
-					size += len(m)
+				size, msgs = 0, 0
+				for _, ms := range encodeAll(img, job) {
+					for _, m := range ms {
+						size += len(m)
+						msgs++
+					}
 				}
 			}
+			b.ReportMetric(float64(msgs), "msgs/frame")
 			b.ReportMetric(float64(size), "bytes/frame")
 		})
 	}
@@ -62,5 +70,56 @@ func BenchmarkDiffTiles(b *testing.B) {
 	b.SetBytes(int64(len(cur.Pix)))
 	for b.Loop() {
 		diffTiles(prev, cur, cols, rows)
+	}
+}
+
+// TestEncodeAllPieces: a large area is split into pieces that each fit in
+// one message, cover it exactly, and decode back to the same pixels (the
+// text frame takes the lossless PNG path).
+func TestEncodeAllPieces(t *testing.T) {
+	img := benchFrame("text")
+	r := image.Rect(64, 0, 1920, 1080) // not starting at the origin
+	got := image.NewRGBA(img.Rect)
+	covered := make([]int, img.Rect.Dx()*img.Rect.Dy())
+	msgs := encodeAll(img, []frameJob{{rects: []image.Rectangle{r}, q: 70}})[encKey{r, 70}]
+	if len(msgs) < 2 {
+		t.Fatalf("a %v area was not split (%d messages)", r.Size(), len(msgs))
+	}
+	for _, m := range msgs {
+		if len(m) > MaxMessage {
+			t.Fatalf("message of %d bytes exceeds %d", len(m), MaxMessage)
+		}
+		if m[0] != MsgTile || m[1] != EncPNG {
+			t.Fatalf("message type %d, encoding %d", m[0], m[1])
+		}
+		x, y := int(binary.LittleEndian.Uint16(m[2:])), int(binary.LittleEndian.Uint16(m[4:]))
+		w, h := int(binary.LittleEndian.Uint16(m[6:])), int(binary.LittleEndian.Uint16(m[8:]))
+		dec, err := png.Decode(bytes.NewReader(m[tileHeader:]))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if dec.Bounds().Dx() != w || dec.Bounds().Dy() != h {
+			t.Fatalf("piece header says %dx%d, image is %v", w, h, dec.Bounds().Size())
+		}
+		draw.Draw(got, image.Rect(x, y, x+w, y+h), dec, dec.Bounds().Min, draw.Src)
+		for py := y; py < y+h; py++ {
+			for px := x; px < x+w; px++ {
+				covered[py*img.Rect.Dx()+px]++
+			}
+		}
+	}
+	for py := range img.Rect.Dy() {
+		for px := range img.Rect.Dx() {
+			want := 0
+			if (image.Point{px, py}).In(r) {
+				want = 1
+				if got.RGBAAt(px, py) != img.RGBAAt(px, py) {
+					t.Fatalf("pixel %d,%d differs after decoding", px, py)
+				}
+			}
+			if covered[py*img.Rect.Dx()+px] != want {
+				t.Fatalf("pixel %d,%d covered %d times, want %d", px, py, covered[py*img.Rect.Dx()+px], want)
+			}
+		}
 	}
 }

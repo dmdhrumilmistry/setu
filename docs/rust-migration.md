@@ -1,8 +1,9 @@
 # Plan: migrating setu from Go to Rust
 
-Status: **approved; Phase 0 done, go/no-go decision pending** (see
-[Phase 0 results](#phase-0-results)). Only throwaway spikes exist in Rust
-(`rust/spikes`).
+Status: **stopped after Phase 0; setu stays in Go.** Phase 0 did not meet
+the approved gate on terminal throughput, so the owner chose option 1
+(see [Decision](#decision)). The plan and the spikes (`rust/spikes`) stay
+on file in case desktop performance or CPU use becomes the bottleneck.
 
 ## 1. Why, and what to expect
 
@@ -113,6 +114,25 @@ options:
    called from Go. This needs cgo, which ends today's `CGO_ENABLED=0`
    builds, so it carries most of the build cost of option 2 for one
    component.
+
+## Decision
+
+**Option 1: keep Go.** Done as part of the decision:
+
+* The terminal fix (replay buffer and bounded backpressure): 12.3 to
+  32.7 MB/s end to end.
+* The desktop encoder no longer encodes a large area whole and then again
+  in halves: large areas are cut into tile-aligned pieces before encoding,
+  which also spreads them over the encoding workers. A full 1080p refresh
+  went from about 71 to 13 ms (text) and 148 to 22 ms (photo), for 2–3%
+  more bytes in per-piece image headers (`BenchmarkEncodeFrame`). That puts
+  Go's whole-frame JPEG time in the same range as the pure-Rust encoder
+  measured above.
+
+Reasons to reopen the migration later: CPU use on hosts becomes a
+complaint (the Rust transports used 4–5× less), or desktop sharing needs
+libjpeg-turbo-class encoding speed at high resolutions and frame rates.
+Phase 0's measurements and spikes are the starting point.
 
 ## 2. Compatibility contract (must not break)
 
