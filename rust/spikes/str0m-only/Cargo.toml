@@ -1,0 +1,9 @@
+[package]
+name = "str0m-peer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+serde_json = "1"
+str0m = { version = "0.26", default-features = false, features = ["rust-crypto"] }

@@ -1,6 +1,8 @@
 # Plan: migrating setu from Go to Rust
 
-Status: **proposal, awaiting approval**. No Rust code exists yet.
+Status: **approved; Phase 0 done, go/no-go decision pending** (see
+[Phase 0 results](#phase-0-results)). Only throwaway spikes exist in Rust
+(`rust/spikes`).
 
 ## 1. Why, and what to expect
 
@@ -34,6 +36,83 @@ Therefore every phase below has a **performance gate** measured against Go
 *with* the buffer and backpressure fixes, not against today's slower code.
 If Phase 0 shows Rust cannot beat that baseline on the terminal and desktop
 paths, the recommendation is to stop and keep the Go fixes.
+
+## Phase 0 results
+
+Measured November 2026 on a 4-vCPU Linux container; spike code and the
+commands to rerun it are in `rust/spikes`. Throughput numbers vary run to
+run by up to ±30%, so ranges are given.
+
+### Go fixes (committed on this branch, not yet released)
+
+| | Before | After |
+| --- | --- | --- |
+| Terminal throughput, end to end (`BenchmarkTerminalThroughput`) | 12.3 MB/s | 32.7 MB/s |
+| Replay buffer per 32 KiB chunk | realloc + 256 KiB copy | 0 allocations |
+| Fast output | client dropped as "too slow" | command slowed to the client's pace (bounded backpressure) |
+
+### WebRTC (a 256 MiB transfer on setu's `setu` channel settings)
+
+| Stack | Host sends (setu's main direction) | Receives from pion | Sender CPU for 256 MiB | Interop with pion, fingerprints | Static builds |
+| --- | --- | --- | --- | --- | --- |
+| pion (today) | 41–68 MiB/s | 41–68 MiB/s | 6.1–7.9 s | (baseline) | yes, no C |
+| webrtc-rs 0.21 | 22–44 MiB/s | 49 MiB/s | 1.5–2.2 s | yes, both directions | musl amd64/arm64 and Windows with `cargo zigbuild` (C via `ring`) |
+| str0m 0.26 | 18–60 MiB/s | 79 MiB/s | 1.3–1.7 s | yes, both directions | same, with `cargo zigbuild` (C via aws-lc, pulled in by `rcgen` even with its `rust-crypto` backend) |
+
+* Both Rust stacks interoperate with pion in setu's host and client roles,
+  and both expose the SDP, so the DTLS-fingerprint binding (auth proofs,
+  device signatures, verification codes) carries over unchanged.
+* **CPU:** both use 4–5× less CPU than pion to move the same data.
+* **Throughput:** with default settings both are *slower* than pion as the
+  sender, the direction a host uses most. SCTP tuning was not attempted.
+* Neither is C-free today; static musl and Windows binaries build with Zig
+  as the C cross compiler. macOS was not built here (it would build on
+  macOS runners).
+* Not yet verified for either: TURN, browser interop (Chrome, Firefox,
+  Safari), and the selected candidate pair for audit and network rules
+  (webrtc-rs has `get_stats`).
+
+### Desktop encoding (one full 1080p frame, same pixels and settings)
+
+| Path | Go (stdlib) | Rust | |
+| --- | --- | --- | --- |
+| JPEG (photos, video, gradients), q70 4:2:0 | 47.5 ms, 251 KB | `jpeg-encoder` (pure Rust) 15.6 ms, 255 KB; `turbojpeg` (libjpeg-turbo, C) 4.6 ms, 250 KB | **Rust 3–10× faster** |
+| PNG (text, UI: ≤256 colours) | 26.7 ms, 133 KB | `png` 17 ms but 307 KB; 112 ms at 174 KB | **Go better** (size) |
+
+Also found in Go: `encodeRect` encodes an area, and if the result exceeds a
+message it splits and encodes again, so the benchmark's full-frame cost
+(62 ms text, 147 ms photo) is 2–3× the raw encoder cost. That is fixable in
+Go.
+
+### Against the gate
+
+The approved gate was: *if Rust does not beat Go with the fixes, stop.*
+
+| Criterion | Result |
+| --- | --- |
+| Terminal throughput | **Not met.** Go with the fixes reaches 32.7 MB/s end to end, near pion's transport ceiling; both Rust stacks send slower than pion with defaults. |
+| CPU per byte on the transport | **Met.** 4–5× less. |
+| Desktop JPEG encoding | **Met.** 3× (pure Rust) to 10× (libjpeg-turbo). |
+| Desktop PNG encoding | **Not met.** |
+| Static, dependency-free builds | **Met with a toolchain change** (Zig as C cross compiler; not C-free). |
+
+The result is mixed, so the decision goes back to the project owner. The
+options:
+
+1. **Stop the full migration; keep Go.** Ship the terminal fix (done), fix
+   `encodeRect`'s double encoding in Go, and revisit if desktop
+   performance becomes the bottleneck.
+2. **Continue the full migration** accepting lower peak throughput (still
+   well above what a terminal needs) for lower CPU and faster desktop JPEG.
+   Recommended stack: **webrtc-rs** (pion's model and API shape, which makes
+   the port closer to a translation, and a TURN client inherited from
+   pion), with TURN, browser interop and SCTP tuning as the first Phase 1
+   tasks. str0m stays the fallback if its CPU and receive advantages
+   matter more than the porting effort of a sans-IO design.
+3. **A narrower Rust component**: only the desktop encoder in Rust,
+   called from Go. This needs cgo, which ends today's `CGO_ENABLED=0`
+   builds, so it carries most of the build cost of option 2 for one
+   component.
 
 ## 2. Compatibility contract (must not break)
 
@@ -98,7 +177,7 @@ this plan most likely to be wrong.
 
 | Phase | Scope | Exit criteria | Effort |
 | --- | --- | --- | --- |
-| 0. Baseline and spikes | Merge the Go buffer fix and real backpressure (users benefit now; honest baseline). Add throughput and desktop-encoding benchmarks to CI. Spike WebRTC crate choice (data channel ↔ pion interop, TURN, fingerprints, static builds for 6 targets) and image encoder. | Benchmarks in CI; written decision on the WebRTC crate with interop and throughput numbers; **go/no-go on the whole migration**. | 2–3 weeks |
+| 0. Baseline and spikes (**done**) | Merge the Go buffer fix and real backpressure (users benefit now; honest baseline). Add throughput and desktop-encoding benchmarks to CI. Spike WebRTC crate choice (data channel ↔ pion interop, TURN, fingerprints, static builds for 6 targets) and image encoder. | Benchmarks in CI; written decision on the WebRTC crate with interop and throughput numbers; **go/no-go on the whole migration**. See [Phase 0 results](#phase-0-results). | 2–3 weeks |
 | 1. Core | `secure`, `link`, `proto`, `nostr` crates; shared test vectors with Go. | All vectors pass both ways; fuzzers for link/proto parsing. | 2–3 weeks |
 | 2. Client | `setu join` in Rust (signaling, WebRTC, auth, device keys, resume, raw terminal). | Rust client passes the conformance suite against the Go host on all 3 OSes. | 2–3 weeks |
 | 3. Terminal host | `host` crate: PTY, replay buffer, admission, auth layers, approval, resume, idle timeout, uploads, recording, notifications; `setu share` incl. background shares. | Go client and web client pass every e2e test against the Rust host; terminal throughput gate passed. | 5–7 weeks |
