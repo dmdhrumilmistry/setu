@@ -355,24 +355,63 @@ func encodeAll(img *image.RGBA, jobs []frameJob) map[encKey][][]byte {
 			}
 		}
 	}
-	workers := max(1, min(runtime.NumCPU()/2, 8, len(todo)))
-	results := make([][][]byte, len(todo))
+	// Large areas are cut into pieces before encoding: encoding a big
+	// area whole, finding it too large for one message and then encoding
+	// its halves (encodeRect's fallback) did the work several times over,
+	// on one worker. Pieces encode in parallel and nearly always fit.
+	type piece struct {
+		key int // index into todo
+		r   image.Rectangle
+	}
+	var pieces []piece
+	for i, k := range todo {
+		for _, r := range splitRect(k.r) {
+			pieces = append(pieces, piece{i, r})
+		}
+	}
+	workers := max(1, min(runtime.NumCPU()/2, 8, len(pieces)))
+	results := make([][][]byte, len(pieces))
 	var wg sync.WaitGroup
 	next := make(chan int)
 	for range workers {
 		wg.Go(func() {
 			for i := range next {
-				results[i] = encodeRect(img, todo[i].r, todo[i].q)
+				p := pieces[i]
+				results[i] = encodeRect(img, p.r, todo[p.key].q)
 			}
 		})
 	}
-	for i := range todo {
+	for i := range pieces {
 		next <- i
 	}
 	close(next)
 	wg.Wait()
-	for i, k := range todo {
-		out[k] = results[i]
+	for i, p := range pieces {
+		k := todo[p.key]
+		out[k] = append(out[k], results[i]...)
+	}
+	return out
+}
+
+// Pieces of a large area are at most pieceW x pieceH pixels (tile aligned):
+// small enough that a typical encoding fits in one message, large enough
+// that per-image headers stay a small part of the frame.
+const (
+	pieceW = 8 * TileSize
+	pieceH = 4 * TileSize
+)
+
+// splitRect cuts r into tile-aligned pieces of at most pieceW x pieceH,
+// row by row.
+func splitRect(r image.Rectangle) []image.Rectangle {
+	if r.Dx() <= pieceW && r.Dy() <= pieceH {
+		return []image.Rectangle{r}
+	}
+	var out []image.Rectangle
+	for y := r.Min.Y; y < r.Max.Y; y += pieceH {
+		for x := r.Min.X; x < r.Max.X; x += pieceW {
+			out = append(out, image.Rect(x, y, min(x+pieceW, r.Max.X), min(y+pieceH, r.Max.Y)))
+		}
 	}
 	return out
 }

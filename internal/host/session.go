@@ -144,8 +144,9 @@ type Session struct {
 	mu          sync.Mutex
 	peers       map[int]*peer
 	nextID      int
-	ring        []byte
-	outTotal    int64 // output bytes produced so far; ring ends here
+	ring        []byte // the newest replayBytes of output: a view of ringBuf
+	ringBuf     []byte // backing store for ring (see appendRing)
+	outTotal    int64  // output bytes produced so far; ring ends here
 	tickets     map[string]*ticket
 	cols, rows  int
 	accepting   bool
@@ -487,12 +488,9 @@ func (s *Session) pumpOutput(done chan<- struct{}) {
 		if n > 0 {
 			chunk := append([]byte(nil), buf[:n]...)
 			s.mu.Lock()
-			s.ring = append(s.ring, chunk...)
+			s.appendRing(chunk)
 			s.outTotal += int64(n)
 			s.rec.output(chunk)
-			if len(s.ring) > replayBytes {
-				s.ring = append([]byte(nil), s.ring[len(s.ring)-replayBytes:]...)
-			}
 			mirror := s.mirroring
 			for _, p := range s.peers {
 				if p.isReady() {
@@ -503,10 +501,75 @@ func (s *Session) pumpOutput(done chan<- struct{}) {
 			if mirror {
 				os.Stdout.Write(chunk)
 			}
+			// Read no more until every client has room: the command then
+			// blocks on its terminal, as it would over a slow ssh link,
+			// instead of the host queueing output without bound.
+			s.waitDrain()
 		}
 		if err != nil {
 			return
 		}
+	}
+}
+
+// appendRing adds output to the replay window without allocating. The
+// backing array holds two windows; only when it fills is the newest window
+// moved to its front, so each byte is copied about once instead of the whole
+// window being reallocated for every chunk (which was the largest CPU cost
+// under heavy output). s.ring stays a view of the newest replayBytes.
+// Slices of it handed to the data channel are safe: pion copies what it
+// sends. Callers hold s.mu.
+func (s *Session) appendRing(b []byte) {
+	if s.ringBuf == nil {
+		s.ringBuf = make([]byte, 0, 2*replayBytes)
+	}
+	if len(b) > replayBytes {
+		b = b[len(b)-replayBytes:]
+	}
+	if len(s.ringBuf)+len(b) > cap(s.ringBuf) {
+		keep := min(len(s.ringBuf), replayBytes-len(b))
+		copy(s.ringBuf, s.ringBuf[len(s.ringBuf)-keep:])
+		s.ringBuf = s.ringBuf[:keep]
+	}
+	s.ringBuf = append(s.ringBuf, b...)
+	s.ring = s.ringBuf[max(0, len(s.ringBuf)-replayBytes):]
+}
+
+// waitDrain blocks while a client's send buffer is above highWater, so the
+// command produces output no faster than clients take it. The wait is
+// bounded: a client still above highWater after stallLimit is disconnected
+// as too slow, so one stuck or deliberately slow client (a view-only one,
+// say) cannot hold the command for longer than that.
+func (s *Session) waitDrain() {
+	var deadline time.Time
+	for {
+		var slow []*peer
+		for _, p := range s.readyPeers(false) {
+			if p.dc.BufferedAmount() > highWater {
+				slow = append(slow, p)
+			}
+		}
+		if len(slow) == 0 {
+			return
+		}
+		if deadline.IsZero() {
+			deadline = time.Now().Add(stallLimit)
+		}
+		left := time.Until(deadline)
+		if left <= 0 {
+			for _, p := range slow {
+				go p.close("client too slow")
+			}
+			return
+		}
+		// The low-water signal wakes us as soon as the first slow client
+		// drains; the short poll covers clients that close meanwhile.
+		t := time.NewTimer(min(left, 100*time.Millisecond))
+		select {
+		case <-slow[0].drained:
+		case <-t.C:
+		}
+		t.Stop()
 	}
 }
 

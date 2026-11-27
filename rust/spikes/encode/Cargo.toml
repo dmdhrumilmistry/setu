@@ -1,0 +1,10 @@
+[package]
+name = "encode-spike"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+jpeg-encoder = { version = "0.6", features = ["simd"] }
+png = "0.18"
+turbojpeg = "1"

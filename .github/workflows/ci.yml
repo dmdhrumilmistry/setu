@@ -26,6 +26,26 @@ jobs:
       - run: go vet ./...
       - run: go test -race -count=1 ./...
 
+  # Performance numbers for every change (shared runners are noisy, so they
+  # are recorded, not gated): terminal throughput end to end, desktop frame
+  # encoding, and the replay buffer. The baseline for the Rust migration
+  # (docs/rust-migration.md) comes from these.
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: benchmarks
+        run: |
+          {
+            go test -run '^$' -bench TerminalThroughput -benchtime 3x ./internal/e2e/
+            go test -run '^$' -bench 'EncodeFrame|DiffTiles' -benchtime 10x ./internal/desktop/
+            go test -run '^$' -bench AppendRing -benchmem ./internal/host/
+          } | tee bench.txt
+          { echo '### Benchmarks'; echo '```'; grep -E '^(Benchmark|cpu:)' bench.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
   # Checks that do not need the tests, in parallel with them.
   go-checks:
     runs-on: ubuntu-latest

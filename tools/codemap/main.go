@@ -185,8 +185,13 @@ func goPackages(root string) ([]*pkg, error) {
 		rel, _ := filepath.Rel(root, path)
 		rel = filepath.ToSlash(rel)
 		if d.IsDir() {
-			// docsgen is its own module; vendor and dot dirs are not ours.
-			if rel != "." && (strings.HasPrefix(d.Name(), ".") || rel == "tools/docsgen" || rel == "web" || d.Name() == "testdata" || d.Name() == "node_modules") {
+			// Other Go modules (tools/docsgen, the Rust migration's spike
+			// harnesses), the Rust tree, dot dirs and test data are not
+			// part of setu's own packages.
+			if rel != "." && (strings.HasPrefix(d.Name(), ".") || rel == "web" || rel == "rust" || d.Name() == "testdata" || d.Name() == "node_modules") {
+				return filepath.SkipDir
+			}
+			if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil && rel != "." {
 				return filepath.SkipDir
 			}
 			return nil

@@ -35,6 +35,13 @@ const (
 	// A client that cannot keep up gets disconnected instead of making the
 	// host buffer without bound.
 	maxBuffered = 8 << 20
+	// Terminal output backpressure (Session.waitDrain): the host stops
+	// reading the command's output while a client has more than highWater
+	// queued, resumes once it falls to lowWater, and gives up on a client
+	// that stays above highWater for stallLimit.
+	highWater  = 1 << 20
+	lowWater   = 256 << 10
+	stallLimit = 5 * time.Second
 )
 
 type peer struct {
@@ -93,10 +100,11 @@ type peer struct {
 	// mustResume: admitted only because it named a resume ticket, so it
 	// must present that ticket's token instead of a normal login.
 	mustResume bool
-	ticket     *ticket      // resume ticket, once ready (guarded by s.mu)
-	lastRx     atomic.Int64 // unix nanos of the last message received
-	pinger     atomic.Bool  // the client sends liveness pings
-	hidden     atomic.Bool  // the client's page is in the background
+	ticket     *ticket       // resume ticket, once ready (guarded by s.mu)
+	lastRx     atomic.Int64  // unix nanos of the last message received
+	pinger     atomic.Bool   // the client sends liveness pings
+	drained    chan struct{} // signalled when dc's queue falls to lowWater
+	hidden     atomic.Bool   // the client's page is in the background
 }
 
 // newPeer registers a peer after checking admission. resumeID is the
@@ -131,7 +139,14 @@ func (s *Session) newPeer(role, label, keyName, resumeID string) (*peer, error) 
 	}
 	s.mu.Lock()
 	s.nextID++
-	p := &peer{s: s, id: s.nextID, role: role, label: label, keyName: keyName, pc: pc, dc: dc, screen: screen, audio: audio, nonce: secure.RandomBytes(32), mustResume: resume}
+	p := &peer{s: s, id: s.nextID, role: role, label: label, keyName: keyName, pc: pc, dc: dc, screen: screen, audio: audio, nonce: secure.RandomBytes(32), mustResume: resume, drained: make(chan struct{}, 1)}
+	dc.SetBufferedAmountLowThreshold(lowWater)
+	dc.OnBufferedAmountLow(func() {
+		select {
+		case p.drained <- struct{}{}:
+		default:
+		}
+	})
 	s.peers[p.id] = p
 	s.mu.Unlock()
 
