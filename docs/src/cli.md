@@ -9,6 +9,7 @@ setu link <id>                                show a background share's links (+
 setu logs <id>                                show a background share's log
 setu stop <id> | --all                        stop background shares
 setu service ...                              always-on shares with persistent links
+setu dashboard                                local web page: live sessions, analytics, profiles and devices
 setu policy                                   show the managed (MDM) policy in force
 setu device [show | reset]                    this device's key fingerprint (for auto-approval)
 setu version                                  version, commit and platform
@@ -211,6 +212,21 @@ Ids can be abbreviated to any unique prefix.
 | `install` | `--no-start` | Register autostart without starting the service now. |
 | `run` | `--dir PATH` | Service state directory (default: the per-user one). |
 | `run` | `--log-file PATH` | Append the supervisor log to PATH instead of stderr. |
+
+## setu dashboard
+
+```sh
+setu dashboard                     # open the local dashboard in your browser
+setu dashboard --no-open           # only print its one-time link
+```
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--addr ADDR` | `127.0.0.1:0` | Loopback address and port to listen on (port `0` picks a free one). Other addresses are refused. |
+| `--no-open` | off | Print the link instead of opening the default browser. |
+
+It serves until Ctrl-C. See [Dashboard](dashboard.md) for what it shows, what
+it can change and how it is protected.
 
 ## setu device
 

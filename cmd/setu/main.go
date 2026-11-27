@@ -47,6 +47,7 @@ Usage:
   setu policy                                   show the managed (MDM) policy in force on this device
   setu device [show | reset]                    this device's key fingerprint (for auto-approval)
   setu doctor                                   check this computer's setu setup and say how to fix problems
+  setu dashboard                                local web page: live sessions, analytics, profiles and devices
   setu upgrade [--check] | auto on|off|status   update setu (it also does so by itself, about daily)
   setu version
 
@@ -100,6 +101,8 @@ func main() {
 		code, err = runUpgrade(os.Args[2:])
 	case "doctor":
 		code, err = runDoctor(os.Args[2:])
+	case "dashboard", "dash":
+		code, err = runDashboard(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println(versionString())
 	case "help", "-h", "--help":
@@ -546,12 +549,21 @@ func serve(sub string, args []string) (int, error) {
 		}
 	}
 
+	var serveControl func(context.Context, *host.Session)
+	if *sessionDir != "" {
+		var stopHooks func()
+		serveControl, stopHooks = dashboardHooks(&cfg, *sessionDir)
+		defer stopHooks()
+	}
 	s, err := host.New(cfg)
 	if err != nil {
 		return 1, err
 	}
 	ctx, cancel := signalContext()
 	defer cancel()
+	if serveControl != nil {
+		serveControl(ctx, s)
+	}
 	code, err := s.Run(ctx)
 	fmt.Fprintf(os.Stderr, "\r\n[setu] session ended (exit code %d)\n", code)
 	return code, err

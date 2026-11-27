@@ -53,6 +53,7 @@
         <li><a href="desktop.html">Remote desktop</a></li>
         <li><a href="claude-code.html">Claude Code from your phone</a></li>
         <li><a href="service.html">Always-on service</a></li>
+        <li><a href="dashboard.html">Dashboard</a></li>
         <li><a href="audit.html">Audit logging</a></li>
       </ul>
     </div>
@@ -172,6 +173,10 @@ an SSH private key.</p>
 <tr>
 <td>Audit log</td>
 <td>Connections, admission decisions and submitted commands go to your collector over TLS, off the machine within about a second. See <a href="audit.html">Audit logging</a>.</td>
+</tr>
+<tr>
+<td>Dashboard</td>
+<td><code>setu dashboard</code> listens on a loopback address only, and only while it runs. Its link carries a one-time 256-bit token in the fragment, traded for an <code>HttpOnly</code>, <code>SameSite=Strict</code> session cookie; every change needs a CSRF token and a same-origin JSON request, requests naming any other host are refused (DNS rebinding), and the page has a strict CSP and cannot be framed. It never shows links, keys or verifiers. The service and background shares answer it over a control socket in their owner-only directories. See <a href="dashboard.html">Dashboard</a>.</td>
 </tr>
 <tr>
 <td>Managed policy</td>

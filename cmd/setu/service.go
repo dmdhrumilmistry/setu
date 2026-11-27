@@ -430,7 +430,7 @@ const defaultDeviceIdle = 90 * 24 * time.Hour
 
 // defaultPairFor is how long a pairing code works by default: long enough
 // to pick up the other device, short enough not to linger.
-const defaultPairFor = 15 * time.Minute
+const defaultPairFor = service.DefaultPairFor
 
 func checkPairFor(d time.Duration) error {
 	if d < time.Minute || d > 24*time.Hour {
@@ -464,16 +464,7 @@ func authMode(auth string, noPassword, passwordFlags bool, pol *policy.Policy) (
 
 // newPairing replaces the profile's pairing code with a new one.
 func newPairing(dir, name string, d time.Duration) (code string, expires time.Time, err error) {
-	code, v, err := secure.NewPairingVerifier()
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	expires = time.Now().Add(d)
-	err = service.UpdateDevices(dir, func(ds *service.DeviceState) error {
-		ds.Profile(name).Pairing = &service.Pairing{Verifier: v, ExpiresAt: expires.UTC()}
-		return nil
-	})
-	return code, expires, err
+	return service.NewPairing(dir, name, d)
 }
 
 // printPairing shows a new pairing code, and a pairing link that carries it

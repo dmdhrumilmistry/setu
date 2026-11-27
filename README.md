@@ -102,6 +102,7 @@ setu service pair claude              # a one-time code / QR for one more device
 setu service device list claude       # which devices can get in
 setu service device remove claude <fingerprint>   # cut one off immediately
 setu doctor                           # check everything; each problem comes with its fix
+setu dashboard                        # local web page: who is connected, analytics, devices
 ```
 
 Your computer shows a notification every time someone connects, so access you

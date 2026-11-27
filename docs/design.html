@@ -53,6 +53,7 @@
         <li><a href="desktop.html">Remote desktop</a></li>
         <li><a href="claude-code.html">Claude Code from your phone</a></li>
         <li><a href="service.html">Always-on service</a></li>
+        <li><a href="dashboard.html">Dashboard</a></li>
         <li><a href="audit.html">Audit logging</a></li>
       </ul>
     </div>
@@ -178,6 +179,18 @@ HKDF, PBKDF2, AES-GCM and HMAC in its standard library. The Rust options
 <tr>
 <td><code>internal/daemon</code></td>
 <td>Detached <code>setu share -d</code> processes and their registry</td>
+</tr>
+<tr>
+<td><code>internal/control</code></td>
+<td>Local control socket between hosting processes (service, background shares) and the dashboard: one JSON request per connection, status and disconnect only</td>
+</tr>
+<tr>
+<td><code>internal/history</code></td>
+<td>Append-only connection history (<code>history.jsonl</code>) behind the dashboard's analytics</td>
+</tr>
+<tr>
+<td><code>internal/dashboard</code></td>
+<td><code>setu dashboard</code>: loopback HTTP server, one-time-token login, JSON API and the embedded page</td>
 </tr>
 <tr>
 <td><code>internal/desktop</code></td>
@@ -399,6 +412,37 @@ and starts the missing ones.</li>
 command exits, the supervisor restarts it with exponential backoff (1 s up to
 1 min, reset after a minute of uptime). A context deadline at <code>expires_at</code>
 stops serving the moment the keys expire.</p>
+<h2 id="dashboard">Dashboard</h2>
+<p><code>setu dashboard</code> is a separate, short-lived process, not part of the
+supervisor: an always-on HTTP listener would be an always-open door to a
+remote shell, while a dashboard that runs only when asked costs nothing the
+rest of the time. It needs three things from the processes that host shares:</p>
+<ol>
+<li><strong>Live state.</strong> The supervisor and every background share listen on a Unix
+domain socket (<code>internal/control</code>) in their own 0700 state directory:
+<code>control.sock</code>, or, when that path exceeds the socket path limit, a socket
+in a verified private per-user directory under the temporary directory,
+named in <code>control.path</code>. Each connection carries one JSON request
+(<code>status</code> or <code>disconnect</code>, unknown fields refused, 4 KiB limit, 5 s
+deadline) and one response. Linux and macOS also check the peer's uid.
+<code>status</code> returns <code>host.Session.Status()</code>, a snapshot with no secrets;
+<code>disconnect</code> revokes the client's resume ticket before closing it.</li>
+<li><strong>History.</strong> <code>host.Config.Events</code> receives connection events (connect,
+reconnect, disconnect with its duration, failed logins, lockouts, refused
+joins, pairings). The supervisor and background shares queue them to a
+goroutine that appends one JSON line per event to <code>history.jsonl</code>
+(<code>O_APPEND</code>, so several processes never interleave inside a line; rotated
+to <code>history.jsonl.1</code> at 2 MiB). A full queue drops events rather than
+stall a share.</li>
+<li><strong>Changes.</strong> Enabling, disabling, rotating, pairing and removing devices
+are the same file edits the CLI makes (<code>internal/service/ops.go</code>, with the
+managed-policy check); the supervisor picks them up as usual.</li>
+</ol>
+<p>The HTTP side binds a loopback address, checks <code>Host</code> against its own
+address, exchanges the one-time fragment token for a cookie session, requires
+a CSRF header plus a same-origin JSON request for every change and serves an
+embedded page under a strict CSP. Analytics are computed per request from the
+history (bucketed by local day or hour).</p>
 <h2 id="implementation-steps">Implementation steps</h2>
 <ol>
 <li>Crypto primitives with Go↔JS test vectors (<code>secure</code>, <code>web/js/crypto.mjs</code>).</li>
@@ -455,6 +499,7 @@ key bar and a compose box.</li>
       <li class="l2"><a href="#file-upload">File upload</a></li>
       <li class="l2"><a href="#audit-log">Audit log</a></li>
       <li class="l2"><a href="#service">Service</a></li>
+      <li class="l2"><a href="#dashboard">Dashboard</a></li>
       <li class="l2"><a href="#implementation-steps">Implementation steps</a></li>
       <li class="l2"><a href="#future-work">Future work</a></li>
     </ul>

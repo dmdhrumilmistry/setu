@@ -108,6 +108,12 @@ separate step after auth.
   minutes, so an update never cuts a session off.
 - `internal/notify`: desktop notifications on the host (connections,
   pairings, lockouts). Text goes to the notifier as argv/env, never as script.
+- `internal/dashboard`: `setu dashboard`, a loopback-only web page (one-time
+  token login, cookie session, CSRF, strict CSP, no secrets in responses) for
+  live sessions, analytics and profile/device management. Live state comes
+  over `internal/control` (a Unix socket in each host's 0700 directory);
+  analytics come from `internal/history` (`history.jsonl`, connection
+  metadata only). Changes reuse `internal/service/ops.go`.
 - `setu doctor` (`cmd/setu/doctor.go`, profile checks in
   `internal/service/doctor.go`): every finding carries the command that fixes it.
 - `internal/audit`: OpenTelemetry (OTLP/HTTP) audit records, keystroke-to-

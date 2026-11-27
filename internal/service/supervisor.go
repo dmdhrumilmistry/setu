@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,7 +14,9 @@ import (
 	"time"
 
 	"github.com/dmdhrumilmistry/setu/internal/audit"
+	"github.com/dmdhrumilmistry/setu/internal/control"
 	"github.com/dmdhrumilmistry/setu/internal/daemon"
+	"github.com/dmdhrumilmistry/setu/internal/history"
 	"github.com/dmdhrumilmistry/setu/internal/host"
 	"github.com/dmdhrumilmistry/setu/internal/notify"
 	"github.com/dmdhrumilmistry/setu/internal/policy"
@@ -50,6 +53,11 @@ type Supervisor struct {
 	every      time.Duration                  // tests: replaces reconcileInterval
 
 	upd updater
+
+	// shares is a copy of running for the control socket, which reads it
+	// from other goroutines; it is replaced whenever running changes.
+	shares atomic.Pointer[map[string]*runner]
+	events func(history.Event) // connection history (nil: none)
 }
 
 type runner struct {
@@ -87,6 +95,20 @@ func (sv *Supervisor) Run(ctx context.Context) error {
 	}
 	sv.Log.Printf("setu service %s started (pid %d), config %s", sv.Version, os.Getpid(), ConfigPath(sv.Dir))
 	sv.upd.start(sv)
+
+	// Connection history and the control socket feed `setu dashboard`.
+	// Neither is needed to serve, so a failure is logged, not fatal.
+	hctx, hcancel := context.WithCancel(context.Background())
+	var hdone <-chan struct{}
+	sv.events, hdone = history.Open(sv.Dir).Writer(hctx, sv.Log.Printf)
+	defer func() { hcancel(); <-hdone }()
+	if ln, err := control.Listen(sv.Dir); err != nil {
+		sv.Log.Printf("dashboard control socket unavailable: %v", err)
+	} else {
+		cctx, ccancel := context.WithCancel(ctx)
+		defer ccancel()
+		go control.Serve(cctx, ln, sv, sv.Log.Printf)
+	}
 
 	var lastStat string
 	lastReconcile := time.Time{}
@@ -219,6 +241,7 @@ func (sv *Supervisor) reconcile(ctx context.Context) {
 			delete(sv.running, name)
 		}
 	}
+	defer sv.publish()
 	for name, fp := range desired {
 		if _, ok := sv.running[name]; ok {
 			continue
@@ -262,6 +285,46 @@ func (sv *Supervisor) stopAll() {
 		delete(sv.running, name)
 	}
 	wg.Wait()
+	sv.publish()
+}
+
+// publish makes the current set of runners visible to the control socket.
+func (sv *Supervisor) publish() {
+	m := make(map[string]*runner, len(sv.running))
+	for name, r := range sv.running {
+		m[name] = r
+	}
+	sv.shares.Store(&m)
+}
+
+// Shares reports every running profile's share (control.Handler).
+func (sv *Supervisor) Shares() []host.Status {
+	out := []host.Status{}
+	m := sv.shares.Load()
+	if m == nil {
+		return out
+	}
+	for _, r := range *m {
+		if s := r.session.Load(); s != nil {
+			out = append(out, s.Status())
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Profile < out[j].Profile })
+	return out
+}
+
+// Disconnect ends a client's connection to a profile (control.Handler).
+func (sv *Supervisor) Disconnect(profile string, client int) error {
+	m := sv.shares.Load()
+	if m == nil || (*m)[profile] == nil {
+		return fmt.Errorf("profile %q is not being served", profile)
+	}
+	s := (*m)[profile].session.Load()
+	if s == nil {
+		return fmt.Errorf("profile %q is not being served", profile)
+	}
+	sv.Log.Printf("profile %s: disconnecting client #%d (asked from the dashboard)", profile, client)
+	return s.Disconnect(client, "disconnected from the dashboard")
 }
 
 // serve runs one profile's command, restarting it with backoff whenever it
@@ -286,6 +349,10 @@ func (sv *Supervisor) serve(ctx context.Context, r *runner, name string, p *Prof
 		}
 		store := &deviceStore{dir: sv.Dir, profile: name, logf: out.printf, now: time.Now, pol: pol, idle: pol.DeviceIdle(time.Duration(p.DeviceIdle))}
 		cfg.Devices = store
+		if ev := sv.events; ev != nil {
+			src := "profile:" + name
+			cfg.Events = func(e history.Event) { e.Source = src; ev(e) }
+		}
 		if p.RequireDevice {
 			cfg.Pairing = store
 		}
@@ -299,6 +366,7 @@ func (sv *Supervisor) serve(ctx context.Context, r *runner, name string, p *Prof
 			sv.Log.Printf("profile %s: serving %q", name, p.Label())
 			var code int
 			code, err = s.Run(ctx)
+			r.session.Store(nil) // nothing left to show or interrupt
 			if err == nil {
 				sv.Log.Printf("profile %s: command exited with code %d", name, code)
 			}

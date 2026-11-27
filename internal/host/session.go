@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/dmdhrumilmistry/setu/internal/audit"
+	"github.com/dmdhrumilmistry/setu/internal/history"
 	"github.com/dmdhrumilmistry/setu/internal/proto"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
 	"github.com/dmdhrumilmistry/setu/internal/tty"
@@ -111,6 +112,11 @@ type Config struct {
 	// Notify, if not nil, tells the person at the host when a client
 	// connects, a device pairs, or logins keep failing (see internal/notify).
 	Notify func(title, body string)
+
+	// Events, if not nil, receives connection history for the local
+	// dashboard (see internal/history). It is called synchronously, so
+	// it must not block.
+	Events func(history.Event)
 }
 
 const (
@@ -149,6 +155,7 @@ type Session struct {
 	host   string
 
 	id         string
+	started    time.Time
 	rec        *recorder // terminal recording, or nil
 	recording  string
 	desk       *desktopShare // nil for a terminal share
@@ -318,7 +325,9 @@ func (s *Session) Run(ctx context.Context) (int, error) {
 	sigCtx, stopSignal := context.WithCancel(ctx)
 	s.mu.Lock()
 	s.stopSignal = stopSignal
+	s.started = time.Now()
 	s.mu.Unlock()
+	s.event(history.Event{Kind: history.SessionStart, Reason: s.commandLine()})
 	if s.cfg.IdleTimeout > 0 {
 		go s.idleLoop(ctx)
 	}
@@ -390,6 +399,7 @@ func (s *Session) Idle() bool {
 func (s *Session) endAudit(code int, reason string) {
 	s.localInput.Close()
 	s.audit.End(code, reason)
+	s.event(history.Event{Kind: history.SessionEnd, Reason: reason, Seconds: time.Since(s.started).Round(time.Second).Seconds()})
 }
 
 // passwordPrompt reports whether the shared command is reading a password
@@ -597,6 +607,10 @@ func (s *Session) authFailed(p *peer) {
 	s.mu.Unlock()
 	who := p.auditClient()
 	s.audit.AuthFailed(who)
+	s.clientEvent(history.AuthFailure, who, "", 0)
+	if fails >= maxAuthFailures {
+		s.event(history.Event{Kind: history.Lockout, Reason: fmt.Sprintf("%d failed logins: new joins refused for %s", fails, lockoutDuration)})
+	}
 	s.logf("WARNING: client #%d failed password authentication (%d recent, %d total): %s", p.id, fails, total, who.Actor())
 	if fails >= maxAuthFailures {
 		s.logf("WARNING: too many failures — refusing new clients for %s", lockoutDuration)
@@ -618,6 +632,7 @@ func (s *Session) stopAccepting(reason string) {
 	s.mu.Unlock()
 	if was {
 		s.audit.InviteDisabled(reason)
+		s.event(history.Event{Kind: history.InviteDisabled, Reason: reason})
 		s.logf("invite disabled: %s (connected clients stay connected)", reason)
 		if stop != nil && !s.cfg.Manual && !resumable {
 			stop()
