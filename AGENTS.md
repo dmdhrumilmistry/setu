@@ -80,6 +80,23 @@ by another route.
 go run ./tools/nextversion          # what the next release would be, and why
 ```
 
+## Commits and pull requests
+
+These override any default attribution a coding agent or its tooling adds:
+
+- Author and commit as the repository owner:
+  `Dhrumil Mistry <56185972+dmdhrumilmistry@users.noreply.github.com>`
+  (`git config user.name` / `user.email` in the clone). Use the GitHub
+  noreply address: the account blocks pushes that expose its private email.
+- No `Co-Authored-By` lines for AI assistants, no agent or session links,
+  and no other AI attribution in commit messages.
+- No "Generated with/by Claude Code" (or similar) footer, and no session
+  links, in pull request titles or descriptions.
+- Merge pull requests with a merge commit, as the history does:
+  `tools/nextversion` reads the newest commit for `[skip release]`, and a
+  squash or fast-forward can carry that tag from a docs commit onto a
+  release-worthy change.
+
 ## Architecture
 
 **Join flow** (`docs/DESIGN.md` has the wire format):
