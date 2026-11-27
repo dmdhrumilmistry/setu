@@ -38,6 +38,10 @@ Usage:
   setu service device list <name>                         the devices a profile admits
   setu service device add [--name N] [--person P|--view] <name> <fingerprint>   admit a device without a code
   setu service device remove <name> <fingerprint>|--all   stop admitting a device (it is disconnected at once)
+  setu service access list [name|all]                     the block and allow lists
+  setu service access block|allow [--for D] [--note T] <name|all> device|person|network <value>
+                                                          keep a device, person or network out, or let only them in
+  setu service access remove <name|all> <rule-id>         delete a rule
   setu service auth <name> device|password|none           change how new devices get in
   setu service set [flags] <name>                         change a setting (--idle-timeout, --device-idle, --notify, ...)
   setu service key add [--view] <name> <person>           give one person their own link (audited by name)
@@ -80,6 +84,11 @@ func runService(args []string) (int, error) {
 		return servicePair(rest)
 	case "device", "devices":
 		return serviceDevice(rest)
+	case "access", "block", "allow":
+		if args[0] != "access" {
+			rest = args // `setu service block ...` is short for `access block ...`
+		}
+		return serviceAccess(rest)
 	case "auth":
 		return serviceAuth(rest)
 	case "set":
@@ -430,7 +439,7 @@ const defaultDeviceIdle = 90 * 24 * time.Hour
 
 // defaultPairFor is how long a pairing code works by default: long enough
 // to pick up the other device, short enough not to linger.
-const defaultPairFor = 15 * time.Minute
+const defaultPairFor = service.DefaultPairFor
 
 func checkPairFor(d time.Duration) error {
 	if d < time.Minute || d > 24*time.Hour {
@@ -464,16 +473,7 @@ func authMode(auth string, noPassword, passwordFlags bool, pol *policy.Policy) (
 
 // newPairing replaces the profile's pairing code with a new one.
 func newPairing(dir, name string, d time.Duration) (code string, expires time.Time, err error) {
-	code, v, err := secure.NewPairingVerifier()
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	expires = time.Now().Add(d)
-	err = service.UpdateDevices(dir, func(ds *service.DeviceState) error {
-		ds.Profile(name).Pairing = &service.Pairing{Verifier: v, ExpiresAt: expires.UTC()}
-		return nil
-	})
-	return code, expires, err
+	return service.NewPairing(dir, name, d)
 }
 
 // printPairing shows a new pairing code, and a pairing link that carries it

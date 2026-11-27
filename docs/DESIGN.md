@@ -52,6 +52,10 @@ HKDF, PBKDF2, AES-GCM and HMAC in its standard library. The Rust options
 | `internal/audit` | OpenTelemetry audit log: rebuilds commands from keystrokes, redacts secrets, exports OTLP/HTTP log records through a bounded batch queue |
 | `internal/service` | The `setu service` supervisor: persistent profiles (keys, password verifiers), hot-reloaded config, restart with backoff, and the systemd / launchd / Task Scheduler autostart entries |
 | `internal/daemon` | Detached `setu share -d` processes and their registry |
+| `internal/control` | Local control socket between hosting processes (service, background shares) and the dashboard: one JSON request per connection, status and disconnect only |
+| `internal/access` | Block and allow lists (`access.json`): rule validation, evaluation, a locked atomic writer and a cached checker the host calls |
+| `internal/history` | Append-only connection history (`history.jsonl`) behind the dashboard's analytics |
+| `internal/dashboard` | `setu dashboard`: loopback HTTP server, one-time-token login, JSON API and the embedded page |
 | `internal/desktop` | `setu desktop`: screen capture and input injection (GDI and `SendInput` on Windows, CoreGraphics and NSPasteboard through purego on macOS, X11 with MIT-SHM and XTEST on Linux and the BSDs; no cgo), clipboard, and the hub that streams changed tiles to every viewer with per-viewer flow control |
 | `web/` | The static client: `crypto.mjs` mirrors `secure`/`link`, `nostr.mjs` mirrors `nostr`, `app.mjs` handles the UI, WebRTC and xterm.js |
 
@@ -310,6 +314,50 @@ Each profile runs `host.Session` in-process, in its own goroutine. When the
 command exits, the supervisor restarts it with exponential backoff (1 s up to
 1 min, reset after a minute of uptime). A context deadline at `expires_at`
 stops serving the moment the keys expire.
+
+## Dashboard
+
+`setu dashboard` is a separate, short-lived process, not part of the
+supervisor: an always-on HTTP listener would be an always-open door to a
+remote shell, while a dashboard that runs only when asked costs nothing the
+rest of the time. It needs three things from the processes that host shares:
+
+1. **Live state.** The supervisor and every background share listen on a Unix
+   domain socket (`internal/control`) in their own 0700 state directory:
+   `control.sock`, or, when that path exceeds the socket path limit, a socket
+   in a verified private per-user directory under the temporary directory,
+   named in `control.path`. Each connection carries one JSON request
+   (`status` or `disconnect`, unknown fields refused, 4 KiB limit, 5 s
+   deadline) and one response. Linux and macOS also check the peer's uid.
+   `status` returns `host.Session.Status()`, a snapshot with no secrets;
+   `disconnect` revokes the client's resume ticket before closing it;
+   `disconnect_all`, `pause` (refuse new joins, keep connected clients),
+   `terminate` (end `Run`; the supervisor restarts the profile) and
+   `enforce` (re-check the access rules now) act on one share.
+2. **History.** `host.Config.Events` receives connection events (connect,
+   reconnect, disconnect with its duration, failed logins, lockouts, refused
+   joins, pairings). The supervisor and background shares queue them to a
+   goroutine that appends one JSON line per event to `history.jsonl`
+   (`O_APPEND`, so several processes never interleave inside a line; rotated
+   to `history.jsonl.1` at 2 MiB). A full queue drops events rather than
+   stall a share.
+3. **Changes.** Enabling, disabling, rotating, pairing and removing devices
+   are the same file edits the CLI makes (`internal/service/ops.go`, with the
+   managed-policy check); the supervisor picks them up as usual.
+
+Block and allow lists (`internal/access`) are a separate file per state
+directory, read through a checker that re-parses it only when its size,
+mtime or mode change, so editing rules never restarts a profile. The host
+asks `Config.Access` in `login` and `resume` (after the device signature and
+the resume token are verified) and every 10 s for connected clients; a
+refused client gets a generic error, its ticket is revoked and the refusal is
+audited and recorded. An unreadable file denies everyone.
+
+The HTTP side binds a loopback address, checks `Host` against its own
+address, exchanges the one-time fragment token for a cookie session, requires
+a CSRF header plus a same-origin JSON request for every change and serves an
+embedded page under a strict CSP. Analytics are computed per request from the
+history (bucketed by local day or hour).
 
 ## Implementation steps
 

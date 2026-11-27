@@ -185,6 +185,28 @@ setu service remove claude                 # delete the profile and its keys
 When keys expire the profile stops being served and `setu service list` shows
 it as `expired`; `setu service rotate` issues fresh keys with a new expiry.
 
+## Watch it in the dashboard
+
+```sh
+setu dashboard
+```
+
+A local web page with who is connected to each profile right now, connection
+analytics and every profile's devices. You can disconnect or block someone,
+pause new joins, end a session, enable or disable a profile, rotate keys and
+pair or remove devices from it. See [Dashboard](dashboard.md).
+
+## Block and allow lists
+
+```sh
+setu service access block --for 24h claude device 3f2a-91c0-77de-0b4e-a1c9
+setu service access allow claude person alice    # only alice may join claude
+setu service access list
+```
+
+Rules name a device key, a personal key or a network, and apply on top of the
+login. See [Block and allow lists](dashboard.md#block-and-allow-lists).
+
 ## Check your setup
 
 ```sh
@@ -234,7 +256,11 @@ the current settings; `--off` disables auditing. See [Audit logging](audit.md).
 
 The directory holds `config.json` (profiles, keys, password verifiers and audit
 settings), `devices.json` (the devices each profile admits and pending pairing
-code verifiers), `supervisor.pid` (the single-instance lock) and `service.log`.
+code verifiers), `supervisor.pid` (the single-instance lock), `service.log`,
+`access.json` (the [block and allow lists](dashboard.md#block-and-allow-lists)),
+`history.jsonl` (the [connection history](dashboard.md#connection-history)
+behind the dashboard's analytics) and `control.sock` (the socket the dashboard
+asks for live state).
 `config.json` contains secrets: setu refuses to load it if other users can read
 it (`chmod 600` fixes that). On Windows it lives in non-roaming
 `%LOCALAPPDATA%`. Set `SETU_SERVICE_DIR` to use another directory.

@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Dashboard - setu docs</title>
+<meta name="description" content="setu dashboard opens a local web page for everything this computer shares unattended: the service&#39;s profiles and background shares (setu share -d). It shows ...">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/theme.js"></script>
+<script src="assets/docs.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button class="icon-btn nav-toggle" id="nav-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" width="26" height="26"><span>setu</span><small>docs</small></a>
+  <div class="search" role="search">
+    <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input id="search" type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false">
+    <kbd class="search-key" aria-hidden="true">/</kbd>
+    <ul id="search-results" class="search-results" role="listbox" aria-label="Search results" hidden></ul>
+  </div>
+  <nav class="toplinks" aria-label="Site">
+    <a href="../">Web client</a>
+    <a href="https://github.com/dmdhrumilmistry/setu">GitHub</a>
+  </nav>
+  <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <svg class="sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+</header>
+<div class="layout">
+  <nav id="sidebar" class="sidebar" aria-label="Documentation">
+    <div class="nav-section">
+      <p class="nav-title">Get started</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="quickstart.html">Quick start</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Guides</p>
+      <ul>
+        <li><a href="sharing.html">Sharing a terminal</a></li>
+        <li><a href="joining.html">Joining a session</a></li>
+        <li><a href="desktop.html">Remote desktop</a></li>
+        <li><a href="claude-code.html">Claude Code from your phone</a></li>
+        <li><a href="service.html">Always-on service</a></li>
+        <li><a href="dashboard.html" aria-current="page">Dashboard</a></li>
+        <li><a href="audit.html">Audit logging</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Administration</p>
+      <ul>
+        <li><a href="mdm.html">MDM and managed policy</a></li>
+        <li><a href="security.html">Security model</a></li>
+      </ul>
+    </div>
+    <div class="nav-section">
+      <p class="nav-title">Reference</p>
+      <ul>
+        <li><a href="cli.html">CLI reference</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting and FAQ</a></li>
+        <li><a href="design.html">Design and protocol</a></li>
+      </ul>
+    </div>
+    
+  </nav>
+  <div class="scrim" id="scrim" hidden></div>
+  <main id="main" tabindex="-1">
+    <article class="content">
+<h1 id="dashboard">Dashboard</h1>
+<p><code>setu dashboard</code> opens a local web page for everything this computer shares
+unattended: the <a href="service.html">service</a>'s profiles and background shares
+(<code>setu share -d</code>). It shows who is connected right now, connection analytics,
+and the profiles and devices that can get in, and it lets you act on them.</p>
+<pre><code class="language-sh">setu dashboard
+</code></pre>
+<p>It prints a link and opens it in your default browser. The dashboard runs
+until you press Ctrl-C in that terminal; nothing listens while it is not
+running.</p>
+<h2 id="what-it-shows">What it shows</h2>
+<p><strong>Overview.</strong> How many clients are connected now, connections over the last
+24 hours, 7, 30 or 90 days (with the change from the period before), time
+connected and the median visit, failed logins, lockouts and refused joins. A
+chart of connections per day (or hour), who connects most, the busiest hours
+of the day, which profiles or shares get used, and the latest activity.
+Problems that need you come first: a profile that is not served because it
+breaks the <a href="mdm.html">managed policy</a>, keys that expire within a week or have
+expired, a share that is locked after failed logins, a service that is not
+running.</p>
+<p><strong>Live sessions.</strong> Every running profile and background share, with each
+connected client: the name from its personal key (or which shared link it
+used), its role, how it got in, its device and device key, its network
+address and whether the connection is direct or relayed, its
+<a href="security.html">verification code</a> and how long it has been connected.</p>
+<p><strong>Profiles and devices.</strong> Every service profile with how new devices get in,
+who holds links, when the keys expire and its other settings, and the devices
+it knows with when each was added and last seen.</p>
+<p><strong>Activity.</strong> The connection history of the period, filterable by kind of
+event and by name, address or share.</p>
+<h2 id="what-you-can-do">What you can do</h2>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Where</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Disconnect a client</td>
+<td>Live sessions</td>
+<td>The client is cut off at once, and its resume token stops working, so it must join and log in again.</td>
+</tr>
+<tr>
+<td>Block a client</td>
+<td>Live sessions</td>
+<td>Adds block rules for its device key, its personal key or its network address, on this profile or every profile, for an hour up to permanently. It is disconnected at once, and with its personal key it can be disconnected from every session too. See <a href="#block-and-allow-lists">Block and allow lists</a>.</td>
+</tr>
+<tr>
+<td>Disconnect everyone</td>
+<td>Live sessions</td>
+<td>Every client of that share is cut off and cannot resume; the command keeps running.</td>
+</tr>
+<tr>
+<td>Pause new joins</td>
+<td>Live sessions</td>
+<td>The share refuses new clients until you resume it (or it restarts); connected clients stay and dropped ones can still reconnect.</td>
+</tr>
+<tr>
+<td>End session</td>
+<td>Live sessions</td>
+<td>The profile's command is stopped and everyone is disconnected; the service starts a fresh session within seconds. You type the profile's name to confirm.</td>
+</tr>
+<tr>
+<td>Stop a background share</td>
+<td>Live sessions</td>
+<td>Same as <code>setu stop &lt;id&gt;</code>: the command ends and its links stop working.</td>
+</tr>
+<tr>
+<td>Enable or disable a profile</td>
+<td>Profiles and devices</td>
+<td>Same as <code>setu service enable</code> / <code>disable</code>. Disabling asks first if anyone is connected.</td>
+</tr>
+<tr>
+<td>Rotate keys</td>
+<td>Profiles and devices</td>
+<td>Same as <code>setu service rotate</code>: every old link stops working. You type the profile's name to confirm.</td>
+</tr>
+<tr>
+<td>Pair a device</td>
+<td>Profiles and devices</td>
+<td>Same as <code>setu service pair</code>: a one-time code, shown once, that works for one device for 15 minutes (or less, if a policy says so).</td>
+</tr>
+<tr>
+<td>Remove a device</td>
+<td>Profiles and devices</td>
+<td>Same as <code>setu service device remove</code>: it can no longer join, and is disconnected within seconds if connected.</td>
+</tr>
+</tbody>
+</table>
+<p>Changes go through the same code and the same managed-policy checks as the
+command line, and the running service applies them within a few seconds. Each
+change is printed in the dashboard's terminal and recorded in the connection
+history.</p>
+<h2 id="block-and-allow-lists">Block and allow lists</h2>
+<p>The <strong>Block and allow lists</strong> page holds rules on top of the link and the
+login, never instead of them: an allowed client still needs a valid link and
+the password, pairing code or known device. There is one list for every
+service profile, one per profile (applied together with the first) and one
+per background share (which ends with the share).</p>
+<table>
+<thead>
+<tr>
+<th>A rule can name</th>
+<th>Example</th>
+<th>How sure the match is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A device key</td>
+<td><code>3f2a-91c0-77de-0b4e-a1c9</code></td>
+<td>Proven: the device signs every connection with its key.</td>
+</tr>
+<tr>
+<td>A person</td>
+<td><code>alice</code></td>
+<td>Proven: the person is the personal key that decrypted the join request.</td>
+</tr>
+<tr>
+<td>A network</td>
+<td><code>203.0.113.7</code> or <code>203.0.113.0/24</code></td>
+<td>The address the connection comes from (a TURN server's, if relayed). Block rules also match the addresses a client lists for itself.</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>A matching <strong>block</strong> rule always refuses.</li>
+<li>If a list has any <strong>allow</strong> rule, only clients that match one of its allow
+rules may join, and connected clients that do not are disconnected. The page
+warns before you add the first one, so you do not lock yourself out.</li>
+<li>Rules can expire (1 hour, 24 hours, 7 days, 30 days) or stay until removed,
+and can carry a note.</li>
+<li>Rules apply to new logins, to reconnects (a blocked client's resume token is
+revoked) and to connected clients, within seconds and at once when you add
+them from the dashboard or the CLI.</li>
+<li>Refused joins are recorded in the activity history and the audit log with
+the rule that matched; the client is only told that the host does not allow
+the connection.</li>
+</ul>
+<p>The same lists from a terminal:</p>
+<pre><code class="language-sh">setu service access list                                  # every rule
+setu service access block --for 24h --note &quot;lost phone&quot; claude device 3f2a-91c0-77de-0b4e-a1c9
+setu service access block all network 203.0.113.0/24      # every profile
+setu service access allow claude person alice             # only alice may join claude
+setu service access remove claude &lt;rule-id&gt;
+</code></pre>
+<p>The rules live in <code>access.json</code> (owner-only) in the service directory, or in a
+background share's own directory. If the file cannot be read or is malformed,
+the share admits nobody until it is fixed, rather than silently dropping the
+rules.</p>
+<h2 id="security">Security</h2>
+<p>The dashboard is a control panel for remote shells, so it is reachable only by
+you, at this computer, while it runs:</p>
+<ul>
+<li><strong>Loopback only.</strong> It listens on <code>127.0.0.1</code> (or <code>--addr</code> with another
+loopback address), on a random port by default, never on a network address.</li>
+<li><strong>A one-time link.</strong> The link carries a 256-bit token after <code>#</code>, which
+browsers never send to a server. The page trades it for a session cookie and
+removes it from the address bar, and the token then stops working, so a link
+left in scrollback or browser history is useless. Opening it a second time
+shows &quot;already used&quot;: run <code>setu dashboard</code> again. Five wrong tokens turn
+login off for that run. When setu opens your browser, it passes the link
+through an owner-only file rather than a command line, which other users of
+the computer could read.</li>
+<li><strong>Sessions end.</strong> The session cookie is <code>HttpOnly</code> and <code>SameSite=Strict</code>, and
+it stops working after 30 minutes without the page open, after 12 hours, when
+you sign out, or when the dashboard stops.</li>
+<li><strong>Requests are checked.</strong> Every change must carry the session's CSRF token,
+be JSON and come from the dashboard's own origin. Requests that name any
+other host are refused, which defeats DNS rebinding. The page has a strict
+Content Security Policy, cannot be framed, sends no referrer and is never
+cached.</li>
+<li><strong>No secrets.</strong> The dashboard never shows links, keys, password verifiers or
+resume tokens. Show links with <code>setu service link NAME</code> or <code>setu link ID</code>.
+The only secret it shows is a pairing code you just asked for, once.</li>
+</ul>
+<p>Other users of the same computer can reach the loopback port, but cannot sign
+in without the token. The dashboard can do nothing that you cannot already do
+with <code>setu service</code> and <code>setu stop</code>.</p>
+<h2 id="connection-history">Connection history</h2>
+<p>The analytics come from a small connection history that the service and
+background shares keep: who connected to what, when, from which address and
+device, for how long, and failed logins, lockouts, refused joins, pairings and
+dashboard changes. It never holds keystrokes, commands or terminal output (the
+<a href="audit.html">audit log</a> is for those, and it lives off the machine).</p>
+<p>It is <code>history.jsonl</code> in the service's <a href="service.html#where-things-live">state directory</a>,
+readable only by you (setu refuses to read or extend it if other users can).
+It is capped at about 2 MiB, with one older file (<code>history.jsonl.1</code>) kept, so
+it holds the last several thousand events. Delete the files to clear it.</p>
+<h2 id="live-state">Live state</h2>
+<p>The service and each background share answer the dashboard over a local
+control socket: <code>control.sock</code> in their own owner-only directory (if that path
+is too long for a socket, a private per-user directory under the system
+temporary directory is used instead). On Linux and macOS a connection from
+another user is refused even if the directory's permissions were loosened. A
+service started by an older setu has no socket: the dashboard then says it
+cannot see live sessions, and <code>setu service install</code> restarts the service with
+the current version.</p>
+<h2 id="options">Options</h2>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--addr ADDR</code></td>
+<td><code>127.0.0.1:0</code></td>
+<td>Loopback address and port to listen on; port <code>0</code> picks a free one.</td>
+</tr>
+<tr>
+<td><code>--no-open</code></td>
+<td>off</td>
+<td>Print the link without opening a browser (for example over SSH, with the port forwarded).</td>
+</tr>
+</tbody>
+</table>
+<p>Creating or removing profiles and personal keys, and changing how a profile
+signs in, stay on the command line (<code>setu service</code>).</p>
+<p>To use the dashboard of a computer you reach over SSH, forward the same port
+number on both ends (the dashboard accepts only requests addressed to its own
+address) and open the printed link on your own computer:</p>
+<pre><code class="language-sh">ssh -L 8765:127.0.0.1:8765 my-computer setu dashboard --addr 127.0.0.1:8765 --no-open
+</code></pre>
+
+    </article>
+    <nav class="pager" aria-label="Previous and next page">
+      <a class="prev" href="service.html"><span>Previous</span>Always-on service</a>
+      <a class="next" href="audit.html"><span>Next</span>Audit logging</a>
+    </nav>
+    <footer class="footer">
+      <a href="https://github.com/dmdhrumilmistry/setu/edit/main/docs/src/dashboard.md">Edit this page on GitHub</a>
+      <span>setu is open source. Peer-to-peer terminal sharing with no server of your own.</span>
+    </footer>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    <p class="toc-title">On this page</p>
+    <ul>
+      <li class="l2"><a href="#what-it-shows">What it shows</a></li>
+      <li class="l2"><a href="#what-you-can-do">What you can do</a></li>
+      <li class="l2"><a href="#block-and-allow-lists">Block and allow lists</a></li>
+      <li class="l2"><a href="#security">Security</a></li>
+      <li class="l2"><a href="#connection-history">Connection history</a></li>
+      <li class="l2"><a href="#live-state">Live state</a></li>
+      <li class="l2"><a href="#options">Options</a></li>
+    </ul>
+  </aside>
+</div>
+</body>
+</html>

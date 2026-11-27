@@ -13,6 +13,7 @@ import (
 
 	"github.com/dmdhrumilmistry/setu/internal/audit"
 	"github.com/dmdhrumilmistry/setu/internal/desktop"
+	"github.com/dmdhrumilmistry/setu/internal/history"
 	"github.com/dmdhrumilmistry/setu/internal/proto"
 	"github.com/dmdhrumilmistry/setu/internal/rtc"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
@@ -68,10 +69,16 @@ type peer struct {
 	localAddrs  []string          // from the client's SDP answer
 	info        *proto.ClientInfo // self-reported device details (sanitized)
 	input       *audit.Input      // keystroke audit (control clients, once ready)
-	client      *audit.Client     // audit identity, fixed once ready
-	viewer      *desktop.Viewer   // desktop shares, once ready
-	inputErrAt  time.Time         // last remote input failure reported
-	uploads     int               // uploads in progress
+	connectedAt time.Time         // when it became ready
+	firstID     int               // resumed clients: the id it first joined as
+	// kicked is why the host is ending this connection on purpose: the
+	// client usually hangs up first when told, and the records should say
+	// why, not "channel closed".
+	kicked     string
+	client     *audit.Client   // audit identity, fixed once ready
+	viewer     *desktop.Viewer // desktop shares, once ready
+	inputErrAt time.Time       // last remote input failure reported
+	uploads    int             // uploads in progress
 
 	lastInput   atomic.Int64 // unix nanoseconds of the client's last input
 	idleWarned  atomic.Bool
@@ -282,6 +289,10 @@ func (p *peer) binding() string {
 // unless the host admits only known devices.
 func (p *peer) login(c proto.Control) {
 	s := p.s
+	if ok, why := s.allowed(p); !ok {
+		s.refuseBlocked(p, why)
+		return
+	}
 	p.mu.Lock()
 	fp := p.deviceFP
 	p.mu.Unlock()
@@ -298,7 +309,9 @@ func (p *peer) login(c proto.Control) {
 		if fp == "" {
 			msg = "this host admits only paired devices, and this client sent no device key"
 		}
-		s.audit.ClientRejected(p.auditClient(), "unknown device")
+		who := p.auditClient()
+		s.audit.ClientRejected(who, "unknown device")
+		s.clientEvent(history.Rejected, who, "unknown device", 0)
 		s.logf("client #%d refused: device %s is not paired", p.id, orNone(fp))
 		p.refuse(msg)
 		return
@@ -333,6 +346,7 @@ func (p *peer) login(c proto.Control) {
 			return
 		}
 		s.logf("client #%d paired device %s (%s); it can join without a code from now on", p.id, fp, who.ActorName())
+		s.clientEvent(history.Paired, who, "", 0)
 		p.authBy = proto.AuthPairing
 	default:
 		p.authBy = proto.AuthPassword
@@ -356,6 +370,17 @@ func (p *peer) refuse(msg string) {
 // joined; a client that only got in by naming a ticket has no other way in.
 func (p *peer) resume(c proto.Control) {
 	t, old, err := p.s.claimTicket(p, c.Resume)
+	if err == nil {
+		if ok, why := p.s.allowed(p); !ok {
+			// Blocked since it joined: the ticket dies with it.
+			p.s.revokeTicket(p)
+			if old != nil {
+				old.close(why)
+			}
+			p.s.refuseBlocked(p, why)
+			return
+		}
+	}
 	if err == nil && p.s.cfg.RequireDevice && !p.s.knownDevice(t.deviceFP, p.binding()) {
 		// The device was removed since it joined: the ticket dies with it.
 		p.s.revokeTicket(p)
@@ -407,6 +432,10 @@ func (p *peer) activate(t *ticket, pos *int64) {
 	// so no keystroke can reach the PTY unaudited.
 	p.state = stateReady
 	p.client = &c
+	p.connectedAt = time.Now()
+	if t != nil && t.firstID != p.id {
+		p.firstID = t.firstID
+	}
 	p.touch()
 	if t != nil && t.lastInput > 0 {
 		// Reconnecting is not input: the idle timeout keeps counting.
@@ -451,10 +480,12 @@ func (p *peer) activate(t *ticket, pos *int64) {
 	}
 	if t != nil {
 		s.audit.ClientReconnected(c, firstID)
+		s.clientEvent(history.Reconnect, c, "", 0)
 		s.logf("client #%d reconnected via %s (first joined as #%d), role=%s: %s", p.id, p.label, firstID, p.role, c.Actor())
 		return
 	}
 	s.audit.ClientConnected(c)
+	s.clientEvent(history.Connect, c, p.authBy, 0)
 	s.logf("client #%d connected via %s, role=%s: %s", p.id, p.label, p.role, c.Actor())
 	verb := "is watching"
 	if p.role == proto.RoleControl {
@@ -495,7 +526,10 @@ func (p *peer) close(reason string) {
 	}
 	wasReady := p.state == stateReady
 	p.state = stateClosed
-	hooks, input, client, viewer := p.onClose, p.input, p.client, p.viewer
+	if p.kicked != "" {
+		reason = p.kicked
+	}
+	hooks, input, client, viewer, since := p.onClose, p.input, p.client, p.viewer, p.connectedAt
 	p.viewer = nil
 	p.mu.Unlock()
 	input.Close()
@@ -504,6 +538,7 @@ func (p *peer) close(reason string) {
 	}
 	if wasReady && client != nil {
 		p.s.audit.ClientDisconnected(*client, reason)
+		p.s.clientEvent(history.Disconnect, *client, reason, time.Since(since))
 	}
 
 	if p.deadline != nil {

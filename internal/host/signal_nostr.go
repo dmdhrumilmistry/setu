@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dmdhrumilmistry/setu/internal/audit"
+	"github.com/dmdhrumilmistry/setu/internal/history"
 	"github.com/dmdhrumilmistry/setu/internal/nostr"
 	"github.com/dmdhrumilmistry/setu/internal/proto"
 	"github.com/dmdhrumilmistry/setu/internal/secure"
@@ -160,6 +161,7 @@ func (ns *nostrSignaler) onHello(ctx context.Context, ev nostr.Event, rr roomRol
 		ns.reply(ev.PubKey, rr, proto.Signal{Type: proto.SigReject, SID: m.SID, Reason: err.Error()})
 		who := audit.Client{Role: rr.role, Via: "nostr", KeyName: rr.name}
 		ns.s.audit.ClientRejected(who, err.Error())
+		ns.s.event(history.Event{Kind: history.Rejected, Name: who.ActorName(), Role: rr.role, Reason: err.Error()})
 		ns.s.logf("rejected a join request from %s: %v", who.ActorName(), err)
 		return
 	}

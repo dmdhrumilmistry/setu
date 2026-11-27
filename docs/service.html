@@ -53,6 +53,7 @@
         <li><a href="desktop.html">Remote desktop</a></li>
         <li><a href="claude-code.html">Claude Code from your phone</a></li>
         <li><a href="service.html" aria-current="page">Always-on service</a></li>
+        <li><a href="dashboard.html">Dashboard</a></li>
         <li><a href="audit.html">Audit logging</a></li>
       </ul>
     </div>
@@ -324,6 +325,20 @@ setu service remove claude                 # delete the profile and its keys
 </code></pre>
 <p>When keys expire the profile stops being served and <code>setu service list</code> shows
 it as <code>expired</code>; <code>setu service rotate</code> issues fresh keys with a new expiry.</p>
+<h2 id="watch-it-in-the-dashboard">Watch it in the dashboard</h2>
+<pre><code class="language-sh">setu dashboard
+</code></pre>
+<p>A local web page with who is connected to each profile right now, connection
+analytics and every profile's devices. You can disconnect or block someone,
+pause new joins, end a session, enable or disable a profile, rotate keys and
+pair or remove devices from it. See <a href="dashboard.html">Dashboard</a>.</p>
+<h2 id="block-and-allow-lists">Block and allow lists</h2>
+<pre><code class="language-sh">setu service access block --for 24h claude device 3f2a-91c0-77de-0b4e-a1c9
+setu service access allow claude person alice    # only alice may join claude
+setu service access list
+</code></pre>
+<p>Rules name a device key, a personal key or a network, and apply on top of the
+login. See <a href="dashboard.html#block-and-allow-lists">Block and allow lists</a>.</p>
 <h2 id="check-your-setup">Check your setup</h2>
 <pre><code class="language-sh">setu doctor
 </code></pre>
@@ -373,7 +388,11 @@ the current settings; <code>--off</code> disables auditing. See <a href="audit.h
 </table>
 <p>The directory holds <code>config.json</code> (profiles, keys, password verifiers and audit
 settings), <code>devices.json</code> (the devices each profile admits and pending pairing
-code verifiers), <code>supervisor.pid</code> (the single-instance lock) and <code>service.log</code>.
+code verifiers), <code>supervisor.pid</code> (the single-instance lock), <code>service.log</code>,
+<code>access.json</code> (the <a href="dashboard.html#block-and-allow-lists">block and allow lists</a>),
+<code>history.jsonl</code> (the <a href="dashboard.html#connection-history">connection history</a>
+behind the dashboard's analytics) and <code>control.sock</code> (the socket the dashboard
+asks for live state).
 <code>config.json</code> contains secrets: setu refuses to load it if other users can read
 it (<code>chmod 600</code> fixes that). On Windows it lives in non-roaming
 <code>%LOCALAPPDATA%</code>. Set <code>SETU_SERVICE_DIR</code> to use another directory.</p>
@@ -394,7 +413,7 @@ profile against it before serving.</li>
     </article>
     <nav class="pager" aria-label="Previous and next page">
       <a class="prev" href="claude-code.html"><span>Previous</span>Claude Code from your phone</a>
-      <a class="next" href="audit.html"><span>Next</span>Audit logging</a>
+      <a class="next" href="dashboard.html"><span>Next</span>Dashboard</a>
     </nav>
     <footer class="footer">
       <a href="https://github.com/dmdhrumilmistry/setu/edit/main/docs/src/service.md">Edit this page on GitHub</a>
@@ -410,6 +429,8 @@ profile against it before serving.</li>
       <li class="l2"><a href="#always-on-remote-desktop">Always-on remote desktop</a></li>
       <li class="l2"><a href="#start-it-at-login">Start it at login</a></li>
       <li class="l2"><a href="#manage-profiles">Manage profiles</a></li>
+      <li class="l2"><a href="#watch-it-in-the-dashboard">Watch it in the dashboard</a></li>
+      <li class="l2"><a href="#block-and-allow-lists">Block and allow lists</a></li>
       <li class="l2"><a href="#check-your-setup">Check your setup</a></li>
       <li class="l2"><a href="#updates">Updates</a></li>
       <li class="l2"><a href="#audit-the-service">Audit the service</a></li>

@@ -53,6 +53,7 @@
         <li><a href="desktop.html">Remote desktop</a></li>
         <li><a href="claude-code.html">Claude Code from your phone</a></li>
         <li><a href="service.html">Always-on service</a></li>
+        <li><a href="dashboard.html">Dashboard</a></li>
         <li><a href="audit.html">Audit logging</a></li>
       </ul>
     </div>
@@ -85,6 +86,7 @@ setu link &lt;id&gt;                                show a background share's li
 setu logs &lt;id&gt;                                show a background share's log
 setu stop &lt;id&gt; | --all                        stop background shares
 setu service ...                              always-on shares with persistent links
+setu dashboard                                local web page: live sessions, analytics, profiles and devices
 setu policy                                   show the managed (MDM) policy in force
 setu device [show | reset]                    this device's key fingerprint (for auto-approval)
 setu version                                  version, commit and platform
@@ -654,6 +656,36 @@ the terminal), plus:</p>
 </tr>
 </tbody>
 </table>
+<h3 id="setu-service-access">setu service access</h3>
+<pre><code class="language-sh">setu service access list [name|all]
+setu service access block [--for 24h] [--note TEXT] &lt;name|all&gt; device|person|network &lt;value&gt;
+setu service access allow [--for 24h] [--note TEXT] &lt;name|all&gt; device|person|network &lt;value&gt;
+setu service access remove &lt;name|all&gt; &lt;rule-id&gt;
+</code></pre>
+<p>Block and allow lists for one profile or (<code>all</code>) every profile; <code>setu service block ...</code> and <code>setu service allow ...</code> are short forms. A running service
+applies a new rule at once and disconnects the clients it covers.</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--for DURATION</code></td>
+<td>never</td>
+<td>The rule expires after this long, for example <code>24h</code>.</td>
+</tr>
+<tr>
+<td><code>--note TEXT</code></td>
+<td>none</td>
+<td>Why the rule exists, shown in listings.</td>
+</tr>
+</tbody>
+</table>
+<p>See <a href="dashboard.html#block-and-allow-lists">Block and allow lists</a>.</p>
 <h3 id="setu-service-rotate">setu service rotate</h3>
 <table>
 <thead>
@@ -757,6 +789,33 @@ the terminal), plus:</p>
 </tr>
 </tbody>
 </table>
+<h2 id="setu-dashboard">setu dashboard</h2>
+<pre><code class="language-sh">setu dashboard                     # open the local dashboard in your browser
+setu dashboard --no-open           # only print its one-time link
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--addr ADDR</code></td>
+<td><code>127.0.0.1:0</code></td>
+<td>Loopback address and port to listen on (port <code>0</code> picks a free one). Other addresses are refused.</td>
+</tr>
+<tr>
+<td><code>--no-open</code></td>
+<td>off</td>
+<td>Print the link instead of opening the default browser.</td>
+</tr>
+</tbody>
+</table>
+<p>It serves until Ctrl-C. See <a href="dashboard.html">Dashboard</a> for what it shows, what
+it can change and how it is protected.</p>
 <h2 id="setu-device">setu device</h2>
 <pre><code class="language-sh">setu device          # print this device's key fingerprint (creates the key on first use)
 setu device reset    # replace the key; hosts that trusted the old one will ask again
@@ -884,9 +943,11 @@ values hidden), or &quot;no managed policy on this device&quot;. See
       <li class="l2"><a href="#background-shares">Background shares</a></li>
       <li class="l2"><a href="#setu-service">setu service</a></li>
       <li class="l3"><a href="#setu-service-add">setu service add</a></li>
+      <li class="l3"><a href="#setu-service-access">setu service access</a></li>
       <li class="l3"><a href="#setu-service-rotate">setu service rotate</a></li>
       <li class="l3"><a href="#setu-service-audit">setu service audit</a></li>
       <li class="l3"><a href="#setu-service-install-and-run">setu service install and run</a></li>
+      <li class="l2"><a href="#setu-dashboard">setu dashboard</a></li>
       <li class="l2"><a href="#setu-device">setu device</a></li>
       <li class="l2"><a href="#setu-doctor">setu doctor</a></li>
       <li class="l2"><a href="#setu-upgrade">setu upgrade</a></li>
